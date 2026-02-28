@@ -146,7 +146,8 @@ for (const org of SEED_ORG_MAP) {
 
 // Seed data if tables are empty
 const oppCount = db.prepare('SELECT COUNT(*) as count FROM opportunities').get() as any;
-if (oppCount.count === 0) {
+const alreadySeeded = db.prepare("SELECT id FROM opportunities WHERE id = '1'").get();
+if (!alreadySeeded && oppCount.count === 0) {
   const insertOpp = db.prepare(`
     INSERT INTO opportunities (id, title, description, category, location, date, duration, spots, spotsRemaining, image, hostId, hostName, popularity, createdAt)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
