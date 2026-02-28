@@ -6,6 +6,7 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import { randomUUID } from 'crypto';
 import { sendVerificationEmail, sendPasswordResetEmail } from './email.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -96,7 +97,7 @@ router.post('/api/auth/register', async (req: Request, res: Response) => {
       return res.status(409).json({ error: 'User already exists' });
     }
 
-    const id = crypto.randomUUID();
+    const id = randomUUID();
     const createdAt = new Date().toISOString();
     const isAdmin = email === ADMIN_EMAIL ? 1 : 0;
     // Admin email is auto-verified; all other users must verify
@@ -108,7 +109,7 @@ router.post('/api/auth/register', async (req: Request, res: Response) => {
     ).run(id, username, email, hashedPassword, isAdmin, emailVerified, resolvedAccountType, createdAt);
 
     // Generate a verification token (expires in 24 hours)
-    const verificationToken = crypto.randomUUID() + '-' + crypto.randomUUID();
+    const verificationToken = randomUUID() + '-' + randomUUID();
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
     db.prepare(
       'INSERT INTO email_verifications (token, userId, expiresAt, createdAt) VALUES (?, ?, ?, ?)'
@@ -216,7 +217,7 @@ router.post('/api/auth/resend-verification', async (req: Request, res: Response)
 
     // Delete any existing tokens for this user, then create a fresh one
     db.prepare('DELETE FROM email_verifications WHERE userId = ?').run(user.id);
-    const newToken = crypto.randomUUID() + '-' + crypto.randomUUID();
+    const newToken = randomUUID() + '-' + randomUUID();
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
     db.prepare(
       'INSERT INTO email_verifications (token, userId, expiresAt, createdAt) VALUES (?, ?, ?, ?)'
@@ -243,7 +244,7 @@ router.post('/api/auth/forgot-password', async (req: Request, res: Response) => 
     if (!user) return res.json({ success: true });
 
     db.prepare('DELETE FROM password_resets WHERE userId = ?').run(user.id);
-    const token = crypto.randomUUID() + '-' + crypto.randomUUID();
+    const token = randomUUID() + '-' + randomUUID();
     const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString(); // 1 hour
     db.prepare('INSERT INTO password_resets (token, userId, expiresAt, createdAt) VALUES (?, ?, ?, ?)')
       .run(token, user.id, expiresAt, new Date().toISOString());
@@ -372,7 +373,7 @@ router.post('/api/opportunities', requireAuth, (req: AuthRequest, res: Response)
       return res.status(403).json({ error: 'Only organization accounts can create opportunities' });
     }
 
-    const id = crypto.randomUUID();
+    const id = randomUUID();
     const createdAt = new Date().toISOString();
     const tagsJson = JSON.stringify(Array.isArray(tags) ? tags : []);
     const resolvedSpotsType = ['limited', 'unlimited', 'none'].includes(spotsType) ? spotsType : 'limited';
