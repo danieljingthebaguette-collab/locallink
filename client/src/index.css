@@ -1,0 +1,187 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-sans: 'Inter', sans-serif;
+  --font-heading: 'Outfit', sans-serif;
+
+  --radius-sm: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.5rem;
+
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+
+  /* Categories */
+  --color-cat-sports: hsl(var(--cat-sports));
+  --color-cat-sports-fg: hsl(var(--cat-sports-fg));
+  --color-cat-edu: hsl(var(--cat-edu));
+  --color-cat-edu-fg: hsl(var(--cat-edu-fg));
+  --color-cat-vol: hsl(var(--cat-vol));
+  --color-cat-vol-fg: hsl(var(--cat-vol-fg));
+  --color-cat-community: hsl(var(--cat-community));
+  --color-cat-community-fg: hsl(var(--cat-community-fg));
+  --color-cat-environment: hsl(var(--cat-environment));
+  --color-cat-environment-fg: hsl(var(--cat-environment-fg));
+}
+
+@layer base {
+  :root {
+    --background: 210 20% 98%;
+    --foreground: 222 47% 11%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+
+    --primary: 221 83% 53%;
+    --primary-foreground: 210 40% 98%;
+
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222 47% 11.2%;
+
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222 47% 11.2%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 221 83% 53%;
+
+    --radius: 0.75rem;
+
+    /* Category Colors */
+    /* Sports - Red/Orange */
+    --cat-sports: 10 90% 60%;
+    --cat-sports-fg: 0 0% 100%;
+
+    /* Education - Green/Teal */
+    --cat-edu: 160 84% 39%;
+    --cat-edu-fg: 0 0% 100%;
+
+    /* Volunteer - Blue/Indigo */
+    --cat-vol: 217 91% 60%;
+    --cat-vol-fg: 0 0% 100%;
+
+    /* Community - Purple */
+    --cat-community: 270 75% 55%;
+    --cat-community-fg: 0 0% 100%;
+
+    /* Environment - Emerald Green */
+    --cat-environment: 145 80% 40%;
+    --cat-environment-fg: 0 0% 100%;
+  }
+
+  .dark {
+    --background: 222 47% 11%;
+    --foreground: 210 40% 98%;
+
+    --card: 222 47% 11%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 222 47% 11%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 217 91% 60%;
+    --primary-foreground: 222 47% 11%;
+
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 224.3 76.3% 48%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply font-sans antialiased bg-background text-foreground;
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  @apply bg-muted-foreground/15 rounded-full;
+}
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-muted-foreground/30;
+}
+
+/* Smooth page transitions */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Card image zoom effect */
+.group:hover img {
+  transform: scale(1.05);
+}
+.group img {
+  transition: transform 0.5s ease;
+}
+
+/* Selection color */
+::selection {
+  background: hsl(var(--primary) / 0.2);
+}
+
+/* Focus visible for accessibility */
+:focus-visible {
+  outline: 2px solid hsl(var(--primary));
+  outline-offset: 2px;
+  border-radius: 0.25rem;
+}

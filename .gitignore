@@ -1,0 +1,16 @@
+node_modules
+dist
+uploads
+
+# Secrets — never commit the real .env
+.env
+*.local
+
+# SQLite database files (auto-created at runtime)
+*.db
+*.db-shm
+*.db-wal
+
+# Editor / tool artifacts
+.claude
+dbcheck.mts

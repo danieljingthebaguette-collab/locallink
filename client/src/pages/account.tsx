@@ -1,0 +1,363 @@
+import { useState } from 'react';
+import { useLocation } from 'wouter';
+import { cn } from '@/lib/utils';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Mail, Lock, User, MailCheck, Users, Building2 } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
+import { useAuthStore } from '@/lib/store';
+
+export default function Account() {
+  const [, navigate] = useLocation();
+  const { toast } = useToast();
+  const { isLoggedIn, currentUser, login, register, resendVerification, loading } = useAuthStore();
+  const [isLoginMode, setIsLoginMode] = useState(true);
+  const [accountType, setAccountType] = useState<'volunteer' | 'organization'>('volunteer');
+  const [formError, setFormError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<{ username?: string; email?: string; password?: string }>({});
+  const [formData, setFormData] = useState({ username: '', email: '', password: '' });
+
+  // After registration, show the "check your email" screen
+  const [pendingVerificationEmail, setPendingVerificationEmail] = useState<string | null>(null);
+  // After login is blocked for unverified email, track that email for the resend button
+  const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null);
+  const [resendLoading, setResendLoading] = useState(false);
+  const [resendSent, setResendSent] = useState(false);
+
+  // If already logged in, redirect to profile
+  if (isLoggedIn && currentUser) {
+    navigate('/profile');
+    return null;
+  }
+
+  const validateForm = (): boolean => {
+    const errors: { username?: string; email?: string; password?: string } = {};
+    setFormError('');
+
+    if (!formData.email.trim()) {
+      errors.email = 'Email is required';
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+      errors.email = 'Please enter a valid email address';
+    }
+
+    if (!formData.password) {
+      errors.password = 'Password is required';
+    } else if (formData.password.length < 6) {
+      errors.password = 'Password must be at least 6 characters';
+    }
+
+    if (!isLoginMode && !formData.username.trim()) {
+      errors.username = 'Username is required';
+    }
+
+    setFieldErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const handleSubmit = async () => {
+    if (!validateForm()) return;
+    setFormError('');
+    setUnverifiedEmail(null);
+
+    if (isLoginMode) {
+      const result = await login(formData.email, formData.password);
+      if (result.success) {
+        toast({ title: 'Logged in successfully!' });
+        navigate('/');
+      } else if (result.needsVerification) {
+        // Email not verified — show inline resend prompt instead of a generic error
+        setUnverifiedEmail(result.email || formData.email);
+        setResendSent(false);
+      } else {
+        setFormError(result.error || 'Login failed');
+      }
+    } else {
+      const result = await register(formData.username, formData.email, formData.password, accountType);
+      if (result.success && result.needsVerification) {
+        // Switch to the "check your email" screen
+        setPendingVerificationEmail(result.email || formData.email);
+      } else if (!result.success) {
+        setFormError(result.error || 'Registration failed');
+      }
+    }
+  };
+
+  const handleResend = async (email: string) => {
+    setResendLoading(true);
+    const result = await resendVerification(email);
+    setResendLoading(false);
+    if (result.success) {
+      setResendSent(true);
+      toast({ title: 'Verification email resent! Check your inbox.' });
+    } else {
+      toast({ title: result.error || 'Failed to resend', variant: 'destructive' });
+    }
+  };
+
+  const clearFieldError = (field: 'username' | 'email' | 'password') => {
+    if (fieldErrors[field]) setFieldErrors((prev) => ({ ...prev, [field]: undefined }));
+  };
+
+  // ── "Check your email" screen shown after successful registration ──
+  if (pendingVerificationEmail) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-primary/5 via-background to-background pb-24 font-sans">
+        <main className="container mx-auto px-4 py-12">
+          <div className="max-w-md mx-auto">
+            <div className="rounded-3xl bg-card border-2 border-border shadow-lg p-8 md:p-10 text-center space-y-6">
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 mx-auto">
+                <MailCheck className="w-8 h-8 text-primary" />
+              </div>
+              <div className="space-y-2">
+                <h2 className="text-2xl font-bold text-foreground">Check your inbox</h2>
+                <p className="text-muted-foreground text-sm leading-relaxed">
+                  We sent a verification link to{' '}
+                  <span className="font-semibold text-foreground">{pendingVerificationEmail}</span>.
+                  Click the link in the email to activate your account.
+                </p>
+              </div>
+              <div className="rounded-xl bg-muted/50 px-4 py-3 text-xs text-muted-foreground text-left space-y-1">
+                <p>• The link expires in <strong>24 hours</strong></p>
+                <p>• Check your spam folder if you don't see it</p>
+              </div>
+              {resendSent ? (
+                <p className="text-sm text-green-600 font-medium">✓ New verification email sent!</p>
+              ) : (
+                <Button
+                  variant="outline"
+                  className="w-full rounded-full"
+                  disabled={resendLoading}
+                  onClick={() => handleResend(pendingVerificationEmail)}
+                >
+                  {resendLoading ? 'Sending...' : 'Resend verification email'}
+                </Button>
+              )}
+              <button
+                onClick={() => {
+                  setPendingVerificationEmail(null);
+                  setIsLoginMode(true);
+                  setFormData({ username: '', email: '', password: '' });
+                }}
+                className="text-sm text-primary hover:text-primary/80 font-medium transition-colors"
+              >
+                Back to login
+              </button>
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-primary/5 via-background to-background pb-24 font-sans">
+      <main className="container mx-auto px-4 py-12">
+        <div className="max-w-md mx-auto">
+          <div className="space-y-6">
+            {/* Logo */}
+            <div className="text-center mb-2">
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary/10 mb-4">
+                <span className="text-3xl">🔗</span>
+              </div>
+            </div>
+
+            <div className="text-center space-y-2 mb-8">
+              <h2 className="text-3xl font-heading font-bold text-foreground">
+                {isLoginMode ? 'Welcome Back' : 'Join LocalLink'}
+              </h2>
+              <p className="text-muted-foreground text-sm">
+                {isLoginMode ? 'Sign in to continue making a difference' : 'Create your account and start volunteering'}
+              </p>
+            </div>
+
+            <div className="rounded-3xl bg-card border-2 border-border shadow-lg p-8 md:p-10 space-y-5">
+              {/* API error */}
+              {formError && (
+                <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+                  {formError}
+                </div>
+              )}
+
+              {/* Email not verified banner with resend option */}
+              {unverifiedEmail && (
+                <div className="rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 space-y-2">
+                  <p className="text-sm text-amber-800 font-medium">Email not verified</p>
+                  <p className="text-xs text-amber-700">
+                    Please verify <span className="font-semibold">{unverifiedEmail}</span> before logging in.
+                  </p>
+                  {resendSent ? (
+                    <p className="text-xs text-green-700 font-medium">✓ New verification email sent!</p>
+                  ) : (
+                    <button
+                      onClick={() => handleResend(unverifiedEmail)}
+                      disabled={resendLoading}
+                      className="text-xs text-amber-800 underline underline-offset-2 font-semibold disabled:opacity-50"
+                    >
+                      {resendLoading ? 'Sending...' : 'Resend verification email'}
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {/* Account Type toggle (signup only) */}
+              {!isLoginMode && (
+                <div className="space-y-2">
+                  <label className="block text-sm font-semibold text-foreground">I am a...</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setAccountType('volunteer')}
+                      className={cn(
+                        'flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-all text-left',
+                        accountType === 'volunteer'
+                          ? 'border-primary bg-primary/5 text-primary'
+                          : 'border-border bg-secondary/40 text-foreground hover:border-primary/40'
+                      )}
+                    >
+                      <Users className="w-6 h-6" />
+                      <div>
+                        <p className="font-semibold text-sm">Volunteer</p>
+                        <p className="text-xs text-muted-foreground">Browse & show interest</p>
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAccountType('organization')}
+                      className={cn(
+                        'flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-all text-left',
+                        accountType === 'organization'
+                          ? 'border-primary bg-primary/5 text-primary'
+                          : 'border-border bg-secondary/40 text-foreground hover:border-primary/40'
+                      )}
+                    >
+                      <Building2 className="w-6 h-6" />
+                      <div>
+                        <p className="font-semibold text-sm">Organization</p>
+                        <p className="text-xs text-muted-foreground">Post opportunities</p>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Username (signup only) */}
+              {!isLoginMode && (
+                <div className="space-y-2">
+                  <label className="block text-sm font-semibold text-foreground">Username</label>
+                  <div className="relative">
+                    <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                    <Input
+                      type="text"
+                      placeholder="Your username"
+                      value={formData.username}
+                      onChange={(e) => {
+                        setFormData({ ...formData, username: e.target.value });
+                        clearFieldError('username');
+                      }}
+                      className={cn(
+                        'pl-12 h-12 border-2 rounded-xl bg-white',
+                        fieldErrors.username ? 'border-red-400' : 'border-border'
+                      )}
+                    />
+                  </div>
+                  {fieldErrors.username && (
+                    <p className="text-xs text-red-600 pl-1">{fieldErrors.username}</p>
+                  )}
+                </div>
+              )}
+
+              {/* Email */}
+              <div className="space-y-2">
+                <label className="block text-sm font-semibold text-foreground">Email Address</label>
+                <div className="relative">
+                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                  <Input
+                    type="email"
+                    placeholder="you@example.com"
+                    value={formData.email}
+                    onChange={(e) => {
+                      setFormData({ ...formData, email: e.target.value });
+                      clearFieldError('email');
+                      setUnverifiedEmail(null);
+                    }}
+                    className={cn(
+                      'pl-12 h-12 border-2 rounded-xl bg-white',
+                      fieldErrors.email ? 'border-red-400' : 'border-border'
+                    )}
+                  />
+                </div>
+                {fieldErrors.email && (
+                  <p className="text-xs text-red-600 pl-1">{fieldErrors.email}</p>
+                )}
+              </div>
+
+              {/* Password */}
+              <div className="space-y-2">
+                <label className="block text-sm font-semibold text-foreground">Password</label>
+                <div className="relative">
+                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                  <Input
+                    type="password"
+                    placeholder={isLoginMode ? 'Enter your password' : 'Create a password (min. 6 characters)'}
+                    value={formData.password}
+                    onChange={(e) => {
+                      setFormData({ ...formData, password: e.target.value });
+                      clearFieldError('password');
+                    }}
+                    className={cn(
+                      'pl-12 h-12 border-2 rounded-xl bg-white',
+                      fieldErrors.password ? 'border-red-400' : 'border-border'
+                    )}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
+                  />
+                </div>
+                {fieldErrors.password && (
+                  <p className="text-xs text-red-600 pl-1">{fieldErrors.password}</p>
+                )}
+                {isLoginMode && (
+                  <div className="flex justify-end">
+                    <button
+                      onClick={() => navigate('/forgot-password')}
+                      className="text-xs text-primary hover:text-primary/80 font-medium transition-colors"
+                    >
+                      Forgot your password?
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Submit */}
+              <Button
+                onClick={handleSubmit}
+                disabled={loading}
+                className="w-full h-12 rounded-full font-semibold mt-2"
+              >
+                {loading
+                  ? (isLoginMode ? 'Signing in...' : 'Creating account...')
+                  : (isLoginMode ? 'Sign In' : 'Create Account')}
+              </Button>
+
+              {/* Toggle */}
+              <div className="text-center pt-2">
+                <button
+                  onClick={() => {
+                    setIsLoginMode(!isLoginMode);
+                    setFormData({ username: '', email: '', password: '' });
+                    setFormError('');
+                    setFieldErrors({});
+                    setUnverifiedEmail(null);
+                    setResendSent(false);
+                    setAccountType('volunteer');
+                  }}
+                  className="text-sm text-primary hover:text-primary/80 font-medium transition-colors"
+                >
+                  {isLoginMode ? "Don't have an account? Sign Up" : 'Already have an account? Login'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+}

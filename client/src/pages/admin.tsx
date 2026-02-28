@@ -1,0 +1,514 @@
+import { useState, useEffect } from 'react';
+import { useLocation } from 'wouter';
+import { cn } from '@/lib/utils';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Button } from '@/components/ui/button';
+import { useToast } from '@/hooks/use-toast';
+import { useAuthStore, useAdminStore, useOpportunitiesStore } from '@/lib/store';
+import type { AppUser, Opportunity } from '@/lib/mockData';
+import { CATEGORIES, type Category } from '@/lib/mockData';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import {
+  Shield,
+  Users,
+  MapPin,
+  Trash2,
+  Star,
+  BarChart3,
+  Search,
+  Edit3,
+  Save,
+  X,
+  ChevronUp,
+  Loader2,
+} from 'lucide-react';
+
+type Tab = 'overview' | 'users' | 'opportunities';
+
+export default function Admin() {
+  const [, navigate] = useLocation();
+  const { toast } = useToast();
+  const { isLoggedIn, currentUser } = useAuthStore();
+  const { users, stats, loading, fetchUsers, fetchStats, deleteUser, deleteOpportunity, updateOpportunity } = useAdminStore();
+  const { opportunities, fetchOpportunities } = useOpportunitiesStore();
+  const [activeTab, setActiveTab] = useState<Tab>('overview');
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Redirect non-admin users
+  useEffect(() => {
+    if (!isLoggedIn || !currentUser) {
+      navigate('/account');
+    } else if (!currentUser.isAdmin) {
+      navigate('/');
+    }
+  }, [isLoggedIn, currentUser, navigate]);
+
+  // Load admin data
+  useEffect(() => {
+    if (currentUser?.isAdmin) {
+      fetchUsers(currentUser.id);
+      fetchStats(currentUser.id);
+      fetchOpportunities();
+    }
+  }, [currentUser]);
+
+  if (!currentUser?.isAdmin) return null;
+
+  const tabs: { value: Tab; label: string; icon: React.ReactNode }[] = [
+    { value: 'overview', label: 'Overview', icon: <BarChart3 className="w-4 h-4" /> },
+    { value: 'users', label: 'Users', icon: <Users className="w-4 h-4" /> },
+    { value: 'opportunities', label: 'Opportunities', icon: <MapPin className="w-4 h-4" /> },
+  ];
+
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-primary/5 via-background to-background pb-24 font-sans">
+      <main className="container mx-auto px-4 py-8">
+        {/* Header */}
+        <div className="flex items-center gap-3 mb-8">
+          <div className="w-12 h-12 rounded-2xl bg-red-500/10 flex items-center justify-center">
+            <Shield className="w-6 h-6 text-red-500" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-heading font-bold text-foreground">Admin Panel</h1>
+            <p className="text-sm text-muted-foreground">Manage users, opportunities, and platform data</p>
+          </div>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex gap-2 mb-8 overflow-x-auto pb-2">
+          {tabs.map((tab) => (
+            <button
+              key={tab.value}
+              onClick={() => setActiveTab(tab.value)}
+              className={cn(
+                'flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-medium transition-all whitespace-nowrap',
+                activeTab === tab.value
+                  ? 'bg-foreground text-background shadow-md'
+                  : 'bg-card border border-border text-muted-foreground hover:bg-accent'
+              )}
+            >
+              {tab.icon}
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Tab Content */}
+        {activeTab === 'overview' && (
+          <OverviewTab stats={stats} users={users} opportunities={opportunities} />
+        )}
+        {activeTab === 'users' && (
+          <UsersTab
+            users={users}
+            adminUserId={currentUser.id}
+            loading={loading}
+            searchQuery={searchQuery}
+            setSearchQuery={setSearchQuery}
+            onDeleteUser={async (userId) => {
+              const ok = await deleteUser(currentUser.id, userId);
+              if (ok) {
+                toast({ title: 'User deleted' });
+                fetchStats(currentUser.id);
+              } else {
+                toast({ title: 'Failed to delete user', variant: 'destructive' });
+              }
+            }}
+          />
+        )}
+        {activeTab === 'opportunities' && (
+          <OpportunitiesTab
+            opportunities={opportunities}
+            adminUserId={currentUser.id}
+            searchQuery={searchQuery}
+            setSearchQuery={setSearchQuery}
+            onDeleteOpportunity={async (oppId) => {
+              const ok = await deleteOpportunity(currentUser.id, oppId);
+              if (ok) {
+                toast({ title: 'Opportunity deleted' });
+                useOpportunitiesStore.setState({ loaded: false });
+                fetchOpportunities();
+                fetchStats(currentUser.id);
+              } else {
+                toast({ title: 'Failed to delete opportunity', variant: 'destructive' });
+              }
+            }}
+            onUpdateOpportunity={async (oppId, data) => {
+              const ok = await updateOpportunity(currentUser.id, oppId, data);
+              if (ok) {
+                toast({ title: 'Opportunity updated!' });
+                useOpportunitiesStore.setState({ loaded: false });
+                fetchOpportunities();
+              } else {
+                toast({ title: 'Failed to update opportunity', variant: 'destructive' });
+              }
+              return ok;
+            }}
+          />
+        )}
+      </main>
+    </div>
+  );
+}
+
+// ===== Overview Tab =====
+function OverviewTab({ stats, users, opportunities }: { stats: any; users: AppUser[]; opportunities: Opportunity[] }) {
+  const statCards = [
+    { label: 'Total Users', value: stats?.totalUsers ?? 0, icon: <Users className="w-5 h-5" />, color: 'text-blue-500 bg-blue-500/10' },
+    { label: 'Opportunities', value: stats?.totalOpps ?? 0, icon: <MapPin className="w-5 h-5" />, color: 'text-green-500 bg-green-500/10' },
+    { label: 'Total Signups', value: stats?.totalSignups ?? 0, icon: <Star className="w-5 h-5" />, color: 'text-purple-500 bg-purple-500/10' },
+  ];
+
+  return (
+    <div className="space-y-6">
+      {/* Stat Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {statCards.map((stat) => (
+          <div key={stat.label} className="rounded-2xl bg-card border border-border p-5 space-y-3">
+            <div className={cn('w-10 h-10 rounded-xl flex items-center justify-center', stat.color)}>
+              {stat.icon}
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-foreground">{stat.value}</p>
+              <p className="text-xs text-muted-foreground font-medium">{stat.label}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Recent Users */}
+      <div className="rounded-2xl bg-card border border-border p-6">
+        <h3 className="font-heading font-semibold text-foreground mb-4">Recent Users</h3>
+        <div className="space-y-3">
+          {users.slice(0, 5).map((user) => (
+            <div key={user.id} className="flex items-center justify-between py-2 border-b border-border/50 last:border-0">
+              <div>
+                <p className="text-sm font-medium text-foreground">{user.username}</p>
+                <p className="text-xs text-muted-foreground">{user.email}</p>
+              </div>
+              <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                {user.isAdmin && (
+                  <span className="bg-red-500/10 text-red-500 px-2 py-0.5 rounded-full font-medium">Admin</span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Recent Opportunities */}
+      <div className="rounded-2xl bg-card border border-border p-6">
+        <h3 className="font-heading font-semibold text-foreground mb-4">Recent Opportunities</h3>
+        <div className="space-y-3">
+          {opportunities.slice(0, 5).map((opp) => (
+            <div key={opp.id} className="flex items-center justify-between py-2 border-b border-border/50 last:border-0">
+              <div>
+                <p className="text-sm font-medium text-foreground">{opp.title}</p>
+                <p className="text-xs text-muted-foreground">{opp.category} · {opp.location}</p>
+              </div>
+              <div className="text-xs text-muted-foreground">
+                {opp.spotsRemaining}/{opp.spots} spots
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ===== Users Tab =====
+function UsersTab({
+  users,
+  adminUserId,
+  loading,
+  searchQuery,
+  setSearchQuery,
+  onDeleteUser,
+}: {
+  users: AppUser[];
+  adminUserId: string;
+  loading: boolean;
+  searchQuery: string;
+  setSearchQuery: (q: string) => void;
+  onDeleteUser: (userId: string) => Promise<void>;
+}) {
+  const [confirmDeleteUser, setConfirmDeleteUser] = useState<AppUser | null>(null);
+
+  const filteredUsers = users.filter(u =>
+    u.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    u.email.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  return (
+    <div className="space-y-4">
+      {/* Search */}
+      <div className="relative">
+        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+        <Input
+          placeholder="Search users..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="pl-11 h-11 rounded-xl border-2 border-border"
+        />
+      </div>
+
+      <p className="text-sm text-muted-foreground">{filteredUsers.length} users found</p>
+
+      <AlertDialog open={!!confirmDeleteUser} onOpenChange={(open) => !open && setConfirmDeleteUser(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete User?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete <strong>{confirmDeleteUser?.username}</strong>? This will remove all their data and signups. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-500 hover:bg-red-600"
+              onClick={() => { if (confirmDeleteUser) { onDeleteUser(confirmDeleteUser.id); setConfirmDeleteUser(null); } }}
+            >
+              Delete User
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {loading ? (
+        <div className="text-center py-12 text-muted-foreground">Loading users...</div>
+      ) : (
+        <div className="space-y-3">
+          {filteredUsers.map((user) => (
+            <div key={user.id} className="rounded-2xl bg-card border border-border p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-sm font-bold text-primary">
+                    {user.username.charAt(0).toUpperCase()}
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-semibold text-foreground">{user.username}</p>
+                      {user.isAdmin && (
+                        <span className="bg-red-500/10 text-red-500 px-2 py-0.5 rounded-full text-[10px] font-medium">Admin</span>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground">{user.email}</p>
+                  </div>
+                </div>
+                {user.id !== adminUserId && (
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    className="rounded-full"
+                    onClick={() => setConfirmDeleteUser(user)}
+                  >
+                    <Trash2 className="w-3 h-3 mr-1" /> Delete
+                  </Button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ===== Opportunities Tab =====
+function OpportunitiesTab({
+  opportunities,
+  adminUserId,
+  searchQuery,
+  setSearchQuery,
+  onDeleteOpportunity,
+  onUpdateOpportunity,
+}: {
+  opportunities: Opportunity[];
+  adminUserId: string;
+  searchQuery: string;
+  setSearchQuery: (q: string) => void;
+  onDeleteOpportunity: (oppId: string) => Promise<void>;
+  onUpdateOpportunity: (oppId: string, data: Record<string, any>) => Promise<boolean>;
+}) {
+  const [confirmDeleteOpp, setConfirmDeleteOpp] = useState<Opportunity | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<{
+    title: string; description: string; category: Category;
+    location: string; date: string; duration: number; spots: number;
+  }>({ title: '', description: '', category: 'volunteer', location: '', date: '', duration: 2, spots: 10 });
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  const filteredOpps = opportunities.filter(o =>
+    o.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    o.location.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    o.category.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const startEdit = (opp: Opportunity) => {
+    setEditingId(opp.id);
+    setEditForm({
+      title: opp.title,
+      description: opp.description,
+      category: opp.category as Category,
+      location: opp.location,
+      date: opp.date,
+      duration: opp.duration,
+      spots: opp.spots,
+    });
+  };
+
+  const handleSaveEdit = async (oppId: string) => {
+    if (!editForm.title || !editForm.description || !editForm.location || !editForm.date) return;
+    setSavingEdit(true);
+    const ok = await onUpdateOpportunity(oppId, editForm);
+    setSavingEdit(false);
+    if (ok) setEditingId(null);
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Search */}
+      <div className="relative">
+        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+        <Input
+          placeholder="Search opportunities..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="pl-11 h-11 rounded-xl border-2 border-border"
+        />
+      </div>
+
+      <AlertDialog open={!!confirmDeleteOpp} onOpenChange={(open) => !open && setConfirmDeleteOpp(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Opportunity?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete <strong>{confirmDeleteOpp?.title}</strong>? This will also remove all signups. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-500 hover:bg-red-600"
+              onClick={() => { if (confirmDeleteOpp) { onDeleteOpportunity(confirmDeleteOpp.id); setConfirmDeleteOpp(null); } }}
+            >
+              Delete Opportunity
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <p className="text-sm text-muted-foreground">{filteredOpps.length} opportunities found</p>
+
+      <div className="space-y-3">
+        {filteredOpps.map((opp) => (
+          <div key={opp.id} className="rounded-2xl bg-card border border-border overflow-hidden">
+            <div className="p-4">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className={cn(
+                      'px-2 py-0.5 rounded-full text-[10px] font-medium uppercase tracking-wide',
+                      opp.category === 'volunteer' ? 'bg-cat-vol/10 text-cat-vol' :
+                      opp.category === 'education' ? 'bg-cat-edu/10 text-cat-edu' :
+                      opp.category === 'sports' ? 'bg-cat-sports/10 text-cat-sports' :
+                      opp.category === 'community' ? 'bg-cat-community/10 text-cat-community' :
+                      'bg-cat-environment/10 text-cat-environment'
+                    )}>
+                      {opp.category}
+                    </span>
+                    <span className="text-xs text-muted-foreground">by {opp.hostName}</span>
+                  </div>
+                  <h4 className="font-semibold text-foreground text-sm truncate">{opp.title}</h4>
+                  <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{opp.description}</p>
+                  <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
+                    <span>{opp.location}</span>
+                    <span>·</span>
+                    <span>{opp.signups.length} interested</span>
+                    <span>·</span>
+                    <span>{opp.duration}h</span>
+                  </div>
+                </div>
+                {opp.image && (
+                  <img src={opp.image} alt={opp.title} className="w-16 h-16 rounded-xl object-cover flex-shrink-0" />
+                )}
+              </div>
+              <div className="flex items-center gap-2 mt-3 pt-3 border-t border-border/50">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="rounded-full text-xs"
+                  onClick={() => editingId === opp.id ? setEditingId(null) : startEdit(opp)}
+                >
+                  {editingId === opp.id ? <ChevronUp className="w-3 h-3 mr-1" /> : <Edit3 className="w-3 h-3 mr-1" />}
+                  {editingId === opp.id ? 'Close' : 'Edit'}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  className="rounded-full text-xs"
+                  onClick={() => setConfirmDeleteOpp(opp)}
+                >
+                  <Trash2 className="w-3 h-3 mr-1" /> Delete
+                </Button>
+              </div>
+            </div>
+
+            {/* Inline edit form */}
+            {editingId === opp.id && (
+              <div className="border-t border-border p-4 bg-secondary/20 space-y-3">
+                <p className="text-xs font-semibold text-foreground uppercase tracking-wide">Edit Post</p>
+                <div className="space-y-2">
+                  <Input placeholder="Title *" value={editForm.title}
+                    onChange={e => setEditForm({ ...editForm, title: e.target.value })}
+                    className="h-9 rounded-xl text-sm" />
+                  <Textarea placeholder="Description *" value={editForm.description}
+                    onChange={e => setEditForm({ ...editForm, description: e.target.value })}
+                    className="rounded-xl text-sm min-h-[60px]" />
+                  <div className="grid grid-cols-2 gap-2">
+                    <select value={editForm.category}
+                      onChange={e => setEditForm({ ...editForm, category: e.target.value as Category })}
+                      className="h-9 rounded-xl border border-input bg-background px-3 text-sm">
+                      {CATEGORIES.filter(c => c.value !== 'all').map(c => (
+                        <option key={c.value} value={c.value}>{c.label}</option>
+                      ))}
+                    </select>
+                    <Input placeholder="Location *" value={editForm.location}
+                      onChange={e => setEditForm({ ...editForm, location: e.target.value })}
+                      className="h-9 rounded-xl text-sm" />
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <Input type="datetime-local" value={editForm.date}
+                      onChange={e => setEditForm({ ...editForm, date: e.target.value })}
+                      className="h-9 rounded-xl text-sm" />
+                    <Input type="number" placeholder="Duration (hrs)" min={0.5} step={0.5}
+                      value={editForm.duration}
+                      onChange={e => setEditForm({ ...editForm, duration: parseFloat(e.target.value) })}
+                      className="h-9 rounded-xl text-sm" />
+                    <Input type="number" placeholder="Spots" min={1}
+                      value={editForm.spots}
+                      onChange={e => setEditForm({ ...editForm, spots: parseInt(e.target.value) })}
+                      className="h-9 rounded-xl text-sm" />
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={() => setEditingId(null)} className="flex-1 rounded-full">
+                    <X className="w-3 h-3 mr-1" /> Cancel
+                  </Button>
+                  <Button size="sm" onClick={() => handleSaveEdit(opp.id)} disabled={savingEdit} className="flex-1 rounded-full">
+                    {savingEdit ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Save className="w-3 h-3 mr-1" />}
+                    {savingEdit ? 'Saving...' : 'Save Changes'}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}

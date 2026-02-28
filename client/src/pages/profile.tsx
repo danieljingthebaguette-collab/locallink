@@ -1,0 +1,341 @@
+import { useEffect, useRef, useState } from 'react';
+import { useLocation } from 'wouter';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { cn } from '@/lib/utils';
+import { useAuthStore, useOpportunitiesStore, useFavoritesStore } from '@/lib/store';
+import { User, Mail, Award, Calendar, LogOut, Loader2, Edit3, Lock, Save, X, Clock, Heart, Building2 } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
+
+// ── Time-on-site helpers ──────────────────────────────────────────────
+const TIME_KEY = 'locallink_time_on_site'; // stored in minutes
+
+function getStoredMinutes(): number {
+  return parseFloat(localStorage.getItem(TIME_KEY) || '0');
+}
+
+function formatTime(totalMinutes: number): string {
+  const hrs = Math.floor(totalMinutes / 60);
+  const mins = Math.round(totalMinutes % 60);
+  if (hrs === 0) return `${mins} min`;
+  return `${hrs}h ${mins}m`;
+}
+
+export default function Profile() {
+  const [, navigate] = useLocation();
+  const { toast } = useToast();
+  const { isLoggedIn, currentUser, logout, updateProfile, loading } = useAuthStore();
+  const { getSignedUpEvents, getHostedEvents, fetchOpportunities, loading: opLoading, loaded } = useOpportunitiesStore();
+  const { favorites, fetchFavorites, removeFavorite } = useFavoritesStore();
+
+  const [editOpen, setEditOpen] = useState(false);
+  const [editData, setEditData] = useState({ username: '', currentPassword: '', newPassword: '', confirmPassword: '' });
+  const [editErrors, setEditErrors] = useState<{ username?: string; currentPassword?: string; newPassword?: string; confirmPassword?: string }>({});
+  const [saving, setSaving] = useState(false);
+  const [timeOnSite, setTimeOnSite] = useState(getStoredMinutes());
+  const sessionStartRef = useRef<number>(Date.now());
+
+  useEffect(() => {
+    fetchOpportunities();
+  }, [fetchOpportunities]);
+
+  useEffect(() => {
+    if (isLoggedIn) fetchFavorites();
+  }, [isLoggedIn, fetchFavorites]);
+
+  useEffect(() => {
+    if (currentUser) {
+      setEditData((d) => ({ ...d, username: currentUser.username }));
+    }
+  }, [currentUser]);
+
+  // Track time on site — accumulate elapsed minutes on unmount
+  useEffect(() => {
+    sessionStartRef.current = Date.now();
+    // Update live every 30s
+    const interval = setInterval(() => {
+      const elapsed = (Date.now() - sessionStartRef.current) / 60000;
+      setTimeOnSite(getStoredMinutes() + elapsed);
+    }, 30000);
+    return () => {
+      clearInterval(interval);
+      const elapsed = (Date.now() - sessionStartRef.current) / 60000;
+      const stored = getStoredMinutes();
+      const newTotal = stored + elapsed;
+      localStorage.setItem(TIME_KEY, String(newTotal));
+    };
+  }, []);
+
+  if (!isLoggedIn || !currentUser) {
+    return (
+      <div className="min-h-screen bg-background pb-24 font-sans">
+        <main className="container mx-auto px-4 py-16 text-center">
+          <User className="w-16 h-16 text-muted-foreground mx-auto opacity-50 mb-4" />
+          <h2 className="text-2xl font-heading font-bold text-foreground mb-2">Please Login</h2>
+          <p className="text-muted-foreground mb-6">You need to be logged in to view your profile.</p>
+          <Button onClick={() => navigate('/account')} className="rounded-full px-8">
+            Login / Sign Up
+          </Button>
+        </main>
+      </div>
+    );
+  }
+
+  const signedUp = getSignedUpEvents(currentUser.id);
+  const hosted = getHostedEvents(currentUser.id);
+
+  const openEdit = () => {
+    setEditData({ username: currentUser.username, currentPassword: '', newPassword: '', confirmPassword: '' });
+    setEditErrors({});
+    setEditOpen(true);
+  };
+
+  const handleSave = async () => {
+    const errors: typeof editErrors = {};
+    if (!editData.username.trim()) errors.username = 'Username is required';
+    if (editData.newPassword) {
+      if (!editData.currentPassword) errors.currentPassword = 'Required to change password';
+      if (editData.newPassword.length < 6) errors.newPassword = 'Min 6 characters';
+      if (editData.newPassword !== editData.confirmPassword) errors.confirmPassword = 'Passwords do not match';
+    }
+    setEditErrors(errors);
+    if (Object.keys(errors).length > 0) return;
+
+    setSaving(true);
+    const payload: { username?: string; currentPassword?: string; newPassword?: string } = {};
+    if (editData.username.trim() !== currentUser.username) payload.username = editData.username.trim();
+    if (editData.newPassword) {
+      payload.currentPassword = editData.currentPassword;
+      payload.newPassword = editData.newPassword;
+    }
+
+    const result = await updateProfile(payload);
+    setSaving(false);
+    if (result.success) {
+      toast({ title: 'Profile updated!' });
+      setEditOpen(false);
+    } else {
+      toast({ title: result.error || 'Update failed', variant: 'destructive' });
+    }
+  };
+
+  const handleUnfavorite = async (orgId: string) => {
+    await removeFavorite(orgId);
+    toast({ title: 'Removed from favorites' });
+  };
+
+  return (
+    <div className="min-h-screen bg-background pb-24 font-sans">
+      <main className="container mx-auto px-4 py-8 max-w-2xl">
+
+        {/* Profile Header */}
+        <div className="rounded-3xl border-2 border-border bg-card p-8 text-center mb-8 relative">
+          <button
+            onClick={openEdit}
+            className="absolute top-4 right-4 p-2 rounded-full hover:bg-secondary transition-colors text-muted-foreground"
+            title="Edit profile"
+          >
+            <Edit3 className="w-4 h-4" />
+          </button>
+          <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
+            <User className="w-10 h-10 text-primary" />
+          </div>
+          <h2 className="text-2xl font-heading font-bold text-foreground">{currentUser.username}</h2>
+          <p className="text-muted-foreground flex items-center justify-center gap-1 mt-1">
+            <Mail className="w-4 h-4" />
+            {currentUser.email}
+          </p>
+          <div className="flex items-center justify-center gap-3 mt-2">
+            <p className="text-xs text-muted-foreground">
+              Member since {new Date(currentUser.createdAt).toLocaleDateString()}
+            </p>
+            <span className={cn(
+              "text-xs font-semibold px-2 py-0.5 rounded-full",
+              currentUser.accountType === 'organization'
+                ? "bg-primary/10 text-primary"
+                : "bg-secondary text-muted-foreground"
+            )}>
+              {currentUser.accountType === 'organization' ? '🏢 Organization' : '🤝 Volunteer'}
+            </span>
+          </div>
+        </div>
+
+        {/* Edit Profile Panel */}
+        {editOpen && (
+          <div className="rounded-3xl border-2 border-primary/30 bg-card p-6 mb-8 space-y-4">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="font-heading font-bold text-lg text-foreground flex items-center gap-2">
+                <Edit3 className="w-5 h-5 text-primary" />
+                Edit Profile
+              </h3>
+              <button onClick={() => setEditOpen(false)} className="p-1.5 rounded-full hover:bg-secondary transition-colors">
+                <X className="w-4 h-4 text-muted-foreground" />
+              </button>
+            </div>
+
+            {/* Username */}
+            <div className="space-y-1">
+              <label className="text-sm font-semibold text-foreground">Username</label>
+              <div className="relative">
+                <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  value={editData.username}
+                  onChange={(e) => { setEditData({ ...editData, username: e.target.value }); setEditErrors({ ...editErrors, username: undefined }); }}
+                  className={cn('pl-10 h-11 rounded-xl border-2', editErrors.username ? 'border-red-400' : 'border-border')}
+                />
+              </div>
+              {editErrors.username && <p className="text-xs text-red-600">{editErrors.username}</p>}
+            </div>
+
+            <div className="border-t border-border pt-4 space-y-1">
+              <p className="text-sm font-semibold text-foreground mb-3">Change Password <span className="font-normal text-muted-foreground">(optional)</span></p>
+
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">Current Password</label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      type="password"
+                      placeholder="Current password"
+                      value={editData.currentPassword}
+                      onChange={(e) => { setEditData({ ...editData, currentPassword: e.target.value }); setEditErrors({ ...editErrors, currentPassword: undefined }); }}
+                      className={cn('pl-10 h-11 rounded-xl border-2', editErrors.currentPassword ? 'border-red-400' : 'border-border')}
+                    />
+                  </div>
+                  {editErrors.currentPassword && <p className="text-xs text-red-600">{editErrors.currentPassword}</p>}
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">New Password</label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      type="password"
+                      placeholder="New password (min. 6 characters)"
+                      value={editData.newPassword}
+                      onChange={(e) => { setEditData({ ...editData, newPassword: e.target.value }); setEditErrors({ ...editErrors, newPassword: undefined }); }}
+                      className={cn('pl-10 h-11 rounded-xl border-2', editErrors.newPassword ? 'border-red-400' : 'border-border')}
+                    />
+                  </div>
+                  {editErrors.newPassword && <p className="text-xs text-red-600">{editErrors.newPassword}</p>}
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">Confirm New Password</label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      type="password"
+                      placeholder="Confirm new password"
+                      value={editData.confirmPassword}
+                      onChange={(e) => { setEditData({ ...editData, confirmPassword: e.target.value }); setEditErrors({ ...editErrors, confirmPassword: undefined }); }}
+                      className={cn('pl-10 h-11 rounded-xl border-2', editErrors.confirmPassword ? 'border-red-400' : 'border-border')}
+                    />
+                  </div>
+                  {editErrors.confirmPassword && <p className="text-xs text-red-600">{editErrors.confirmPassword}</p>}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <Button variant="outline" onClick={() => setEditOpen(false)} className="flex-1 h-11 rounded-full font-semibold">
+                Cancel
+              </Button>
+              <Button onClick={handleSave} disabled={saving} className="flex-1 h-11 rounded-full font-semibold">
+                {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
+                {saving ? 'Saving...' : 'Save Changes'}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Stats Grid */}
+        <div className="grid grid-cols-3 gap-3 mb-8">
+          {[
+            { icon: Award, label: 'Events Interested', value: opLoading && !loaded ? '...' : signedUp.length, color: 'text-purple-500' },
+            { icon: Calendar, label: 'Events Hosted', value: opLoading && !loaded ? '...' : hosted.length, color: 'text-green-500' },
+            { icon: Clock, label: 'Time on Site', value: formatTime(timeOnSite), color: 'text-blue-500' },
+          ].map((stat) => (
+            <div key={stat.label} className="rounded-2xl border-2 border-border bg-card p-4 text-center">
+              <stat.icon className={`w-6 h-6 mx-auto mb-2 ${stat.color}`} />
+              <p className="text-xl font-bold text-foreground">{stat.value}</p>
+              <p className="text-[10px] text-muted-foreground font-medium leading-tight mt-1">{stat.label}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Activity Summary */}
+        <div className="rounded-2xl border-2 border-border bg-card p-6 mb-6">
+          <h3 className="font-heading font-bold text-lg text-foreground mb-4">Activity Summary</h3>
+          {opLoading && !loaded ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="w-6 h-6 animate-spin text-primary" />
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between py-2 border-b border-border">
+                <span className="text-muted-foreground">Events Interested In</span>
+                <span className="font-bold text-foreground">{signedUp.length}</span>
+              </div>
+              <div className="flex items-center justify-between py-2 border-b border-border">
+                <span className="text-muted-foreground">Events Hosted</span>
+                <span className="font-bold text-foreground">{hosted.length}</span>
+              </div>
+              <div className="flex items-center justify-between py-2">
+                <span className="text-muted-foreground">Time on Site</span>
+                <span className="font-bold text-foreground">{formatTime(timeOnSite)}</span>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Favorite Organizations */}
+        <div className="rounded-2xl border-2 border-border bg-card p-6 mb-8">
+          <h3 className="font-heading font-bold text-lg text-foreground mb-4 flex items-center gap-2">
+            <Heart className="w-5 h-5 text-red-400" />
+            Favorite Organizations
+          </h3>
+          {favorites.length === 0 ? (
+            <div className="text-center py-6 space-y-2">
+              <Building2 className="w-8 h-8 text-muted-foreground mx-auto opacity-40" />
+              <p className="text-sm text-muted-foreground">No favorites yet</p>
+              <p className="text-xs text-muted-foreground">Heart an organization on any event post to save them here.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {favorites.map(org => (
+                <div key={org.id} className="flex items-center justify-between py-2 border-b border-border/50 last:border-0">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-sm font-bold text-primary">
+                      {org.username.charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">{org.username}</p>
+                      <p className="text-xs text-muted-foreground">{org.email}</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleUnfavorite(org.id)}
+                    className="p-1.5 rounded-full hover:bg-red-50 transition-colors text-red-400 hover:text-red-500"
+                    title="Remove from favorites"
+                  >
+                    <Heart className="w-4 h-4 fill-current" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Logout Button */}
+        <Button
+          variant="outline"
+          onClick={() => { logout(); navigate('/'); }}
+          className="w-full h-11 rounded-full font-semibold text-red-500 border-red-200 hover:bg-red-50"
+        >
+          <LogOut className="w-4 h-4 mr-2" />
+          Logout
+        </Button>
+      </main>
+    </div>
+  );
+}
