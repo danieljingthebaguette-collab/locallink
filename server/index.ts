@@ -8,6 +8,7 @@ import routes from './routes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
+app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3001;
 
 // Rate limiter: max 20 login/register attempts per IP per 15 minutes
