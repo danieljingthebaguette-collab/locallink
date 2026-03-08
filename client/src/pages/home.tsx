@@ -257,8 +257,8 @@ export default function Home() {
                       <div className={cn("absolute inset-0 bg-gradient-to-br", getCategoryColor(opp.category))} />
                     )}
                     <div className="relative h-full p-6 flex flex-col justify-between z-10 text-white">
-                      {/* TOP — always visible */}
-                      <div className="space-y-2">
+                      {/* TOP — always visible, separator sits right below the tags */}
+                      <div className="space-y-2 border-b border-white/20 pb-3">
                         <div className="flex items-center gap-2 flex-wrap">
                           <p className="text-xs font-bold tracking-widest uppercase opacity-80">{getCategoryLabel(opp.category)}</p>
                           {alreadyInterested && (
@@ -279,9 +279,9 @@ export default function Home() {
                           </div>
                         )}
                       </div>
-                      {/* BOTTOM — large cards: full info + host; small cards: availability only */}
+                      {/* BOTTOM — large cards: full info + host; small cards: spots + interested */}
                       {large ? (
-                        <div className="space-y-3">
+                        <div className="space-y-3 pt-3">
                           <p className="text-sm line-clamp-2 opacity-95 font-medium">{opp.description}</p>
                           <p className="text-xs opacity-70 font-medium">by {opp.hostName}</p>
                           <div className="flex items-center justify-between pt-3 border-t border-white/20">
@@ -300,9 +300,12 @@ export default function Home() {
                           </div>
                         </div>
                       ) : (
-                        <div className="flex items-center gap-1.5 pt-3 border-t border-white/20 mt-auto">
-                          <Users className="w-3.5 h-3.5 opacity-75" />
-                          <span className="text-xs font-bold">{spotsDisplay ?? 'No spots listed'}</span>
+                        <div className="flex items-center justify-between pt-3">
+                          <div className="flex items-center gap-1.5">
+                            <Users className="w-3.5 h-3.5 opacity-75" />
+                            <span className="text-xs font-bold">{spotsDisplay ?? 'No spots listed'}</span>
+                          </div>
+                          <span className="text-xs opacity-70">{opp.signups.length} interested</span>
                         </div>
                       )}
                     </div>
