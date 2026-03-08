@@ -257,6 +257,7 @@ export default function Home() {
                       <div className={cn("absolute inset-0 bg-gradient-to-br", getCategoryColor(opp.category))} />
                     )}
                     <div className="relative h-full p-6 flex flex-col justify-between z-10 text-white">
+                      {/* TOP — always visible */}
                       <div className="space-y-2">
                         <div className="flex items-center gap-2 flex-wrap">
                           <p className="text-xs font-bold tracking-widest uppercase opacity-80">{getCategoryLabel(opp.category)}</p>
@@ -278,9 +279,11 @@ export default function Home() {
                           </div>
                         )}
                       </div>
-                      {large && (
+                      {/* BOTTOM — large cards: full info + host; small cards: availability only */}
+                      {large ? (
                         <div className="space-y-3">
                           <p className="text-sm line-clamp-2 opacity-95 font-medium">{opp.description}</p>
+                          <p className="text-xs opacity-70 font-medium">by {opp.hostName}</p>
                           <div className="flex items-center justify-between pt-3 border-t border-white/20">
                             {spotsDisplay && (
                               <div className="flex items-center gap-2">
@@ -295,6 +298,11 @@ export default function Home() {
                             <span className="mx-1">&bull;</span>
                             <Clock className="w-3 h-3" /><span>{opp.duration}h</span>
                           </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1.5 pt-3 border-t border-white/20 mt-auto">
+                          <Users className="w-3.5 h-3.5 opacity-75" />
+                          <span className="text-xs font-bold">{spotsDisplay ?? 'No spots listed'}</span>
                         </div>
                       )}
                     </div>
