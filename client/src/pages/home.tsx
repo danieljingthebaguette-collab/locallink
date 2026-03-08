@@ -354,7 +354,7 @@ export default function Home() {
               className={cn("bg-gradient-to-br rounded-3xl w-full max-w-3xl overflow-hidden border-2 border-white/20 shadow-2xl max-h-[90vh] overflow-y-auto", getModalGradient(selectedCard.category))}>
 
               {/* Modal header image area */}
-              <div className="relative h-64 overflow-hidden">
+              <div className="relative h-48 md:h-64 overflow-hidden">
                 {selectedCard.image ? (
                   <><img src={selectedCard.image} alt={selectedCard.title} className="w-full h-full object-cover" />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent" /></>
@@ -379,15 +379,22 @@ export default function Home() {
                   initial={{ opacity: 0, y: 14 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.12, duration: 0.32, ease: EASE_OUT }}
-                  className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {[{ label: 'Location', val: selectedCard.location },
-                    { label: 'Date & Time', val: `${formatDate(selectedCard.date)} · ${formatTime(selectedCard.date)}` },
-                    { label: 'Duration', val: `${selectedCard.duration} hours` }].map(({ label, val }) => (
-                    <div key={label} className="bg-white/15 backdrop-blur-md rounded-2xl p-4 border border-white/20">
-                      <p className="text-xs font-bold tracking-widest uppercase opacity-75 mb-2">{label}</p>
-                      <p className="text-base font-semibold">{val}</p>
-                    </div>
-                  ))}
+                  className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  {/* Location — full width on mobile, 1/3 on desktop */}
+                  <div className="col-span-2 md:col-span-1 bg-white/15 backdrop-blur-md rounded-2xl p-3 md:p-4 border border-white/20">
+                    <p className="text-xs font-bold tracking-widest uppercase opacity-75 mb-1.5">Location</p>
+                    <p className="text-sm md:text-base font-semibold">{selectedCard.location}</p>
+                  </div>
+                  {/* Date & Time — half width on mobile */}
+                  <div className="bg-white/15 backdrop-blur-md rounded-2xl p-3 md:p-4 border border-white/20">
+                    <p className="text-xs font-bold tracking-widest uppercase opacity-75 mb-1.5">Date & Time</p>
+                    <p className="text-sm md:text-base font-semibold">{formatDate(selectedCard.date)} · {formatTime(selectedCard.date)}</p>
+                  </div>
+                  {/* Duration — half width on mobile */}
+                  <div className="bg-white/15 backdrop-blur-md rounded-2xl p-3 md:p-4 border border-white/20">
+                    <p className="text-xs font-bold tracking-widest uppercase opacity-75 mb-1.5">Duration</p>
+                    <p className="text-sm md:text-base font-semibold">{selectedCard.duration} hours</p>
+                  </div>
                 </motion.div>
 
                 {/* Availability + Host */}
@@ -395,18 +402,18 @@ export default function Home() {
                   initial={{ opacity: 0, y: 14 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.17, duration: 0.32, ease: EASE_OUT }}
-                  className="grid grid-cols-2 gap-4">
-                  <div className="bg-white/15 backdrop-blur-md rounded-2xl p-4 border border-white/20">
-                    <p className="text-xs font-bold tracking-widest uppercase opacity-75 mb-2">Availability</p>
+                  className="grid grid-cols-2 gap-3">
+                  <div className="bg-white/15 backdrop-blur-md rounded-2xl p-3 md:p-4 border border-white/20">
+                    <p className="text-xs font-bold tracking-widest uppercase opacity-75 mb-1.5">Availability</p>
                     <p className="text-lg font-semibold">
                       {selectedCard.spotsType === 'unlimited' ? 'Open to all' :
                        selectedCard.spotsType === 'none' ? 'Not specified' :
                        `${selectedCard.spotsRemaining} / ${selectedCard.spots} spots`}
                     </p>
                   </div>
-                  <div className="bg-white/15 backdrop-blur-md rounded-2xl p-4 border border-white/20 flex items-center justify-between">
+                  <div className="bg-white/15 backdrop-blur-md rounded-2xl p-3 md:p-4 border border-white/20 flex items-center justify-between">
                     <div>
-                      <p className="text-xs font-bold tracking-widest uppercase opacity-75 mb-2">Host</p>
+                      <p className="text-xs font-bold tracking-widest uppercase opacity-75 mb-1.5">Host</p>
                       <p className="text-lg font-semibold">{selectedCard.hostName}</p>
                     </div>
                     {isLoggedIn && currentUser?.id !== selectedCard.hostId && (

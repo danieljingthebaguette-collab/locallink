@@ -350,7 +350,7 @@ export default function CreatePostModal({ open, onClose }: Props) {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div className="bg-white/15 backdrop-blur-md rounded-2xl p-4 border border-white/20 space-y-2">
                         <label className="text-xs font-bold tracking-widest uppercase opacity-75 block">Duration (hours)</label>
                         <Input type="number" min={0.5} max={24} step={0.5}
@@ -360,11 +360,11 @@ export default function CreatePostModal({ open, onClose }: Props) {
                       </div>
                       <div className="bg-white/15 backdrop-blur-md rounded-2xl p-4 border border-white/20 space-y-2">
                         <label className="text-xs font-bold tracking-widest uppercase opacity-75 block">Spots</label>
-                        <div className="flex gap-1.5 mb-2">
+                        <div className="flex gap-1.5 mb-2 flex-wrap">
                           {(['limited', 'unlimited', 'none'] as SpotsType[]).map(st => (
                             <button key={st} type="button"
                               onClick={() => setSpotsType(st)}
-                              className={cn("flex-1 rounded-lg py-1 text-xs font-semibold transition-all border",
+                              className={cn("flex-1 min-w-[60px] rounded-lg py-1.5 text-xs font-semibold transition-all border",
                                 spotsType === st
                                   ? "bg-white text-primary border-white"
                                   : "bg-white/20 text-white border-white/30 hover:bg-white/30")}>
