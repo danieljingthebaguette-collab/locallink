@@ -411,25 +411,23 @@ export default function Home() {
                        `${selectedCard.spotsRemaining} / ${selectedCard.spots} spots`}
                     </p>
                   </div>
-                  <div className="bg-white/15 backdrop-blur-md rounded-2xl p-3 md:p-4 border border-white/20 flex items-center justify-between">
-                    <div>
-                      <p className="text-xs font-bold tracking-widest uppercase opacity-75 mb-1.5">Host</p>
-                      <p className="text-lg font-semibold">{selectedCard.hostName}</p>
-                    </div>
+                  <div className="relative bg-white/15 backdrop-blur-md rounded-2xl p-3 md:p-4 border border-white/20">
+                    <p className="text-xs font-bold tracking-widest uppercase opacity-75 mb-1.5">Host</p>
+                    <p className="text-lg font-semibold pr-8 truncate">{selectedCard.hostName}</p>
                     {isLoggedIn && currentUser?.id !== selectedCard.hostId && (
                       <motion.button
                         whileHover={{ scale: 1.15 }}
                         whileTap={{ scale: 0.85 }}
                         onClick={() => handleFavToggle(selectedCard.hostId)}
                         disabled={togglingFav}
-                        className="p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
+                        className="absolute top-2.5 right-2.5 p-1.5 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
                         title={isFavorited(selectedCard.hostId) ? 'Remove from favorites' : 'Favorite this org'}>
                         <motion.div
                           animate={isFavorited(selectedCard.hostId)
                             ? { scale: [1, 1.4, 0.9, 1.1, 1] }
                             : { scale: 1 }}
                           transition={{ duration: 0.4, ease: 'easeOut' }}>
-                          <Heart className={cn("w-5 h-5 transition-colors duration-150", isFavorited(selectedCard.hostId) ? "fill-red-500 text-red-500" : "text-white/70")} />
+                          <Heart className={cn("w-4 h-4 transition-colors duration-150", isFavorited(selectedCard.hostId) ? "fill-red-500 text-red-500" : "text-white/70")} />
                         </motion.div>
                       </motion.button>
                     )}

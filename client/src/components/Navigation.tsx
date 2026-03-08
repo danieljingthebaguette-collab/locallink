@@ -5,10 +5,10 @@ import { Home, Calendar, Info, User, LogOut, Shield } from 'lucide-react';
 import Logo from './Logo';
 
 const NAV_ITEMS = [
-  { path: '/', label: 'Home', icon: Home },
-  { path: '/my-events', label: 'My Events', icon: Calendar },
-  { path: '/about', label: 'About', icon: Info },
-  { path: '/profile', label: 'Profile', icon: User },
+  { path: '/', label: 'Home', mobileLabel: 'Home', icon: Home },
+  { path: '/my-events', label: 'My Events', mobileLabel: 'Events', icon: Calendar },
+  { path: '/about', label: 'About', mobileLabel: 'About', icon: Info },
+  { path: '/profile', label: 'Profile', mobileLabel: 'Profile', icon: User },
 ];
 
 export default function Navigation() {
@@ -108,7 +108,7 @@ export default function Navigation() {
                 )}
               >
                 <Icon className="w-5 h-5" />
-                <span className="text-[10px] font-medium">{item.label.split(' ')[0]}</span>
+                <span className="text-[10px] font-medium">{item.mobileLabel}</span>
               </button>
             );
           })}
