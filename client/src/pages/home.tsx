@@ -278,23 +278,25 @@ export default function Home() {
                           </div>
                         )}
                       </div>
-                      <div className="space-y-3">
-                        <p className="text-sm line-clamp-2 opacity-95 font-medium">{opp.description}</p>
-                        <div className="flex items-center justify-between pt-3 border-t border-white/20">
-                          {spotsDisplay && (
-                            <div className="flex items-center gap-2">
-                              <Users className="w-4 h-4" />
-                              <span className="font-bold text-sm">{spotsDisplay}</span>
-                            </div>
-                          )}
-                          <span className="text-xs opacity-70">{opp.signups.length} interested</span>
+                      {large && (
+                        <div className="space-y-3">
+                          <p className="text-sm line-clamp-2 opacity-95 font-medium">{opp.description}</p>
+                          <div className="flex items-center justify-between pt-3 border-t border-white/20">
+                            {spotsDisplay && (
+                              <div className="flex items-center gap-2">
+                                <Users className="w-4 h-4" />
+                                <span className="font-bold text-sm">{spotsDisplay}</span>
+                              </div>
+                            )}
+                            <span className="text-xs opacity-70">{opp.signups.length} interested</span>
+                          </div>
+                          <div className="flex items-center gap-2 text-xs opacity-80">
+                            <MapPin className="w-3 h-3" /><span>{opp.location.split(',')[0]}</span>
+                            <span className="mx-1">&bull;</span>
+                            <Clock className="w-3 h-3" /><span>{opp.duration}h</span>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2 text-xs opacity-80">
-                          <MapPin className="w-3 h-3" /><span>{opp.location.split(',')[0]}</span>
-                          <span className="mx-1">&bull;</span>
-                          <Clock className="w-3 h-3" /><span>{opp.duration}h</span>
-                        </div>
-                      </div>
+                      )}
                     </div>
                   </motion.div>
                 );
