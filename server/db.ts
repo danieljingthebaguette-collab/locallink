@@ -118,32 +118,6 @@ try {
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'linklocal2@gmail.com';
 db.prepare('UPDATE users SET isAdmin = 1, emailVerified = 1 WHERE email = ?').run(ADMIN_EMAIL);
 
-// ── Seed org users ─────────────────────────────────────────────────────────
-// The seeded opportunities were created with fake hostIds (seed1–seed6) that
-// don't correspond to real users.  This migration creates proper org user
-// records for each one so that features like favoriting work correctly.
-// Each org uses a fixed UUID so the migration is idempotent.
-const SEED_ORG_MAP = [
-  { fakeId: 'seed1', id: 'org-eco-warriors-0001', username: 'EcoWarriors',  email: 'eco@seedorg.local'    },
-  { fakeId: 'seed2', id: 'org-math-genius-0002',  username: 'MathGenius',   email: 'math@seedorg.local'   },
-  { fakeId: 'seed3', id: 'org-sports-club-0003',  username: 'SportsClub',   email: 'sports@seedorg.local' },
-  { fakeId: 'seed4', id: 'org-food-for-all-0004', username: 'FoodForAll',   email: 'food@seedorg.local'   },
-  { fakeId: 'seed5', id: 'org-green-future-0005', username: 'GreenFuture',  email: 'green@seedorg.local'  },
-  { fakeId: 'seed6', id: 'org-green-thumb-0006',  username: 'GreenThumb',   email: 'thumb@seedorg.local'  },
-];
-
-for (const org of SEED_ORG_MAP) {
-  // Create a real org user record if it doesn't already exist
-  db.prepare(`
-    INSERT OR IGNORE INTO users (id, username, email, password, isAdmin, emailVerified, accountType, createdAt)
-    VALUES (?, ?, ?, 'seed-locked', 0, 1, 'organization', ?)
-  `).run(org.id, org.username, org.email, new Date().toISOString());
-
-  // Point any opportunity that still has the fake hostId at the real org user
-  db.prepare('UPDATE opportunities SET hostId = ?, hostName = ? WHERE hostId = ?')
-    .run(org.id, org.username, org.fakeId);
-}
-
 // Seed data if tables are empty
 const oppCount = db.prepare('SELECT COUNT(*) as count FROM opportunities').get() as any;
 const alreadySeeded = db.prepare("SELECT id FROM opportunities WHERE id = '1'").get();
