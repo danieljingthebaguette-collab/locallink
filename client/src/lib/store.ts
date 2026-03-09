@@ -377,8 +377,8 @@ interface AdminState {
   fetchUsers: (adminUserId: string) => Promise<void>;
   fetchStats: (adminUserId: string) => Promise<void>;
   deleteUser: (adminUserId: string, userId: string) => Promise<boolean>;
-  deleteOpportunity: (adminUserId: string, oppId: string) => Promise<boolean>;
-  updateOpportunity: (adminUserId: string, oppId: string, data: Record<string, any>) => Promise<boolean>;
+  deleteOpportunity: (adminUserId: string, oppId: string, reason?: string) => Promise<boolean>;
+  updateOpportunity: (adminUserId: string, oppId: string, data: Record<string, any>, reason?: string) => Promise<boolean>;
   banUser: (userId: string) => Promise<boolean>;
   unbanUser: (userId: string) => Promise<boolean>;
 }
@@ -433,11 +433,12 @@ export const useAdminStore = create<AdminState>((set) => ({
     }
   },
 
-  deleteOpportunity: async (_adminUserId, oppId) => {
+  deleteOpportunity: async (_adminUserId, oppId, reason) => {
     try {
       const res = await fetch(`${API}/admin/opportunities/${oppId}`, {
         method: 'DELETE',
         headers: getAuthHeaders(),
+        body: JSON.stringify({ reason: reason ?? '' }),
       });
       return res.ok;
     } catch {
@@ -445,12 +446,12 @@ export const useAdminStore = create<AdminState>((set) => ({
     }
   },
 
-  updateOpportunity: async (_adminUserId, oppId, data) => {
+  updateOpportunity: async (_adminUserId, oppId, data, reason) => {
     try {
       const res = await fetch(`${API}/admin/opportunities/${oppId}`, {
         method: 'PUT',
         headers: getAuthHeaders(),
-        body: JSON.stringify(data),
+        body: JSON.stringify({ ...data, adminReason: reason ?? '' }),
       });
       return res.ok;
     } catch {

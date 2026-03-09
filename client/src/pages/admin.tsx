@@ -141,8 +141,8 @@ export default function Admin() {
             adminUserId={currentUser.id}
             searchQuery={searchQuery}
             setSearchQuery={setSearchQuery}
-            onDeleteOpportunity={async (oppId) => {
-              const ok = await deleteOpportunity(currentUser.id, oppId);
+            onDeleteOpportunity={async (oppId, reason) => {
+              const ok = await deleteOpportunity(currentUser.id, oppId, reason);
               if (ok) {
                 toast({ title: 'Opportunity deleted' });
                 useOpportunitiesStore.setState({ loaded: false });
@@ -152,8 +152,8 @@ export default function Admin() {
                 toast({ title: 'Failed to delete opportunity', variant: 'destructive' });
               }
             }}
-            onUpdateOpportunity={async (oppId, data) => {
-              const ok = await updateOpportunity(currentUser.id, oppId, data);
+            onUpdateOpportunity={async (oppId, data, reason) => {
+              const ok = await updateOpportunity(currentUser.id, oppId, data, reason);
               if (ok) {
                 toast({ title: 'Opportunity updated!' });
                 useOpportunitiesStore.setState({ loaded: false });
@@ -455,15 +455,17 @@ function OpportunitiesTab({
   adminUserId: string;
   searchQuery: string;
   setSearchQuery: (q: string) => void;
-  onDeleteOpportunity: (oppId: string) => Promise<void>;
-  onUpdateOpportunity: (oppId: string, data: Record<string, any>) => Promise<boolean>;
+  onDeleteOpportunity: (oppId: string, reason?: string) => Promise<void>;
+  onUpdateOpportunity: (oppId: string, data: Record<string, any>, reason?: string) => Promise<boolean>;
 }) {
   const [confirmDeleteOpp, setConfirmDeleteOpp] = useState<Opportunity | null>(null);
+  const [deleteReason, setDeleteReason] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<{
     title: string; description: string; category: Category;
     location: string; date: string; duration: number; spots: number;
   }>({ title: '', description: '', category: 'volunteer', location: '', date: '', duration: 2, spots: 10 });
+  const [editReason, setEditReason] = useState('');
   const [savingEdit, setSavingEdit] = useState(false);
 
   const filteredOpps = opportunities.filter(o =>
@@ -474,6 +476,7 @@ function OpportunitiesTab({
 
   const startEdit = (opp: Opportunity) => {
     setEditingId(opp.id);
+    setEditReason('');
     setEditForm({
       title: opp.title,
       description: opp.description,
@@ -488,9 +491,9 @@ function OpportunitiesTab({
   const handleSaveEdit = async (oppId: string) => {
     if (!editForm.title || !editForm.description || !editForm.location || !editForm.date) return;
     setSavingEdit(true);
-    const ok = await onUpdateOpportunity(oppId, editForm);
+    const ok = await onUpdateOpportunity(oppId, editForm, editReason);
     setSavingEdit(false);
-    if (ok) setEditingId(null);
+    if (ok) { setEditingId(null); setEditReason(''); }
   };
 
   return (
@@ -506,19 +509,38 @@ function OpportunitiesTab({
         />
       </div>
 
-      <AlertDialog open={!!confirmDeleteOpp} onOpenChange={(open) => !open && setConfirmDeleteOpp(null)}>
+      <AlertDialog open={!!confirmDeleteOpp} onOpenChange={(open) => { if (!open) { setConfirmDeleteOpp(null); setDeleteReason(''); } }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Opportunity?</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete <strong>{confirmDeleteOpp?.title}</strong>? This will also remove all signups. This cannot be undone.
+              Are you sure you want to delete <strong>{confirmDeleteOpp?.title}</strong>? All signups will be removed. This cannot be undone.
+              The host will receive a notification.
             </AlertDialogDescription>
           </AlertDialogHeader>
+          <div className="px-1 pb-2">
+            <Textarea
+              placeholder="Reason for removal (optional — will be included in the host's notification)"
+              value={deleteReason}
+              onChange={e => setDeleteReason(e.target.value)}
+              className="rounded-xl text-sm min-h-[72px] resize-none"
+              maxLength={300}
+            />
+            {deleteReason.length > 0 && (
+              <p className="text-[10px] text-muted-foreground mt-1 text-right">{deleteReason.length}/300</p>
+            )}
+          </div>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel onClick={() => setDeleteReason('')}>Cancel</AlertDialogCancel>
             <AlertDialogAction
               className="bg-red-500 hover:bg-red-600"
-              onClick={() => { if (confirmDeleteOpp) { onDeleteOpportunity(confirmDeleteOpp.id); setConfirmDeleteOpp(null); } }}
+              onClick={() => {
+                if (confirmDeleteOpp) {
+                  onDeleteOpportunity(confirmDeleteOpp.id, deleteReason);
+                  setConfirmDeleteOpp(null);
+                  setDeleteReason('');
+                }
+              }}
             >
               Delete Opportunity
             </AlertDialogAction>
@@ -617,6 +639,18 @@ function OpportunitiesTab({
                       value={editForm.spots}
                       onChange={e => setEditForm({ ...editForm, spots: parseInt(e.target.value) })}
                       className="h-9 rounded-xl text-sm" />
+                  </div>
+                  <div className="relative">
+                    <Textarea
+                      placeholder="Reason for edit (optional — sends a notification to the host)"
+                      value={editReason}
+                      onChange={e => setEditReason(e.target.value)}
+                      className="rounded-xl text-sm min-h-[56px] resize-none pr-12"
+                      maxLength={300}
+                    />
+                    {editReason.length > 0 && (
+                      <p className="absolute bottom-2 right-3 text-[9px] text-muted-foreground">{editReason.length}/300</p>
+                    )}
                   </div>
                 </div>
                 <div className="flex gap-2">

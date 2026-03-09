@@ -602,10 +602,10 @@ router.delete('/api/admin/users/:id', requireAdmin, (req: AuthRequest, res: Resp
 router.put('/api/admin/opportunities/:id', requireAdmin, (req: Request, res: Response) => {
   try {
     const oppId = req.params.id;
-    const { title, description, category, location, date, duration, spots, spotsRemaining } = req.body;
+    const { title, description, category, location, date, duration, spots, spotsRemaining, adminReason } = req.body;
 
-    const existing = db.prepare('SELECT id FROM opportunities WHERE id = ?').get(oppId);
-    if (!existing) return res.status(404).json({ error: 'Opportunity not found' });
+    const opp = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(oppId) as any;
+    if (!opp) return res.status(404).json({ error: 'Opportunity not found' });
 
     if (title !== undefined) db.prepare('UPDATE opportunities SET title = ? WHERE id = ?').run(title, oppId);
     if (description !== undefined) db.prepare('UPDATE opportunities SET description = ? WHERE id = ?').run(description, oppId);
@@ -616,9 +616,20 @@ router.put('/api/admin/opportunities/:id', requireAdmin, (req: Request, res: Res
     if (spots !== undefined) db.prepare('UPDATE opportunities SET spots = ? WHERE id = ?').run(spots, oppId);
     if (spotsRemaining !== undefined) db.prepare('UPDATE opportunities SET spotsRemaining = ? WHERE id = ?').run(spotsRemaining, oppId);
 
-    const opp = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(oppId);
+    // Notify host if a reason was provided
+    if (adminReason?.trim() && opp.hostId) {
+      const hostExists = db.prepare('SELECT id FROM users WHERE id = ?').get(opp.hostId);
+      if (hostExists) {
+        const postTitle = title ?? opp.title;
+        const msg = `An admin edited your post "${postTitle}". Reason: ${adminReason.trim()}`;
+        db.prepare('INSERT INTO notifications (id, userId, type, message, postId, read, createdAt) VALUES (?, ?, ?, ?, ?, 0, ?)')
+          .run(randomUUID(), opp.hostId, 'admin_edit', msg, oppId, new Date().toISOString());
+      }
+    }
+
+    const updated = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(oppId);
     const signups = (db.prepare('SELECT userId FROM signups WHERE opportunityId = ?').all(oppId) as any[]).map(s => s.userId);
-    return res.json({ ...opp, signups });
+    return res.json({ ...updated, signups });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
@@ -627,9 +638,22 @@ router.put('/api/admin/opportunities/:id', requireAdmin, (req: Request, res: Res
 router.delete('/api/admin/opportunities/:id', requireAdmin, (req: Request, res: Response) => {
   try {
     const oppId = req.params.id;
+    const { reason } = req.body || {};
 
-    const existing = db.prepare('SELECT id FROM opportunities WHERE id = ?').get(oppId);
-    if (!existing) return res.status(404).json({ error: 'Opportunity not found' });
+    const opp = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(oppId) as any;
+    if (!opp) return res.status(404).json({ error: 'Opportunity not found' });
+
+    // Notify host before deleting (always notify, reason is optional)
+    if (opp.hostId) {
+      const hostExists = db.prepare('SELECT id FROM users WHERE id = ?').get(opp.hostId);
+      if (hostExists) {
+        const msg = reason?.trim()
+          ? `Your post "${opp.title}" was removed by an admin. Reason: ${reason.trim()}`
+          : `Your post "${opp.title}" was removed by an admin.`;
+        db.prepare('INSERT INTO notifications (id, userId, type, message, postId, read, createdAt) VALUES (?, ?, ?, ?, ?, 0, ?)')
+          .run(randomUUID(), opp.hostId, 'admin_delete', msg, null, new Date().toISOString());
+      }
+    }
 
     db.prepare('DELETE FROM signups WHERE opportunityId = ?').run(oppId);
     db.prepare('DELETE FROM opportunities WHERE id = ?').run(oppId);
