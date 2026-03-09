@@ -187,6 +187,9 @@ function OverviewTab({ stats, users, opportunities }: { stats: any; users: AppUs
 
   const maxSignups = Math.max(...analytics.map(d => d.signups), 1);
   const maxUsers = Math.max(...analytics.map(d => d.users), 1);
+  const [hoveredDay, setHoveredDay] = useState<{ date: string; signups: number; users: number } | null>(null);
+  const totalSignups = analytics.reduce((s, d) => s + d.signups, 0);
+  const totalUsers = analytics.reduce((s, d) => s + d.users, 0);
 
   const statCards = [
     { label: 'Total Users', value: stats?.totalUsers ?? 0, icon: <Users className="w-5 h-5" />, color: 'text-blue-500 bg-blue-500/10' },
@@ -214,29 +217,26 @@ function OverviewTab({ stats, users, opportunities }: { stats: any; users: AppUs
       {/* Analytics Chart */}
       {analytics.length > 0 && (
         <div className="rounded-2xl bg-card border border-border p-6">
-          <div className="flex items-center justify-between mb-5 flex-wrap gap-2">
-            <div className="flex items-center gap-2">
-              <TrendingUp className="w-5 h-5 text-primary" />
-              <h3 className="font-heading font-semibold text-foreground">14-Day Activity</h3>
-            </div>
-            <div className="flex items-center gap-3 text-xs text-muted-foreground">
-              <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-sm bg-violet-500/80" /><span>Signups</span></div>
-              <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-sm bg-sky-400/80" /><span>New users</span></div>
-            </div>
+          <div className="flex items-center gap-2 mb-5">
+            <TrendingUp className="w-5 h-5 text-primary" />
+            <h3 className="font-heading font-semibold text-foreground">14-Day Activity</h3>
           </div>
           <div className="flex items-end gap-1 h-28">
             {analytics.map((d) => (
-              <div key={d.date} className="flex-1 flex flex-col items-center gap-0.5 min-w-0">
+              <div
+                key={d.date}
+                className="flex-1 flex flex-col items-center gap-0.5 min-w-0 cursor-default"
+                onMouseEnter={() => setHoveredDay(d)}
+                onMouseLeave={() => setHoveredDay(null)}
+              >
                 <div className="w-full flex gap-[2px] items-end" style={{ height: '88px' }}>
                   <div
-                    className="flex-1 bg-violet-500/70 hover:bg-violet-500 rounded-t-sm transition-colors"
+                    className={cn('flex-1 rounded-t-sm transition-colors', hoveredDay?.date === d.date ? 'bg-violet-500' : 'bg-violet-500/60')}
                     style={{ height: `${maxSignups > 0 ? Math.max((d.signups / maxSignups) * 100, d.signups > 0 ? 5 : 0) : 0}%` }}
-                    title={`${d.signups} signups on ${d.date}`}
                   />
                   <div
-                    className="flex-1 bg-sky-400/70 hover:bg-sky-400 rounded-t-sm transition-colors"
+                    className={cn('flex-1 rounded-t-sm transition-colors', hoveredDay?.date === d.date ? 'bg-sky-400' : 'bg-sky-400/60')}
                     style={{ height: `${maxUsers > 0 ? Math.max((d.users / maxUsers) * 100, d.users > 0 ? 5 : 0) : 0}%` }}
-                    title={`${d.users} new users on ${d.date}`}
                   />
                 </div>
                 <p className="text-[7px] text-muted-foreground leading-none mt-0.5 w-full text-center truncate">
@@ -244,6 +244,33 @@ function OverviewTab({ stats, users, opportunities }: { stats: any; users: AppUs
                 </p>
               </div>
             ))}
+          </div>
+
+          {/* Stats row — shows 14-day totals by default, per-day values on hover */}
+          <div className="flex items-center justify-between mt-4 pt-3 border-t border-border/30 gap-3 flex-wrap">
+            <div className="flex items-center gap-5">
+              <div className="flex items-center gap-1.5">
+                <div className="w-2.5 h-2.5 rounded-sm bg-violet-500/80 flex-shrink-0" />
+                <span className="text-xs text-muted-foreground">
+                  <span className="font-bold text-foreground text-sm mr-0.5">
+                    {hoveredDay ? hoveredDay.signups : totalSignups}
+                  </span>
+                  {hoveredDay ? 'signups' : 'total signups'}
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <div className="w-2.5 h-2.5 rounded-sm bg-sky-400/80 flex-shrink-0" />
+                <span className="text-xs text-muted-foreground">
+                  <span className="font-bold text-foreground text-sm mr-0.5">
+                    {hoveredDay ? hoveredDay.users : totalUsers}
+                  </span>
+                  {hoveredDay ? 'new users' : 'new users'}
+                </span>
+              </div>
+            </div>
+            <p className="text-[10px] text-muted-foreground italic">
+              {hoveredDay ? hoveredDay.date : '14-day totals · hover a bar for daily'}
+            </p>
           </div>
         </div>
       )}
