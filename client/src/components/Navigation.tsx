@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { useAuthStore, useNotificationStore } from '@/lib/store';
-import { Home, Calendar, Info, User, LogOut, Shield, Bell, Users, X } from 'lucide-react';
+import { Home, Calendar, Info, User, LogOut, Shield, Bell, Users, X, Trash2, Edit3, UserMinus } from 'lucide-react';
 import Logo from './Logo';
 
 const NAV_ITEMS = [
@@ -160,9 +160,17 @@ export default function Navigation() {
                                 >
                                   <div className={cn(
                                     'w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5',
-                                    n.type === 'interest' ? 'bg-green-500/15 text-green-600' : 'bg-orange-500/15 text-orange-500'
+                                    n.type === 'interest' ? 'bg-green-500/15 text-green-600' :
+                                    n.type === 'disinterest' ? 'bg-orange-500/15 text-orange-500' :
+                                    n.type === 'admin_delete' ? 'bg-red-500/15 text-red-500' :
+                                    n.type === 'admin_edit' ? 'bg-amber-500/15 text-amber-600' :
+                                    'bg-primary/10 text-primary'
                                   )}>
-                                    <Users className="w-4 h-4" />
+                                    {n.type === 'interest' && <Users className="w-4 h-4" />}
+                                    {n.type === 'disinterest' && <UserMinus className="w-4 h-4" />}
+                                    {n.type === 'admin_delete' && <Trash2 className="w-4 h-4" />}
+                                    {n.type === 'admin_edit' && <Edit3 className="w-4 h-4" />}
+                                    {!['interest','disinterest','admin_delete','admin_edit'].includes(n.type) && <Bell className="w-4 h-4" />}
                                   </div>
                                   <div className="flex-1 min-w-0">
                                     <p className="text-sm text-foreground leading-snug">{n.message}</p>
