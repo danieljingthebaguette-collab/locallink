@@ -228,7 +228,11 @@ export const useOpportunitiesStore = create<OpportunitiesState>((set, get) => ({
       filtered.sort((a, b) => b.popularity - a.popularity);
     }
 
-    return filtered;
+    // Always push past events to the bottom regardless of sort
+    const now = new Date();
+    const future = filtered.filter(o => new Date(o.date) >= now);
+    const past = filtered.filter(o => new Date(o.date) < now);
+    return [...future, ...past];
   },
 
   fetchOpportunities: async () => {
@@ -371,6 +375,8 @@ interface AdminState {
   deleteUser: (adminUserId: string, userId: string) => Promise<boolean>;
   deleteOpportunity: (adminUserId: string, oppId: string) => Promise<boolean>;
   updateOpportunity: (adminUserId: string, oppId: string, data: Record<string, any>) => Promise<boolean>;
+  banUser: (userId: string) => Promise<boolean>;
+  unbanUser: (userId: string) => Promise<boolean>;
 }
 
 export const useAdminStore = create<AdminState>((set) => ({
@@ -446,6 +452,28 @@ export const useAdminStore = create<AdminState>((set) => ({
     } catch {
       return false;
     }
+  },
+
+  banUser: async (userId) => {
+    try {
+      const res = await fetch(`${API}/admin/users/${userId}/ban`, { method: 'POST', headers: getAuthHeaders() });
+      if (res.ok) {
+        set(s => ({ users: s.users.map(u => u.id === userId ? { ...u, banned: true } : u) }));
+        return true;
+      }
+      return false;
+    } catch { return false; }
+  },
+
+  unbanUser: async (userId) => {
+    try {
+      const res = await fetch(`${API}/admin/users/${userId}/unban`, { method: 'POST', headers: getAuthHeaders() });
+      if (res.ok) {
+        set(s => ({ users: s.users.map(u => u.id === userId ? { ...u, banned: false } : u) }));
+        return true;
+      }
+      return false;
+    } catch { return false; }
   },
 }));
 

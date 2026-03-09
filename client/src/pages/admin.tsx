@@ -6,6 +6,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { useAuthStore, useAdminStore, useOpportunitiesStore } from '@/lib/store';
+import { Ban, CheckCircle2, TrendingUp } from 'lucide-react';
 import type { AppUser, Opportunity } from '@/lib/mockData';
 import { CATEGORIES, type Category } from '@/lib/mockData';
 import {
@@ -35,7 +36,7 @@ export default function Admin() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const { isLoggedIn, currentUser } = useAuthStore();
-  const { users, stats, loading, fetchUsers, fetchStats, deleteUser, deleteOpportunity, updateOpportunity } = useAdminStore();
+  const { users, stats, loading, fetchUsers, fetchStats, deleteUser, deleteOpportunity, updateOpportunity, banUser, unbanUser } = useAdminStore();
   const { opportunities, fetchOpportunities } = useOpportunitiesStore();
   const [activeTab, setActiveTab] = useState<Tab>('overview');
   const [searchQuery, setSearchQuery] = useState('');
@@ -121,6 +122,16 @@ export default function Admin() {
                 toast({ title: 'Failed to delete user', variant: 'destructive' });
               }
             }}
+            onBanUser={async (userId) => {
+              const ok = await banUser(userId);
+              if (ok) toast({ title: 'User suspended' });
+              else toast({ title: 'Failed to suspend user', variant: 'destructive' });
+            }}
+            onUnbanUser={async (userId) => {
+              const ok = await unbanUser(userId);
+              if (ok) toast({ title: 'User reinstated' });
+              else toast({ title: 'Failed to reinstate user', variant: 'destructive' });
+            }}
           />
         )}
         {activeTab === 'opportunities' && (
@@ -162,6 +173,19 @@ export default function Admin() {
 
 // ===== Overview Tab =====
 function OverviewTab({ stats, users, opportunities }: { stats: any; users: AppUser[]; opportunities: Opportunity[] }) {
+  const [analytics, setAnalytics] = useState<{ date: string; signups: number; users: number }[]>([]);
+
+  useEffect(() => {
+    const token = localStorage.getItem('locallink_token');
+    fetch('/api/admin/analytics', { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.ok ? r.json() : [])
+      .then(setAnalytics)
+      .catch(() => {});
+  }, []);
+
+  const maxSignups = Math.max(...analytics.map(d => d.signups), 1);
+  const maxUsers = Math.max(...analytics.map(d => d.users), 1);
+
   const statCards = [
     { label: 'Total Users', value: stats?.totalUsers ?? 0, icon: <Users className="w-5 h-5" />, color: 'text-blue-500 bg-blue-500/10' },
     { label: 'Opportunities', value: stats?.totalOpps ?? 0, icon: <MapPin className="w-5 h-5" />, color: 'text-green-500 bg-green-500/10' },
@@ -184,6 +208,43 @@ function OverviewTab({ stats, users, opportunities }: { stats: any; users: AppUs
           </div>
         ))}
       </div>
+
+      {/* Analytics Chart */}
+      {analytics.length > 0 && (
+        <div className="rounded-2xl bg-card border border-border p-6">
+          <div className="flex items-center justify-between mb-5 flex-wrap gap-2">
+            <div className="flex items-center gap-2">
+              <TrendingUp className="w-5 h-5 text-primary" />
+              <h3 className="font-heading font-semibold text-foreground">14-Day Activity</h3>
+            </div>
+            <div className="flex items-center gap-3 text-xs text-muted-foreground">
+              <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-sm bg-violet-500/80" /><span>Signups</span></div>
+              <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-sm bg-sky-400/80" /><span>New users</span></div>
+            </div>
+          </div>
+          <div className="flex items-end gap-1 h-28">
+            {analytics.map((d) => (
+              <div key={d.date} className="flex-1 flex flex-col items-center gap-0.5 min-w-0">
+                <div className="w-full flex gap-[2px] items-end" style={{ height: '88px' }}>
+                  <div
+                    className="flex-1 bg-violet-500/70 hover:bg-violet-500 rounded-t-sm transition-colors"
+                    style={{ height: `${maxSignups > 0 ? Math.max((d.signups / maxSignups) * 100, d.signups > 0 ? 5 : 0) : 0}%` }}
+                    title={`${d.signups} signups on ${d.date}`}
+                  />
+                  <div
+                    className="flex-1 bg-sky-400/70 hover:bg-sky-400 rounded-t-sm transition-colors"
+                    style={{ height: `${maxUsers > 0 ? Math.max((d.users / maxUsers) * 100, d.users > 0 ? 5 : 0) : 0}%` }}
+                    title={`${d.users} new users on ${d.date}`}
+                  />
+                </div>
+                <p className="text-[7px] text-muted-foreground leading-none mt-0.5 w-full text-center truncate">
+                  {d.date.slice(5).replace('-', '/')}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Recent Users */}
       <div className="rounded-2xl bg-card border border-border p-6">
@@ -234,6 +295,8 @@ function UsersTab({
   searchQuery,
   setSearchQuery,
   onDeleteUser,
+  onBanUser,
+  onUnbanUser,
 }: {
   users: AppUser[];
   adminUserId: string;
@@ -241,6 +304,8 @@ function UsersTab({
   searchQuery: string;
   setSearchQuery: (q: string) => void;
   onDeleteUser: (userId: string) => Promise<void>;
+  onBanUser: (userId: string) => Promise<void>;
+  onUnbanUser: (userId: string) => Promise<void>;
 }) {
   const [confirmDeleteUser, setConfirmDeleteUser] = useState<AppUser | null>(null);
 
@@ -289,31 +354,55 @@ function UsersTab({
       ) : (
         <div className="space-y-3">
           {filteredUsers.map((user) => (
-            <div key={user.id} className="rounded-2xl bg-card border border-border p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-sm font-bold text-primary">
+            <div key={user.id} className={cn('rounded-2xl bg-card border border-border p-4', user.banned && 'opacity-60')}>
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-sm font-bold text-primary flex-shrink-0">
                     {user.username.charAt(0).toUpperCase()}
                   </div>
-                  <div>
-                    <div className="flex items-center gap-2">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <p className="text-sm font-semibold text-foreground">{user.username}</p>
                       {user.isAdmin && (
                         <span className="bg-red-500/10 text-red-500 px-2 py-0.5 rounded-full text-[10px] font-medium">Admin</span>
                       )}
+                      {user.banned && (
+                        <span className="bg-amber-500/10 text-amber-600 px-2 py-0.5 rounded-full text-[10px] font-medium">Suspended</span>
+                      )}
                     </div>
-                    <p className="text-xs text-muted-foreground">{user.email}</p>
+                    <p className="text-xs text-muted-foreground truncate">{user.email}</p>
                   </div>
                 </div>
                 {user.id !== adminUserId && (
-                  <Button
-                    size="sm"
-                    variant="destructive"
-                    className="rounded-full"
-                    onClick={() => setConfirmDeleteUser(user)}
-                  >
-                    <Trash2 className="w-3 h-3 mr-1" /> Delete
-                  </Button>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    {user.banned ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="rounded-full text-xs text-green-600 border-green-300 hover:bg-green-50 dark:hover:bg-green-950"
+                        onClick={() => onUnbanUser(user.id)}
+                      >
+                        <CheckCircle2 className="w-3 h-3 mr-1" /> Reinstate
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="rounded-full text-xs text-amber-600 border-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950"
+                        onClick={() => onBanUser(user.id)}
+                      >
+                        <Ban className="w-3 h-3 mr-1" /> Suspend
+                      </Button>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      className="rounded-full"
+                      onClick={() => setConfirmDeleteUser(user)}
+                    >
+                      <Trash2 className="w-3 h-3 mr-1" /> Delete
+                    </Button>
+                  </div>
                 )}
               </div>
             </div>

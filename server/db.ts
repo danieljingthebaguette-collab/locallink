@@ -145,6 +145,13 @@ try {
   db.exec("ALTER TABLE users ADD COLUMN accountType TEXT DEFAULT 'volunteer'");
 }
 
+// Migrate: add banned column to users if it doesn't exist yet
+try {
+  db.prepare('SELECT banned FROM users LIMIT 1').get();
+} catch {
+  db.exec("ALTER TABLE users ADD COLUMN banned INTEGER DEFAULT 0");
+}
+
 // Auto-grant admin and auto-verify the designated admin email
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'linklocal2@gmail.com';
 db.prepare('UPDATE users SET isAdmin = 1, emailVerified = 1 WHERE email = ?').run(ADMIN_EMAIL);

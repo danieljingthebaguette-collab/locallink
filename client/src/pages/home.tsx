@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'wouter';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
-import { Plus, MapPin, Users, Clock, Search, Loader2, Heart, Flag, X } from 'lucide-react';
+import { Plus, MapPin, Users, Clock, Search, Loader2, Heart, Flag, X, Share2, Edit3, Save } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -10,6 +10,7 @@ import { useToast } from '@/hooks/use-toast';
 import { getCardSize, isLargeCard, getTitleSize } from '@/lib/cardUtils';
 import { getCategoryColor, getModalGradient, getCategoryBorder, getCategoryLabel } from '@/lib/categoryUtils';
 import { useAuthStore, useOpportunitiesStore, useFavoritesStore } from '@/lib/store';
+import { CATEGORIES, type Category } from '@/lib/mockData';
 import { CATEGORIES, type Category, type Opportunity } from '@/lib/mockData';
 import CreatePostModal from '@/components/CreatePostModal';
 
@@ -30,8 +31,8 @@ export default function Home() {
   const {
     setSearchQuery, setCategory, setSortBy, getFiltered,
     currentCategory, searchQuery, sortBy,
-    signup, cancelSignup, fetchOpportunities,
-    loading, loaded,
+    signup, cancelSignup, fetchOpportunities, updateOpportunity,
+    loading, loaded, opportunities,
   } = useOpportunitiesStore();
   // Destructure `favorites` array directly so React re-renders when it changes
   const { favorites, fetchFavorites, addFavorite, removeFavorite } = useFavoritesStore();
@@ -46,6 +47,10 @@ export default function Home() {
   const [reportReason, setReportReason] = useState('');
   const [reportNote, setReportNote] = useState('');
   const [submittingReport, setSubmittingReport] = useState(false);
+  // Edit post state
+  const [showEditForm, setShowEditForm] = useState(false);
+  const [editForm, setEditForm] = useState({ title: '', description: '', location: '', date: '', duration: 2, spots: 10, category: 'volunteer' as Category });
+  const [savingEdit, setSavingEdit] = useState(false);
 
   // Bump this key whenever sort/category/search changes so cards re-animate entrance
   const [listKey, setListKey] = useState(0);
@@ -53,6 +58,19 @@ export default function Home() {
 
   useEffect(() => { fetchOpportunities(); }, [fetchOpportunities]);
   useEffect(() => { if (isLoggedIn) fetchFavorites(); }, [isLoggedIn, fetchFavorites]);
+
+  // Deep link: auto-open post from ?post=ID in URL
+  useEffect(() => {
+    if (!loaded) return;
+    const params = new URLSearchParams(window.location.search);
+    const postId = params.get('post');
+    if (postId) {
+      const opp = opportunities.find(o => o.id === postId);
+      if (opp) setSelectedCard(opp);
+      // Clean the URL without reloading
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, [loaded, opportunities]);
 
   // Re-animate cards when sort or category changes
   useEffect(() => {
@@ -124,6 +142,47 @@ export default function Home() {
       const fresh = useOpportunitiesStore.getState().opportunities.find(o => o.id === oppId);
       if (fresh) setSelectedCard(fresh); else setSelectedCard(null);
     } finally { setSigningUp(false); }
+  };
+
+  // ── Share post ────────────────────────────────────────────────────
+  const handleShare = (oppId: string) => {
+    const url = `${window.location.origin}/?post=${oppId}`;
+    navigator.clipboard.writeText(url).then(() => {
+      toast({ title: 'Link copied!', description: 'Share it with anyone to open this post directly.' });
+    }).catch(() => {
+      toast({ title: url, description: 'Copy this link to share the post.' });
+    });
+  };
+
+  // ── Edit post (host only) ─────────────────────────────────────────
+  const openEditForm = (opp: typeof selectedCard) => {
+    if (!opp) return;
+    setEditForm({
+      title: opp.title,
+      description: opp.description,
+      location: opp.location,
+      date: opp.date,
+      duration: opp.duration,
+      spots: opp.spots,
+      category: opp.category as Category,
+    });
+    setShowEditForm(true);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!selectedCard) return;
+    setSavingEdit(true);
+    const success = await updateOpportunity(selectedCard.id, editForm);
+    if (success) {
+      // Refresh selected card from updated store
+      const updated = useOpportunitiesStore.getState().opportunities.find(o => o.id === selectedCard.id);
+      if (updated) setSelectedCard(updated);
+      setShowEditForm(false);
+      toast({ title: 'Post updated!' });
+    } else {
+      toast({ title: 'Failed to update post', variant: 'destructive' });
+    }
+    setSavingEdit(false);
   };
 
   // ── Report post ───────────────────────────────────────────────────
@@ -262,6 +321,7 @@ export default function Home() {
                 const hasImage = opp.image && large;
                 const alreadyInterested = isInterested(opp);
                 const spotsDisplay = getSpotsDisplay(opp);
+                const isPast = new Date(opp.date) < new Date();
                 return (
                   <motion.div
                     key={`${opp.id}-${listKey}`}
@@ -277,7 +337,8 @@ export default function Home() {
                     onClick={() => setSelectedCard(opp)}
                     className={cn(
                       "group relative rounded-3xl overflow-hidden cursor-pointer border-4 shadow-sm hover:shadow-2xl transition-shadow duration-300",
-                      getCategoryBorder(opp.category), getCardSize(opp.popularity)
+                      getCategoryBorder(opp.category), getCardSize(opp.popularity),
+                      isPast && "opacity-50 grayscale"
                     )}>
                     {hasImage ? (
                       <div className="absolute inset-0">
@@ -292,6 +353,7 @@ export default function Home() {
                       <div className="space-y-2 border-b border-white/20 pb-3">
                         <div className="flex items-center gap-2 flex-wrap">
                           <p className="text-xs font-bold tracking-widest uppercase opacity-80">{getCategoryLabel(opp.category)}</p>
+                          {isPast && <span className="text-[10px] font-bold bg-white/20 text-white px-2 py-0.5 rounded-full">ENDED</span>}
                           {alreadyInterested && (
                             <motion.span
                               initial={{ scale: 0.7, opacity: 0 }}
@@ -374,7 +436,7 @@ export default function Home() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.22 }}
-            onClick={() => { setSelectedCard(null); setShowReportModal(false); setReportReason(''); setReportNote(''); }}
+            onClick={() => { setSelectedCard(null); setShowReportModal(false); setReportReason(''); setReportNote(''); setShowEditForm(false); }}
             className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
             <motion.div
               initial={{ scale: 0.88, opacity: 0, y: 36 }}
@@ -390,20 +452,106 @@ export default function Home() {
                   <><img src={selectedCard.image} alt={selectedCard.title} className="w-full h-full object-cover" />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent" /></>
                 ) : <div className="absolute inset-0 bg-gradient-to-br opacity-30" />}
-                <div className="absolute inset-0 flex items-end p-6 md:p-8 justify-between">
+                <div className="absolute inset-0 flex items-end p-6 md:p-8 justify-between gap-3">
                   <motion.h2
                     initial={{ opacity: 0, y: 12 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.08, duration: 0.32, ease: EASE_OUT }}
-                    className="text-3xl md:text-4xl font-heading font-bold text-white leading-tight max-w-lg">
+                    className="text-3xl md:text-4xl font-heading font-bold text-white leading-tight max-w-lg flex-1">
                     {selectedCard.title}
                   </motion.h2>
-                  <button onClick={() => setSelectedCard(null)} className="text-3xl text-white/80 hover:text-white transition-colors">&#x2715;</button>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    {/* Share button */}
+                    <button
+                      onClick={() => handleShare(selectedCard.id)}
+                      className="p-2 rounded-full bg-white/20 hover:bg-white/30 text-white transition-colors"
+                      title="Copy link">
+                      <Share2 className="w-4 h-4" />
+                    </button>
+                    {/* Edit button — host or admin only */}
+                    {(currentUser?.id === selectedCard.hostId || currentUser?.isAdmin) && (
+                      <button
+                        onClick={() => showEditForm ? setShowEditForm(false) : openEditForm(selectedCard)}
+                        className="p-2 rounded-full bg-white/20 hover:bg-white/30 text-white transition-colors"
+                        title="Edit post">
+                        <Edit3 className="w-4 h-4" />
+                      </button>
+                    )}
+                    <button onClick={() => { setSelectedCard(null); setShowEditForm(false); }} className="p-2 rounded-full bg-white/20 hover:bg-white/30 text-white transition-colors text-lg leading-none">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
               </div>
 
               {/* Modal body */}
               <div className="p-6 md:p-8 space-y-6 text-white">
+
+                {/* Inline Edit Form — host/admin only */}
+                <AnimatePresence>
+                  {showEditForm && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      transition={{ duration: 0.2 }}
+                      className="bg-white/15 backdrop-blur-md rounded-2xl p-4 border border-white/20 space-y-3 overflow-hidden">
+                      <p className="text-xs font-bold tracking-widest uppercase opacity-75">Edit Post</p>
+                      <input
+                        value={editForm.title}
+                        onChange={e => setEditForm(f => ({ ...f, title: e.target.value }))}
+                        placeholder="Title"
+                        className="w-full rounded-xl bg-white/80 text-foreground border-0 text-sm h-9 px-3"
+                      />
+                      <textarea
+                        value={editForm.description}
+                        onChange={e => setEditForm(f => ({ ...f, description: e.target.value }))}
+                        placeholder="Description"
+                        rows={3}
+                        className="w-full rounded-xl bg-white/80 text-foreground border-0 text-sm px-3 py-2 resize-none"
+                      />
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <input
+                          value={editForm.location}
+                          onChange={e => setEditForm(f => ({ ...f, location: e.target.value }))}
+                          placeholder="Location"
+                          className="rounded-xl bg-white/80 text-foreground border-0 text-sm h-9 px-3"
+                        />
+                        <input
+                          type="datetime-local"
+                          value={editForm.date}
+                          onChange={e => setEditForm(f => ({ ...f, date: e.target.value }))}
+                          className="rounded-xl bg-white/80 text-foreground border-0 text-sm h-9 px-3"
+                        />
+                        <input
+                          type="number" min={0.5} step={0.5}
+                          value={editForm.duration}
+                          onChange={e => setEditForm(f => ({ ...f, duration: parseFloat(e.target.value) }))}
+                          placeholder="Duration (hrs)"
+                          className="rounded-xl bg-white/80 text-foreground border-0 text-sm h-9 px-3"
+                        />
+                        <input
+                          type="number" min={1}
+                          value={editForm.spots}
+                          onChange={e => setEditForm(f => ({ ...f, spots: parseInt(e.target.value) }))}
+                          placeholder="Spots"
+                          className="rounded-xl bg-white/80 text-foreground border-0 text-sm h-9 px-3"
+                        />
+                      </div>
+                      <div className="flex gap-2 pt-1">
+                        <button onClick={() => setShowEditForm(false)}
+                          className="flex-1 rounded-xl py-2 bg-white/10 hover:bg-white/20 text-white text-sm font-medium transition-colors">
+                          Cancel
+                        </button>
+                        <button onClick={handleSaveEdit} disabled={savingEdit}
+                          className="flex-1 rounded-xl py-2 bg-white text-primary text-sm font-semibold flex items-center justify-center gap-1.5 disabled:opacity-60 hover:bg-white/90 transition-colors">
+                          {savingEdit ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                          {savingEdit ? 'Saving...' : 'Save Changes'}
+                        </button>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
 
                 {/* Location / Date / Duration */}
                 <motion.div

@@ -149,6 +149,11 @@ router.post('/api/auth/login', async (req: Request, res: Response) => {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
+    // Block banned users from logging in
+    if (user.banned) {
+      return res.status(403).json({ error: 'Your account has been suspended. Please contact support.' });
+    }
+
     // Block login if email is not yet verified
     if (!user.emailVerified) {
       return res.status(403).json({
@@ -625,6 +630,47 @@ router.delete('/api/admin/opportunities/:id', requireAdmin, (req: Request, res: 
     db.prepare('DELETE FROM signups WHERE opportunityId = ?').run(oppId);
     db.prepare('DELETE FROM opportunities WHERE id = ?').run(oppId);
     return res.json({ success: true });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/api/admin/users/:id/ban', requireAdmin, (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.params.id;
+    if (userId === req.userId) return res.status(400).json({ error: 'Cannot ban yourself' });
+    const user = db.prepare('SELECT id, isAdmin FROM users WHERE id = ?').get(userId) as any;
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    if (user.isAdmin) return res.status(400).json({ error: 'Cannot ban an admin account' });
+    db.prepare('UPDATE users SET banned = 1 WHERE id = ?').run(userId);
+    return res.json({ success: true });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/api/admin/users/:id/unban', requireAdmin, (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.params.id;
+    db.prepare('UPDATE users SET banned = 0 WHERE id = ?').run(userId);
+    return res.json({ success: true });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/api/admin/analytics', requireAdmin, (_req: Request, res: Response) => {
+  try {
+    const days: { date: string; signups: number; users: number }[] = [];
+    for (let i = 13; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const dateStr = d.toISOString().slice(0, 10);
+      const signups = db.prepare("SELECT COUNT(*) as count FROM signups WHERE date(createdAt) = ?").get(dateStr) as any;
+      const users = db.prepare("SELECT COUNT(*) as count FROM users WHERE date(createdAt) = ?").get(dateStr) as any;
+      days.push({ date: dateStr, signups: signups.count, users: users.count });
+    }
+    return res.json(days);
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }

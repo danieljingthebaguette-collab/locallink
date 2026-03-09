@@ -27,6 +27,7 @@ export interface AppUser {
   isAdmin: boolean;
   emailVerified: boolean;
   accountType: 'volunteer' | 'organization';
+  banned?: boolean;
   createdAt: string;
 }
 
