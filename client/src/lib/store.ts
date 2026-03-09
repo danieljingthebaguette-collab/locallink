@@ -22,7 +22,7 @@ interface AuthState {
   resendVerification: (email: string) => Promise<{ success: boolean; error?: string }>;
   forgotPassword: (email: string) => Promise<{ success: boolean; error?: string }>;
   resetPassword: (token: string, password: string) => Promise<{ success: boolean; error?: string }>;
-  updateProfile: (data: { username?: string; currentPassword?: string; newPassword?: string }) => Promise<{ success: boolean; error?: string }>;
+  updateProfile: (data: { username?: string; currentPassword?: string; newPassword?: string; notifyOnInterest?: boolean }) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   loadUser: () => void;
 }

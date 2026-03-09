@@ -170,7 +170,7 @@ router.post('/api/auth/login', async (req: Request, res: Response) => {
     const token = jwt.sign({ userId: user.id, isAdmin: !!user.isAdmin }, JWT_SECRET, { expiresIn: '7d' });
     // Never send the hashed password to the client
     const { password: _pwd, ...safeUser } = user;
-    return res.json({ ...safeUser, isAdmin: !!user.isAdmin, emailVerified: true, token });
+    return res.json({ ...safeUser, isAdmin: !!user.isAdmin, emailVerified: true, notifyOnInterest: !!user.notifyOnInterest, token });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
@@ -206,6 +206,7 @@ router.get('/api/auth/verify-email', (req: Request, res: Response) => {
       ...safeUser,
       isAdmin: !!user.isAdmin,
       emailVerified: true,
+      notifyOnInterest: !!user.notifyOnInterest,
     });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
@@ -293,10 +294,10 @@ router.post('/api/auth/reset-password', async (req: Request, res: Response) => {
   }
 });
 
-// Edit profile (username and/or password)
+// Edit profile (username and/or password and/or notification settings)
 router.put('/api/auth/profile', requireAuth, async (req: AuthRequest, res: Response) => {
   try {
-    const { username, currentPassword, newPassword } = req.body;
+    const { username, currentPassword, newPassword, notifyOnInterest } = req.body;
     const userId = req.userId!;
 
     const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId) as any;
@@ -317,10 +318,14 @@ router.put('/api/auth/profile', requireAuth, async (req: AuthRequest, res: Respo
       db.prepare('UPDATE users SET password = ? WHERE id = ?').run(hashed, userId);
     }
 
+    if (typeof notifyOnInterest === 'boolean') {
+      db.prepare('UPDATE users SET notifyOnInterest = ? WHERE id = ?').run(notifyOnInterest ? 1 : 0, userId);
+    }
+
     const updated = db.prepare(
-      'SELECT id, username, email, isAdmin, emailVerified, accountType, createdAt FROM users WHERE id = ?'
+      'SELECT id, username, email, isAdmin, emailVerified, accountType, notifyOnInterest, createdAt FROM users WHERE id = ?'
     ).get(userId) as any;
-    return res.json({ ...updated, isAdmin: !!updated.isAdmin, emailVerified: !!updated.emailVerified });
+    return res.json({ ...updated, isAdmin: !!updated.isAdmin, emailVerified: !!updated.emailVerified, notifyOnInterest: !!updated.notifyOnInterest });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
@@ -417,13 +422,16 @@ router.post('/api/opportunities/:id/signup', requireAuth, (req: AuthRequest, res
     db.prepare('INSERT INTO signups (opportunityId, userId, createdAt) VALUES (?, ?, ?)').run(oppId, userId, new Date().toISOString());
     // Increment popularity but do NOT decrement spotsRemaining
     db.prepare('UPDATE opportunities SET popularity = popularity + 1 WHERE id = ?').run(oppId);
-    // Notify the host that someone is interested (skip if host signs up for own post)
+    // Notify the host that someone is interested (only if host has opted in; skip own signups)
     if (opp.hostId !== userId) {
-      const volunteer = db.prepare('SELECT username FROM users WHERE id = ?').get(userId) as any;
-      const volunteerName = volunteer?.username || 'Someone';
-      db.prepare('INSERT INTO notifications (id, userId, type, message, postId, read, createdAt) VALUES (?, ?, ?, ?, ?, 0, ?)').run(
-        randomUUID(), opp.hostId, 'interest', `${volunteerName} is interested in "${opp.title}"`, oppId, new Date().toISOString()
-      );
+      const host = db.prepare('SELECT id, notifyOnInterest FROM users WHERE id = ?').get(opp.hostId) as any;
+      if (host?.notifyOnInterest) {
+        const volunteer = db.prepare('SELECT username FROM users WHERE id = ?').get(userId) as any;
+        const volunteerName = volunteer?.username || 'Someone';
+        db.prepare('INSERT INTO notifications (id, userId, type, message, postId, read, createdAt) VALUES (?, ?, ?, ?, ?, 0, ?)').run(
+          randomUUID(), opp.hostId, 'interest', `${volunteerName} is interested in "${opp.title}"`, oppId, new Date().toISOString()
+        );
+      }
     }
 
     const updated = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(oppId) as any;

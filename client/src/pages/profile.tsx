@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import { useAuthStore, useOpportunitiesStore, useFavoritesStore } from '@/lib/store';
-import { User, Mail, Award, Calendar, LogOut, Loader2, Edit3, Lock, Save, X, Clock, Heart, Building2 } from 'lucide-react';
+import { User, Mail, Award, Calendar, LogOut, Loader2, Edit3, Lock, Save, X, Clock, Heart, Building2, Bell } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 // ── Time-on-site helpers ──────────────────────────────────────────────
@@ -122,6 +122,16 @@ export default function Profile() {
   const handleUnfavorite = async (orgId: string) => {
     await removeFavorite(orgId);
     toast({ title: 'Removed from favorites' });
+  };
+
+  const handleToggleNotifyOnInterest = async () => {
+    const newValue = !currentUser.notifyOnInterest;
+    const result = await updateProfile({ notifyOnInterest: newValue });
+    if (result.success) {
+      toast({ title: newValue ? 'Interest notifications enabled' : 'Interest notifications disabled' });
+    } else {
+      toast({ title: result.error || 'Failed to update setting', variant: 'destructive' });
+    }
   };
 
   return (
@@ -287,6 +297,39 @@ export default function Profile() {
             </div>
           )}
         </div>
+
+        {/* Notification Settings (organization accounts only) */}
+        {currentUser.accountType === 'organization' && (
+          <div className="rounded-2xl border-2 border-border bg-card p-6 mb-6">
+            <h3 className="font-heading font-bold text-lg text-foreground mb-4 flex items-center gap-2">
+              <Bell className="w-5 h-5 text-primary" />
+              Notification Settings
+            </h3>
+            <div className="flex items-center justify-between py-2">
+              <div className="flex-1 pr-4">
+                <p className="text-sm font-semibold text-foreground">Interest notifications</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Get notified when someone shows interest in your posts
+                </p>
+              </div>
+              <button
+                onClick={handleToggleNotifyOnInterest}
+                title={currentUser.notifyOnInterest ? 'Disable interest notifications' : 'Enable interest notifications'}
+                className={cn(
+                  'relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none',
+                  currentUser.notifyOnInterest ? 'bg-primary' : 'bg-muted-foreground/30'
+                )}
+              >
+                <span
+                  className={cn(
+                    'inline-block h-4 w-4 rounded-full bg-white shadow transition-transform',
+                    currentUser.notifyOnInterest ? 'translate-x-6' : 'translate-x-1'
+                  )}
+                />
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Favorite Organizations */}
         <div className="rounded-2xl border-2 border-border bg-card p-6 mb-8">

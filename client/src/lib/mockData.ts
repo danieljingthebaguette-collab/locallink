@@ -28,6 +28,7 @@ export interface AppUser {
   emailVerified: boolean;
   accountType: 'volunteer' | 'organization';
   banned?: boolean;
+  notifyOnInterest?: boolean;
   createdAt: string;
 }
 
