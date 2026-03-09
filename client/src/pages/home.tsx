@@ -40,6 +40,7 @@ export default function Home() {
 
   // Card / modal state
   const [selectedCard, setSelectedCard] = useState<Opportunity | null>(null);
+  const [hostProfile, setHostProfile] = useState<{ profileImage: string | null } | null>(null);
   const [signingUp, setSigningUp] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [togglingFav, setTogglingFav] = useState(false);
@@ -86,6 +87,19 @@ export default function Home() {
     const t = setTimeout(() => setListKey(k => k + 1), 350);
     return () => clearTimeout(t);
   }, [searchQuery]);
+
+  // Fetch host profile image when a card modal opens
+  useEffect(() => {
+    if (!selectedCard) { setHostProfile(null); return; }
+    const token = localStorage.getItem('locallink_token');
+    if (!token) { setHostProfile(null); return; }
+    fetch(`/api/auth/user/${selectedCard.hostId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => setHostProfile(data ? { profileImage: data.profileImage || null } : null))
+      .catch(() => setHostProfile(null));
+  }, [selectedCard?.hostId]);
 
   const filteredOpportunities = getFiltered();
 
@@ -592,7 +606,23 @@ export default function Home() {
                   </div>
                   <div className="relative bg-white/15 backdrop-blur-md rounded-2xl p-3 md:p-4 border border-white/20">
                     <p className="text-xs font-bold tracking-widest uppercase opacity-75 mb-1.5">Host</p>
-                    <p className="text-lg font-semibold pr-8 truncate">{selectedCard.hostName}</p>
+                    <div className="flex items-center gap-2 pr-8">
+                      {/* Host avatar */}
+                      <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0 bg-white/20 flex items-center justify-center">
+                        {hostProfile?.profileImage ? (
+                          <img
+                            src={hostProfile.profileImage}
+                            alt={selectedCard.hostName}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <span className="text-sm font-bold text-white">
+                            {selectedCard.hostName.charAt(0).toUpperCase()}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-base font-semibold truncate">{selectedCard.hostName}</p>
+                    </div>
                     {isLoggedIn && currentUser?.id !== selectedCard.hostId && (
                       <motion.button
                         whileHover={{ scale: 1.15 }}
