@@ -1,7 +1,9 @@
 import { useLocation } from 'wouter';
+import { useState, useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
-import { useAuthStore } from '@/lib/store';
-import { Home, Calendar, Info, User, LogOut, Shield } from 'lucide-react';
+import { useAuthStore, useNotificationStore } from '@/lib/store';
+import { Home, Calendar, Info, User, LogOut, Shield, Bell, Users, X } from 'lucide-react';
 import Logo from './Logo';
 
 const NAV_ITEMS = [
@@ -14,6 +16,38 @@ const NAV_ITEMS = [
 export default function Navigation() {
   const [location, navigate] = useLocation();
   const { isLoggedIn, currentUser, logout } = useAuthStore();
+  const { notifications, unreadCount, fetchNotifications, markRead, markAllRead } = useNotificationStore();
+  const [notifOpen, setNotifOpen] = useState(false);
+  const notifRef = useRef<HTMLDivElement>(null);
+
+  // Fetch notifications when logged in, poll every 30s
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    fetchNotifications();
+    const interval = setInterval(fetchNotifications, 30_000);
+    return () => clearInterval(interval);
+  }, [isLoggedIn, fetchNotifications]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
+        setNotifOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const formatTimeAgo = (iso: string) => {
+    const diff = Date.now() - new Date(iso).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    return `${Math.floor(hrs / 24)}d ago`;
+  };
 
   return (
     <>
@@ -70,6 +104,80 @@ export default function Navigation() {
                       Admin
                     </button>
                   )}
+
+                  {/* Notification Bell */}
+                  <div className="relative" ref={notifRef}>
+                    <button
+                      onClick={() => setNotifOpen(o => !o)}
+                      className="relative p-2 rounded-full hover:bg-secondary transition-colors"
+                      title="Notifications"
+                    >
+                      <Bell className="w-5 h-5 text-muted-foreground" />
+                      {unreadCount > 0 && (
+                        <span className="absolute top-1 right-1 w-4 h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                          {unreadCount > 9 ? '9+' : unreadCount}
+                        </span>
+                      )}
+                    </button>
+
+                    <AnimatePresence>
+                      {notifOpen && (
+                        <motion.div
+                          initial={{ opacity: 0, y: 8, scale: 0.95 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={{ opacity: 0, y: 8, scale: 0.95 }}
+                          transition={{ duration: 0.15 }}
+                          className="absolute right-0 top-full mt-2 w-80 bg-card border border-border rounded-2xl shadow-xl overflow-hidden z-50"
+                        >
+                          <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+                            <h3 className="font-semibold text-sm text-foreground">Notifications</h3>
+                            <div className="flex items-center gap-2">
+                              {unreadCount > 0 && (
+                                <button onClick={markAllRead} className="text-xs text-primary hover:underline">
+                                  Mark all read
+                                </button>
+                              )}
+                              <button onClick={() => setNotifOpen(false)} className="p-1 rounded-full hover:bg-secondary">
+                                <X className="w-3.5 h-3.5 text-muted-foreground" />
+                              </button>
+                            </div>
+                          </div>
+                          <div className="max-h-72 overflow-y-auto divide-y divide-border">
+                            {notifications.length === 0 ? (
+                              <div className="py-8 text-center text-sm text-muted-foreground">
+                                <Bell className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                                No notifications yet
+                              </div>
+                            ) : (
+                              notifications.map(n => (
+                                <button
+                                  key={n.id}
+                                  onClick={() => { markRead(n.id); setNotifOpen(false); }}
+                                  className={cn(
+                                    'w-full text-left px-4 py-3 hover:bg-secondary/50 transition-colors flex gap-3 items-start',
+                                    !n.read && 'bg-primary/5'
+                                  )}
+                                >
+                                  <div className={cn(
+                                    'w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5',
+                                    n.type === 'interest' ? 'bg-green-500/15 text-green-600' : 'bg-orange-500/15 text-orange-500'
+                                  )}>
+                                    <Users className="w-4 h-4" />
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm text-foreground leading-snug">{n.message}</p>
+                                    <p className="text-[11px] text-muted-foreground mt-0.5">{formatTimeAgo(n.createdAt)}</p>
+                                  </div>
+                                  {!n.read && <div className="w-2 h-2 rounded-full bg-primary mt-1.5 flex-shrink-0" />}
+                                </button>
+                              ))
+                            )}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+
                   <button
                     onClick={() => { logout(); navigate('/'); }}
                     className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"

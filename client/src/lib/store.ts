@@ -515,3 +515,53 @@ export const useFavoritesStore = create<FavoritesState>((set, get) => ({
     return get().favorites.some(f => f.id === orgId);
   },
 }));
+
+// ===== Notification Store =====
+export interface AppNotification {
+  id: string;
+  userId: string;
+  type: 'interest' | 'cancel';
+  message: string;
+  postId: string | null;
+  read: boolean;
+  createdAt: string;
+}
+
+interface NotificationState {
+  notifications: AppNotification[];
+  unreadCount: number;
+  fetchNotifications: () => Promise<void>;
+  markRead: (id: string) => Promise<void>;
+  markAllRead: () => Promise<void>;
+}
+
+export const useNotificationStore = create<NotificationState>((set, get) => ({
+  notifications: [],
+  unreadCount: 0,
+
+  fetchNotifications: async () => {
+    try {
+      const res = await fetch(`${API}/notifications`, { headers: getAuthHeaders() });
+      if (res.ok) {
+        const data: AppNotification[] = await res.json();
+        set({ notifications: data, unreadCount: data.filter(n => !n.read).length });
+      }
+    } catch { /* ignore */ }
+  },
+
+  markRead: async (id) => {
+    await fetch(`${API}/notifications/${id}/read`, { method: 'POST', headers: getAuthHeaders() });
+    set(s => {
+      const notifications = s.notifications.map(n => n.id === id ? { ...n, read: true } : n);
+      return { notifications, unreadCount: notifications.filter(n => !n.read).length };
+    });
+  },
+
+  markAllRead: async () => {
+    await fetch(`${API}/notifications/read-all`, { method: 'POST', headers: getAuthHeaders() });
+    set(s => ({
+      notifications: s.notifications.map(n => ({ ...n, read: true })),
+      unreadCount: 0,
+    }));
+  },
+}));

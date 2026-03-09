@@ -2,9 +2,10 @@ import { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'wouter';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
-import { Plus, MapPin, Users, Clock, Search, Loader2, Heart } from 'lucide-react';
+import { Plus, MapPin, Users, Clock, Search, Loader2, Heart, Flag, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { getCardSize, isLargeCard, getTitleSize } from '@/lib/cardUtils';
 import { getCategoryColor, getModalGradient, getCategoryBorder, getCategoryLabel } from '@/lib/categoryUtils';
@@ -41,6 +42,10 @@ export default function Home() {
   const [signingUp, setSigningUp] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [togglingFav, setTogglingFav] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportReason, setReportReason] = useState('');
+  const [reportNote, setReportNote] = useState('');
+  const [submittingReport, setSubmittingReport] = useState(false);
 
   // Bump this key whenever sort/category/search changes so cards re-animate entrance
   const [listKey, setListKey] = useState(0);
@@ -119,6 +124,32 @@ export default function Home() {
       const fresh = useOpportunitiesStore.getState().opportunities.find(o => o.id === oppId);
       if (fresh) setSelectedCard(fresh); else setSelectedCard(null);
     } finally { setSigningUp(false); }
+  };
+
+  // ── Report post ───────────────────────────────────────────────────
+  const handleReport = async () => {
+    if (!selectedCard || !reportReason) return;
+    setSubmittingReport(true);
+    try {
+      const token = localStorage.getItem('locallink_token');
+      const res = await fetch('/api/reports', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ postId: selectedCard.id, reason: reportReason, note: reportNote }),
+      });
+      if (res.ok) {
+        toast({ title: 'Report submitted', description: 'Thank you — our team will review this post.' });
+        setShowReportModal(false);
+        setReportReason('');
+        setReportNote('');
+      } else {
+        const data = await res.json();
+        toast({ title: 'Could not submit report', description: data.error || 'Please try again.', variant: 'destructive' });
+      }
+    } catch {
+      toast({ title: 'Network error', variant: 'destructive' });
+    }
+    setSubmittingReport(false);
   };
 
   // ── Favorite toggle ────────────────────────────────────────────────
@@ -343,7 +374,7 @@ export default function Home() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.22 }}
-            onClick={() => setSelectedCard(null)}
+            onClick={() => { setSelectedCard(null); setShowReportModal(false); setReportReason(''); setReportNote(''); }}
             className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
             <motion.div
               initial={{ scale: 0.88, opacity: 0, y: 36 }}
@@ -491,6 +522,54 @@ export default function Home() {
                     </motion.button>
                   )}
                 </motion.div>
+                {/* Report button */}
+                {isLoggedIn && currentUser?.id !== selectedCard.hostId && (
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.35 }}
+                    className="pt-2 text-center">
+                    {!showReportModal ? (
+                      <button
+                        onClick={() => setShowReportModal(true)}
+                        className="text-white/40 hover:text-white/70 text-xs flex items-center gap-1 mx-auto transition-colors">
+                        <Flag className="w-3 h-3" />
+                        Report this post
+                      </button>
+                    ) : (
+                      <div className="bg-white/10 border border-white/20 rounded-2xl p-4 text-left space-y-3">
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs font-bold tracking-widest uppercase opacity-75">Report Post</p>
+                          <button onClick={() => setShowReportModal(false)} className="p-1 rounded-full hover:bg-white/10">
+                            <X className="w-3.5 h-3.5 text-white/60" />
+                          </button>
+                        </div>
+                        <select
+                          value={reportReason}
+                          onChange={e => setReportReason(e.target.value)}
+                          className="w-full rounded-xl bg-white/80 text-foreground border-0 text-sm h-9 px-3">
+                          <option value="">Select a reason...</option>
+                          <option value="spam">Spam or misleading</option>
+                          <option value="inappropriate">Inappropriate content</option>
+                          <option value="fake">Fake or scam</option>
+                          <option value="other">Other</option>
+                        </select>
+                        <Textarea
+                          placeholder="Additional details (optional)"
+                          value={reportNote}
+                          onChange={e => setReportNote(e.target.value)}
+                          className="rounded-xl bg-white/80 text-foreground border-0 text-sm resize-none min-h-[60px]"
+                        />
+                        <button
+                          onClick={handleReport}
+                          disabled={!reportReason || submittingReport}
+                          className="w-full rounded-xl py-2 bg-red-500/80 hover:bg-red-500 text-white text-sm font-semibold transition-colors disabled:opacity-50">
+                          {submittingReport ? 'Submitting...' : 'Submit Report'}
+                        </button>
+                      </div>
+                    )}
+                  </motion.div>
+                )}
               </div>
             </motion.div>
           </motion.div>

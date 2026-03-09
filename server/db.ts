@@ -77,6 +77,37 @@ db.exec(`
     UNIQUE(opportunityId, userId)
   );
 
+  CREATE TABLE IF NOT EXISTS notifications (
+    id TEXT PRIMARY KEY,
+    userId TEXT NOT NULL,
+    type TEXT NOT NULL,
+    message TEXT NOT NULL,
+    postId TEXT,
+    read INTEGER DEFAULT 0,
+    createdAt TEXT NOT NULL,
+    FOREIGN KEY (userId) REFERENCES users(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS reports (
+    id TEXT PRIMARY KEY,
+    postId TEXT NOT NULL,
+    postTitle TEXT NOT NULL,
+    reporterId TEXT NOT NULL,
+    reporterName TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    note TEXT,
+    createdAt TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS feedback (
+    id TEXT PRIMARY KEY,
+    userId TEXT,
+    username TEXT,
+    rating INTEGER NOT NULL,
+    message TEXT NOT NULL,
+    createdAt TEXT NOT NULL
+  );
+
 `);
 
 // Migrate: add isAdmin column if it doesn't exist yet

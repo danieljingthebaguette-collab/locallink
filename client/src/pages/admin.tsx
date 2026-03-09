@@ -25,9 +25,11 @@ import {
   X,
   ChevronUp,
   Loader2,
+  Flag,
+  MessageSquare,
 } from 'lucide-react';
 
-type Tab = 'overview' | 'users' | 'opportunities';
+type Tab = 'overview' | 'users' | 'opportunities' | 'reports' | 'feedback';
 
 export default function Admin() {
   const [, navigate] = useLocation();
@@ -62,6 +64,8 @@ export default function Admin() {
     { value: 'overview', label: 'Overview', icon: <BarChart3 className="w-4 h-4" /> },
     { value: 'users', label: 'Users', icon: <Users className="w-4 h-4" /> },
     { value: 'opportunities', label: 'Opportunities', icon: <MapPin className="w-4 h-4" /> },
+    { value: 'reports', label: 'Reports', icon: <Flag className="w-4 h-4" /> },
+    { value: 'feedback', label: 'Feedback', icon: <MessageSquare className="w-4 h-4" /> },
   ];
 
   return (
@@ -149,6 +153,8 @@ export default function Admin() {
             }}
           />
         )}
+        {activeTab === 'reports' && <ReportsTab toast={toast} />}
+        {activeTab === 'feedback' && <FeedbackTab toast={toast} />}
       </main>
     </div>
   );
@@ -509,6 +515,151 @@ function OpportunitiesTab({
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+// ===== Reports Tab =====
+function ReportsTab({ toast }: { toast: any }) {
+  const [reports, setReports] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchReports = async () => {
+    setLoading(true);
+    try {
+      const token = localStorage.getItem('locallink_token');
+      const res = await fetch('/api/admin/reports', { headers: { Authorization: `Bearer ${token}` } });
+      if (res.ok) setReports(await res.json());
+    } catch { /* ignore */ }
+    setLoading(false);
+  };
+
+  useEffect(() => { fetchReports(); }, []);
+
+  const dismissReport = async (id: string) => {
+    const token = localStorage.getItem('locallink_token');
+    const res = await fetch(`/api/admin/reports/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
+    if (res.ok) {
+      setReports(r => r.filter(x => x.id !== id));
+      toast({ title: 'Report dismissed' });
+    }
+  };
+
+  const REASON_LABELS: Record<string, string> = {
+    spam: 'Spam or misleading', inappropriate: 'Inappropriate content', fake: 'Fake or scam', other: 'Other',
+  };
+
+  if (loading) return <div className="flex justify-center py-16"><Loader2 className="w-8 h-8 animate-spin text-muted-foreground" /></div>;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="font-heading font-bold text-lg">Reports <span className="text-muted-foreground font-normal text-base">({reports.length})</span></h2>
+      </div>
+      {reports.length === 0 ? (
+        <div className="text-center py-16 text-muted-foreground">
+          <Flag className="w-10 h-10 mx-auto mb-3 opacity-30" />
+          <p>No reports yet — all clear!</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {reports.map(r => (
+            <div key={r.id} className="rounded-2xl bg-card border border-border p-4 space-y-2">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-foreground truncate">{r.postTitle}</p>
+                  <p className="text-xs text-muted-foreground">Reported by <span className="font-medium">{r.reporterName}</span> · {new Date(r.createdAt).toLocaleDateString()}</p>
+                </div>
+                <span className="text-xs bg-red-500/10 text-red-500 font-semibold px-2.5 py-1 rounded-full whitespace-nowrap flex-shrink-0">
+                  {REASON_LABELS[r.reason] || r.reason}
+                </span>
+              </div>
+              {r.note && <p className="text-sm text-muted-foreground bg-secondary/50 rounded-xl px-3 py-2">"{r.note}"</p>}
+              <div className="flex gap-2 pt-1">
+                <Button variant="outline" size="sm" className="rounded-full text-xs" onClick={() => dismissReport(r.id)}>
+                  <Trash2 className="w-3 h-3 mr-1" /> Dismiss
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ===== Feedback Tab =====
+function FeedbackTab({ toast }: { toast: any }) {
+  const [feedback, setFeedback] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchFeedback = async () => {
+    setLoading(true);
+    try {
+      const token = localStorage.getItem('locallink_token');
+      const res = await fetch('/api/admin/feedback', { headers: { Authorization: `Bearer ${token}` } });
+      if (res.ok) setFeedback(await res.json());
+    } catch { /* ignore */ }
+    setLoading(false);
+  };
+
+  useEffect(() => { fetchFeedback(); }, []);
+
+  const deleteFeedback = async (id: string) => {
+    const token = localStorage.getItem('locallink_token');
+    const res = await fetch(`/api/admin/feedback/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
+    if (res.ok) {
+      setFeedback(f => f.filter(x => x.id !== id));
+      toast({ title: 'Feedback deleted' });
+    }
+  };
+
+  const avgRating = feedback.length > 0
+    ? (feedback.reduce((s, f) => s + f.rating, 0) / feedback.length).toFixed(1)
+    : '—';
+
+  if (loading) return <div className="flex justify-center py-16"><Loader2 className="w-8 h-8 animate-spin text-muted-foreground" /></div>;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <h2 className="font-heading font-bold text-lg">Feedback <span className="text-muted-foreground font-normal text-base">({feedback.length})</span></h2>
+        {feedback.length > 0 && (
+          <div className="flex items-center gap-1.5 bg-yellow-500/10 text-yellow-600 px-3 py-1.5 rounded-full text-sm font-semibold">
+            <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
+            {avgRating} avg rating
+          </div>
+        )}
+      </div>
+      {feedback.length === 0 ? (
+        <div className="text-center py-16 text-muted-foreground">
+          <MessageSquare className="w-10 h-10 mx-auto mb-3 opacity-30" />
+          <p>No feedback yet.</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {feedback.map(f => (
+            <div key={f.id} className="rounded-2xl bg-card border border-border p-4 space-y-2">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="flex gap-0.5 mb-1">
+                    {[1,2,3,4,5].map(s => (
+                      <Star key={s} className={cn('w-3.5 h-3.5', s <= f.rating ? 'fill-yellow-400 text-yellow-400' : 'text-muted-foreground/20')} />
+                    ))}
+                  </div>
+                  <p className="text-sm text-foreground">{f.message}</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {f.username ? <span className="font-medium">{f.username}</span> : 'Anonymous'} · {new Date(f.createdAt).toLocaleDateString()}
+                  </p>
+                </div>
+                <button onClick={() => deleteFeedback(f.id)} className="p-1.5 rounded-full hover:bg-secondary transition-colors flex-shrink-0">
+                  <X className="w-3.5 h-3.5 text-muted-foreground" />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

@@ -408,6 +408,14 @@ router.post('/api/opportunities/:id/signup', requireAuth, (req: AuthRequest, res
     db.prepare('INSERT INTO signups (opportunityId, userId, createdAt) VALUES (?, ?, ?)').run(oppId, userId, new Date().toISOString());
     // Increment popularity but do NOT decrement spotsRemaining
     db.prepare('UPDATE opportunities SET popularity = popularity + 1 WHERE id = ?').run(oppId);
+    // Notify the host that someone is interested (skip if host signs up for own post)
+    if (opp.hostId !== userId) {
+      const volunteer = db.prepare('SELECT username FROM users WHERE id = ?').get(userId) as any;
+      const volunteerName = volunteer?.username || 'Someone';
+      db.prepare('INSERT INTO notifications (id, userId, type, message, postId, read, createdAt) VALUES (?, ?, ?, ?, ?, 0, ?)').run(
+        randomUUID(), opp.hostId, 'interest', `${volunteerName} is interested in "${opp.title}"`, oppId, new Date().toISOString()
+      );
+    }
 
     const updated = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(oppId) as any;
     const signups = (db.prepare('SELECT userId FROM signups WHERE opportunityId = ?').all(oppId) as any[]).map(s => s.userId);
@@ -426,6 +434,15 @@ router.delete('/api/opportunities/:id/signup', requireAuth, (req: AuthRequest, r
     if (!existing) return res.status(404).json({ error: 'Not interested' });
 
     db.prepare('DELETE FROM signups WHERE opportunityId = ? AND userId = ?').run(oppId, userId);
+    // Notify the host that someone cancelled their interest
+    const cancelOpp = db.prepare('SELECT title, hostId FROM opportunities WHERE id = ?').get(oppId) as any;
+    if (cancelOpp && cancelOpp.hostId !== userId) {
+      const volunteer = db.prepare('SELECT username FROM users WHERE id = ?').get(userId) as any;
+      const volunteerName = volunteer?.username || 'Someone';
+      db.prepare('INSERT INTO notifications (id, userId, type, message, postId, read, createdAt) VALUES (?, ?, ?, ?, ?, 0, ?)').run(
+        randomUUID(), cancelOpp.hostId, 'cancel', `${volunteerName} removed interest from "${cancelOpp.title}"`, oppId, new Date().toISOString()
+      );
+    }
     // Do NOT restore spotsRemaining — spots are informational only
 
     const updated = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(oppId) as any;
@@ -619,6 +636,117 @@ router.get('/api/admin/stats', requireAdmin, (_req: Request, res: Response) => {
     const totalOpps = (db.prepare('SELECT COUNT(*) as count FROM opportunities').get() as any).count;
     const totalSignups = (db.prepare('SELECT COUNT(*) as count FROM signups').get() as any).count;
     return res.json({ totalUsers, totalOpps, totalSignups });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ===== NOTIFICATIONS =====
+
+router.get('/api/notifications', requireAuth, (req: AuthRequest, res: Response) => {
+  try {
+    const notifications = db.prepare(
+      'SELECT * FROM notifications WHERE userId = ? ORDER BY createdAt DESC LIMIT 50'
+    ).all(req.userId!);
+    return res.json((notifications as any[]).map(n => ({ ...n, read: !!n.read })));
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/api/notifications/read-all', requireAuth, (req: AuthRequest, res: Response) => {
+  try {
+    db.prepare('UPDATE notifications SET read = 1 WHERE userId = ?').run(req.userId!);
+    return res.json({ success: true });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/api/notifications/:id/read', requireAuth, (req: AuthRequest, res: Response) => {
+  try {
+    db.prepare('UPDATE notifications SET read = 1 WHERE id = ? AND userId = ?').run(req.params.id, req.userId!);
+    return res.json({ success: true });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ===== REPORTS =====
+
+router.post('/api/reports', requireAuth, (req: AuthRequest, res: Response) => {
+  try {
+    const { postId, reason, note } = req.body;
+    if (!postId || !reason) return res.status(400).json({ error: 'Missing required fields' });
+
+    const post = db.prepare('SELECT title FROM opportunities WHERE id = ?').get(postId) as any;
+    if (!post) return res.status(404).json({ error: 'Post not found' });
+
+    const reporter = db.prepare('SELECT username FROM users WHERE id = ?').get(req.userId!) as any;
+
+    // Prevent duplicate reports from same user for same post
+    const existing = db.prepare('SELECT id FROM reports WHERE postId = ? AND reporterId = ?').get(postId, req.userId!);
+    if (existing) return res.status(409).json({ error: 'You already reported this post' });
+
+    db.prepare(
+      'INSERT INTO reports (id, postId, postTitle, reporterId, reporterName, reason, note, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+    ).run(randomUUID(), postId, post.title, req.userId!, reporter?.username || 'Unknown', reason, note || null, new Date().toISOString());
+
+    return res.status(201).json({ success: true });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/api/admin/reports', requireAdmin, (_req: Request, res: Response) => {
+  try {
+    const reports = db.prepare('SELECT * FROM reports ORDER BY createdAt DESC').all();
+    return res.json(reports);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+router.delete('/api/admin/reports/:id', requireAdmin, (req: Request, res: Response) => {
+  try {
+    db.prepare('DELETE FROM reports WHERE id = ?').run(req.params.id);
+    return res.json({ success: true });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ===== FEEDBACK =====
+
+router.post('/api/feedback', (req: Request, res: Response) => {
+  try {
+    const { rating, message, userId, username } = req.body;
+    if (!rating || !message) return res.status(400).json({ error: 'Rating and message are required' });
+    if (rating < 1 || rating > 5) return res.status(400).json({ error: 'Rating must be 1–5' });
+
+    db.prepare(
+      'INSERT INTO feedback (id, userId, username, rating, message, createdAt) VALUES (?, ?, ?, ?, ?, ?)'
+    ).run(randomUUID(), userId || null, username || null, rating, message, new Date().toISOString());
+
+    return res.status(201).json({ success: true });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/api/admin/feedback', requireAdmin, (_req: Request, res: Response) => {
+  try {
+    const feedback = db.prepare('SELECT * FROM feedback ORDER BY createdAt DESC').all();
+    return res.json(feedback);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+router.delete('/api/admin/feedback/:id', requireAdmin, (req: Request, res: Response) => {
+  try {
+    db.prepare('DELETE FROM feedback WHERE id = ?').run(req.params.id);
+    return res.json({ success: true });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
