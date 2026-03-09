@@ -108,6 +108,16 @@ db.exec(`
     createdAt TEXT NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS appeals (
+    id TEXT PRIMARY KEY,
+    userId TEXT NOT NULL,
+    username TEXT NOT NULL,
+    email TEXT NOT NULL,
+    message TEXT NOT NULL,
+    status TEXT DEFAULT 'pending',
+    createdAt TEXT NOT NULL
+  );
+
 `);
 
 // Migrate: add isAdmin column if it doesn't exist yet

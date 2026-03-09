@@ -151,7 +151,11 @@ router.post('/api/auth/login', async (req: Request, res: Response) => {
 
     // Block banned users from logging in
     if (user.banned) {
-      return res.status(403).json({ error: 'Your account has been suspended. Please contact support.' });
+      return res.status(403).json({
+        error: 'Your account has been suspended.',
+        suspended: true,
+        email: user.email,
+      });
     }
 
     // Block login if email is not yet verified
@@ -792,6 +796,66 @@ router.get('/api/admin/feedback', requireAdmin, (_req: Request, res: Response) =
 router.delete('/api/admin/feedback/:id', requireAdmin, (req: Request, res: Response) => {
   try {
     db.prepare('DELETE FROM feedback WHERE id = ?').run(req.params.id);
+    return res.json({ success: true });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ===== APPEALS =====
+
+// Submit a ban appeal (no auth required — suspended users can't log in)
+router.post('/api/appeals', (req: Request, res: Response) => {
+  try {
+    const { email, message } = req.body;
+    if (!email || !message?.trim()) return res.status(400).json({ error: 'Email and message are required' });
+
+    const user = db.prepare('SELECT id, username, email, banned FROM users WHERE email = ?').get(email) as any;
+    if (!user) return res.status(404).json({ error: 'No account found with that email' });
+    if (!user.banned) return res.status(400).json({ error: 'Account is not suspended' });
+
+    // Prevent duplicate pending appeals
+    const existing = db.prepare("SELECT id FROM appeals WHERE userId = ? AND status = 'pending'").get(user.id);
+    if (existing) return res.status(409).json({ error: 'You already have a pending appeal' });
+
+    db.prepare(
+      'INSERT INTO appeals (id, userId, username, email, message, status, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    ).run(randomUUID(), user.id, user.username, user.email, message.trim(), 'pending', new Date().toISOString());
+
+    return res.status(201).json({ success: true });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Admin: list all pending appeals
+router.get('/api/admin/appeals', requireAdmin, (_req: Request, res: Response) => {
+  try {
+    const appeals = db.prepare("SELECT * FROM appeals WHERE status = 'pending' ORDER BY createdAt DESC").all();
+    return res.json(appeals);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Admin: approve appeal → unban user
+router.post('/api/admin/appeals/:id/approve', requireAdmin, (req: Request, res: Response) => {
+  try {
+    const appeal = db.prepare('SELECT * FROM appeals WHERE id = ?').get(req.params.id) as any;
+    if (!appeal) return res.status(404).json({ error: 'Appeal not found' });
+
+    db.prepare('UPDATE users SET banned = 0 WHERE id = ?').run(appeal.userId);
+    db.prepare("UPDATE appeals SET status = 'approved' WHERE id = ?").run(req.params.id);
+    return res.json({ success: true });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Admin: dismiss appeal
+router.delete('/api/admin/appeals/:id', requireAdmin, (req: Request, res: Response) => {
+  try {
+    db.prepare("UPDATE appeals SET status = 'dismissed' WHERE id = ?").run(req.params.id);
     return res.json({ success: true });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });

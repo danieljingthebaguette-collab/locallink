@@ -17,7 +17,7 @@ interface AuthState {
   isLoggedIn: boolean;
   currentUser: AppUser | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<{ success: boolean; error?: string; needsVerification?: boolean; email?: string }>;
+  login: (email: string, password: string) => Promise<{ success: boolean; error?: string; needsVerification?: boolean; suspended?: boolean; email?: string }>;
   register: (username: string, email: string, password: string, accountType?: string) => Promise<{ success: boolean; error?: string; needsVerification?: boolean; email?: string }>;
   resendVerification: (email: string) => Promise<{ success: boolean; error?: string }>;
   forgotPassword: (email: string) => Promise<{ success: boolean; error?: string }>;
@@ -50,6 +50,10 @@ export const useAuthStore = create<AuthState>((set) => {
           // Surface the "email not verified" case so the UI can offer a resend button
           if (data.needsVerification) {
             return { success: false, error: data.error, needsVerification: true, email: data.email };
+          }
+          // Surface the "suspended" case so the UI can offer an appeal form
+          if (data.suspended) {
+            return { success: false, error: data.error, suspended: true, email: data.email };
           }
           return { success: false, error: data.error || 'Login failed' };
         }

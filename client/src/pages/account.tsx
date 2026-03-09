@@ -3,7 +3,8 @@ import { useLocation } from 'wouter';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Mail, Lock, User, MailCheck, Users, Building2 } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
+import { Mail, Lock, User, MailCheck, Users, Building2, ShieldOff } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuthStore } from '@/lib/store';
 
@@ -23,6 +24,12 @@ export default function Account() {
   const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null);
   const [resendLoading, setResendLoading] = useState(false);
   const [resendSent, setResendSent] = useState(false);
+
+  // Suspension appeal state
+  const [suspendedEmail, setSuspendedEmail] = useState<string | null>(null);
+  const [appealMessage, setAppealMessage] = useState('');
+  const [appealSending, setAppealSending] = useState(false);
+  const [appealSent, setAppealSent] = useState(false);
 
   // If already logged in, redirect to profile
   if (isLoggedIn && currentUser) {
@@ -58,6 +65,8 @@ export default function Account() {
     if (!validateForm()) return;
     setFormError('');
     setUnverifiedEmail(null);
+    setSuspendedEmail(null);
+    setAppealSent(false);
 
     if (isLoginMode) {
       const result = await login(formData.email, formData.password);
@@ -68,6 +77,10 @@ export default function Account() {
         // Email not verified — show inline resend prompt instead of a generic error
         setUnverifiedEmail(result.email || formData.email);
         setResendSent(false);
+      } else if (result.suspended) {
+        // Account suspended — show appeal form
+        setSuspendedEmail(result.email || formData.email);
+        setAppealMessage('');
       } else {
         setFormError(result.error || 'Login failed');
       }
@@ -96,6 +109,28 @@ export default function Account() {
 
   const clearFieldError = (field: 'username' | 'email' | 'password') => {
     if (fieldErrors[field]) setFieldErrors((prev) => ({ ...prev, [field]: undefined }));
+  };
+
+  const handleSubmitAppeal = async () => {
+    if (!suspendedEmail || !appealMessage.trim()) return;
+    setAppealSending(true);
+    try {
+      const res = await fetch('/api/appeals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: suspendedEmail, message: appealMessage.trim() }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setAppealSent(true);
+        toast({ title: 'Appeal submitted! The admin will review it shortly.' });
+      } else {
+        toast({ title: data.error || 'Failed to submit appeal', variant: 'destructive' });
+      }
+    } catch {
+      toast({ title: 'Network error. Please try again.', variant: 'destructive' });
+    }
+    setAppealSending(false);
   };
 
   // ── "Check your email" screen shown after successful registration ──
@@ -175,6 +210,46 @@ export default function Account() {
               {formError && (
                 <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
                   {formError}
+                </div>
+              )}
+
+              {/* Suspended account banner with appeal form */}
+              {suspendedEmail && (
+                <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-4 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <ShieldOff className="w-4 h-4 text-red-600 flex-shrink-0" />
+                    <p className="text-sm text-red-800 font-semibold">Account suspended</p>
+                  </div>
+                  <p className="text-xs text-red-700 leading-relaxed">
+                    Your account (<span className="font-semibold">{suspendedEmail}</span>) has been suspended.
+                    You may submit an appeal below for admin review.
+                  </p>
+                  {appealSent ? (
+                    <div className="rounded-lg bg-green-50 border border-green-200 px-3 py-2">
+                      <p className="text-xs text-green-800 font-medium">✓ Appeal submitted — the admin will review it shortly.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <Textarea
+                        placeholder="Explain why your account should be reinstated..."
+                        value={appealMessage}
+                        onChange={(e) => setAppealMessage(e.target.value)}
+                        className="text-sm rounded-xl min-h-[80px] border-red-200 focus:border-red-400 resize-none"
+                        maxLength={500}
+                      />
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-[10px] text-red-400">{appealMessage.length}/500</p>
+                        <Button
+                          size="sm"
+                          onClick={handleSubmitAppeal}
+                          disabled={appealSending || !appealMessage.trim()}
+                          className="rounded-full text-xs h-8 bg-red-600 hover:bg-red-700"
+                        >
+                          {appealSending ? 'Submitting...' : 'Submit Appeal'}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -347,6 +422,9 @@ export default function Account() {
                     setFieldErrors({});
                     setUnverifiedEmail(null);
                     setResendSent(false);
+                    setSuspendedEmail(null);
+                    setAppealSent(false);
+                    setAppealMessage('');
                     setAccountType('volunteer');
                   }}
                   className="text-sm text-primary hover:text-primary/80 font-medium transition-colors"

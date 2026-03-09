@@ -6,7 +6,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { useAuthStore, useAdminStore, useOpportunitiesStore } from '@/lib/store';
-import { Ban, CheckCircle2, TrendingUp } from 'lucide-react';
+import { Ban, CheckCircle2, TrendingUp, Scale } from 'lucide-react';
 import type { AppUser, Opportunity } from '@/lib/mockData';
 import { CATEGORIES, type Category } from '@/lib/mockData';
 import {
@@ -30,7 +30,7 @@ import {
   MessageSquare,
 } from 'lucide-react';
 
-type Tab = 'overview' | 'users' | 'opportunities' | 'reports' | 'feedback';
+type Tab = 'overview' | 'users' | 'opportunities' | 'reports' | 'feedback' | 'appeals';
 
 export default function Admin() {
   const [, navigate] = useLocation();
@@ -67,6 +67,7 @@ export default function Admin() {
     { value: 'opportunities', label: 'Opportunities', icon: <MapPin className="w-4 h-4" /> },
     { value: 'reports', label: 'Reports', icon: <Flag className="w-4 h-4" /> },
     { value: 'feedback', label: 'Feedback', icon: <MessageSquare className="w-4 h-4" /> },
+    { value: 'appeals', label: 'Appeals', icon: <Scale className="w-4 h-4" /> },
   ];
 
   return (
@@ -166,6 +167,7 @@ export default function Admin() {
         )}
         {activeTab === 'reports' && <ReportsTab toast={toast} />}
         {activeTab === 'feedback' && <FeedbackTab toast={toast} />}
+        {activeTab === 'appeals' && <AppealsTab toast={toast} onUnbanUser={unbanUser} />}
       </main>
     </div>
   );
@@ -667,6 +669,108 @@ function ReportsTab({ toast }: { toast: any }) {
               <div className="flex gap-2 pt-1">
                 <Button variant="outline" size="sm" className="rounded-full text-xs" onClick={() => dismissReport(r.id)}>
                   <Trash2 className="w-3 h-3 mr-1" /> Dismiss
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ===== Appeals Tab =====
+function AppealsTab({ toast, onUnbanUser }: { toast: any; onUnbanUser: (userId: string) => Promise<boolean> }) {
+  const [appeals, setAppeals] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchAppeals = async () => {
+    setLoading(true);
+    try {
+      const token = localStorage.getItem('locallink_token');
+      const res = await fetch('/api/admin/appeals', { headers: { Authorization: `Bearer ${token}` } });
+      if (res.ok) setAppeals(await res.json());
+    } catch { /* ignore */ }
+    setLoading(false);
+  };
+
+  useEffect(() => { fetchAppeals(); }, []);
+
+  const approveAppeal = async (appeal: any) => {
+    const token = localStorage.getItem('locallink_token');
+    const res = await fetch(`/api/admin/appeals/${appeal.id}/approve`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (res.ok) {
+      setAppeals(a => a.filter(x => x.id !== appeal.id));
+      toast({ title: `${appeal.username}'s account has been reinstated` });
+    } else {
+      toast({ title: 'Failed to approve appeal', variant: 'destructive' });
+    }
+  };
+
+  const dismissAppeal = async (id: string) => {
+    const token = localStorage.getItem('locallink_token');
+    const res = await fetch(`/api/admin/appeals/${id}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (res.ok) {
+      setAppeals(a => a.filter(x => x.id !== id));
+      toast({ title: 'Appeal dismissed' });
+    }
+  };
+
+  if (loading) return <div className="flex justify-center py-16"><Loader2 className="w-8 h-8 animate-spin text-muted-foreground" /></div>;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="font-heading font-bold text-lg">
+          Appeals <span className="text-muted-foreground font-normal text-base">({appeals.length})</span>
+        </h2>
+      </div>
+      {appeals.length === 0 ? (
+        <div className="text-center py-16 text-muted-foreground">
+          <Scale className="w-10 h-10 mx-auto mb-3 opacity-30" />
+          <p>No pending appeals.</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {appeals.map(a => (
+            <div key={a.id} className="rounded-2xl bg-card border border-border p-4 space-y-3">
+              <div className="flex items-start gap-3">
+                <div className="w-9 h-9 rounded-full bg-amber-500/10 flex items-center justify-center text-sm font-bold text-amber-600 flex-shrink-0">
+                  {a.username.charAt(0).toUpperCase()}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="text-sm font-semibold text-foreground">{a.username}</p>
+                    <span className="bg-amber-500/10 text-amber-600 px-2 py-0.5 rounded-full text-[10px] font-medium">Suspended</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">{a.email} · {new Date(a.createdAt).toLocaleDateString()}</p>
+                </div>
+              </div>
+              <div className="bg-secondary/50 rounded-xl px-3 py-2.5">
+                <p className="text-xs text-muted-foreground font-medium mb-1 uppercase tracking-wide">Appeal message</p>
+                <p className="text-sm text-foreground leading-relaxed">"{a.message}"</p>
+              </div>
+              <div className="flex gap-2 pt-1">
+                <Button
+                  size="sm"
+                  className="rounded-full text-xs bg-green-600 hover:bg-green-700 flex-1"
+                  onClick={() => approveAppeal(a)}
+                >
+                  <CheckCircle2 className="w-3 h-3 mr-1" /> Approve & Reinstate
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="rounded-full text-xs flex-1"
+                  onClick={() => dismissAppeal(a.id)}
+                >
+                  <X className="w-3 h-3 mr-1" /> Dismiss
                 </Button>
               </div>
             </div>
