@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import { useAuthStore, useOpportunitiesStore, useFavoritesStore } from '@/lib/store';
-import { User, Mail, Award, Calendar, LogOut, Loader2, Edit3, Lock, Save, X, Clock, Heart, Building2, Bell } from 'lucide-react';
+import { User, Mail, Award, Calendar, LogOut, Loader2, Edit3, Lock, Save, X, Clock, Heart, Building2, Bell, Camera } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 // ── Time-on-site helpers ──────────────────────────────────────────────
@@ -33,7 +33,9 @@ export default function Profile() {
   const [editErrors, setEditErrors] = useState<{ username?: string; currentPassword?: string; newPassword?: string; confirmPassword?: string }>({});
   const [saving, setSaving] = useState(false);
   const [timeOnSite, setTimeOnSite] = useState(getStoredMinutes());
+  const [avatarUploading, setAvatarUploading] = useState(false);
   const sessionStartRef = useRef<number>(Date.now());
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetchOpportunities();
@@ -134,6 +136,47 @@ export default function Profile() {
     }
   };
 
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!fileInputRef.current) return;
+    fileInputRef.current.value = '';
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      toast({ title: 'Please select an image file', variant: 'destructive' });
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast({ title: 'Image must be under 5 MB', variant: 'destructive' });
+      return;
+    }
+    setAvatarUploading(true);
+    try {
+      const token = localStorage.getItem('locallink_token');
+      const formData = new FormData();
+      formData.append('image', file);
+      const uploadRes = await fetch('/api/upload', {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formData,
+      });
+      if (!uploadRes.ok) {
+        toast({ title: 'Upload failed', variant: 'destructive' });
+        setAvatarUploading(false);
+        return;
+      }
+      const { url } = await uploadRes.json();
+      const result = await updateProfile({ profileImage: url });
+      if (result.success) {
+        toast({ title: 'Profile picture updated!' });
+      } else {
+        toast({ title: result.error || 'Failed to save image', variant: 'destructive' });
+      }
+    } catch {
+      toast({ title: 'Network error', variant: 'destructive' });
+    }
+    setAvatarUploading(false);
+  };
+
   return (
     <div className="min-h-screen bg-background pb-24 font-sans">
       <main className="container mx-auto px-4 py-8 max-w-2xl">
@@ -147,8 +190,43 @@ export default function Profile() {
           >
             <Edit3 className="w-4 h-4" />
           </button>
-          <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
-            <User className="w-10 h-10 text-primary" />
+          {/* Clickable avatar with upload overlay */}
+          <div className="relative inline-block mx-auto mb-4">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleAvatarChange}
+            />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={avatarUploading}
+              className="group relative w-20 h-20 rounded-full overflow-hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              title="Change profile picture"
+            >
+              {currentUser.profileImage ? (
+                <img
+                  src={currentUser.profileImage}
+                  alt={currentUser.username}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="w-full h-full bg-primary/10 flex items-center justify-center">
+                  <User className="w-10 h-10 text-primary" />
+                </div>
+              )}
+              {/* Hover / uploading overlay */}
+              <div className={cn(
+                'absolute inset-0 flex flex-col items-center justify-center rounded-full transition-opacity bg-black/40',
+                avatarUploading ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+              )}>
+                {avatarUploading
+                  ? <Loader2 className="w-6 h-6 text-white animate-spin" />
+                  : <Camera className="w-6 h-6 text-white" />
+                }
+              </div>
+            </button>
           </div>
           <h2 className="text-2xl font-heading font-bold text-foreground">{currentUser.username}</h2>
           <p className="text-muted-foreground flex items-center justify-center gap-1 mt-1">

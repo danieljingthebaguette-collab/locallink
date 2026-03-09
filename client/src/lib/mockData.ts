@@ -29,6 +29,7 @@ export interface AppUser {
   accountType: 'volunteer' | 'organization';
   banned?: boolean;
   notifyOnInterest?: boolean;
+  profileImage?: string | null;
   createdAt: string;
 }
 
