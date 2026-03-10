@@ -63,11 +63,6 @@ export default function MyEvents() {
   const editFileRef = useRef<HTMLInputElement>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
 
-  // Quick spots inline editor
-  const [quickSpotsId, setQuickSpotsId] = useState<string | null>(null);
-  const [quickSpotsValue, setQuickSpotsValue] = useState<number>(0);
-  const [savingQuickSpots, setSavingQuickSpots] = useState(false);
-
   // Availability toggle
   const [togglingAvailId, setTogglingAvailId] = useState<string | null>(null);
 
@@ -133,23 +128,12 @@ export default function MyEvents() {
     }
   };
 
-  const handleQuickSpotsUpdate = async (oppId: string) => {
-    if (quickSpotsValue < 1) return;
-    setSavingQuickSpots(true);
-    const success = await updateOpportunity(oppId, { spots: quickSpotsValue });
-    setSavingQuickSpots(false);
-    if (success) {
-      toast({ title: 'Spots updated!' });
-      setQuickSpotsId(null);
-    } else {
-      toast({ title: 'Failed to update spots', variant: 'destructive' });
-    }
-  };
-
   const handleToggleAvail = async (opp: Opportunity) => {
     setTogglingAvailId(opp.id);
-    const newVal = opp.isAvailable === false ? true : false;
-    const success = await updateOpportunity(opp.id, { isAvailable: newVal });
+    // SQLite returns 0/1 integers; JS booleans may come from optimistic updates.
+    // Treat anything falsy-and-not-undefined as "closed".
+    const currentlyOpen = opp.isAvailable !== 0 && opp.isAvailable !== false;
+    const success = await updateOpportunity(opp.id, { isAvailable: !currentlyOpen });
     setTogglingAvailId(null);
     if (!success) {
       toast({ title: 'Failed to update availability', variant: 'destructive' });
@@ -285,8 +269,11 @@ export default function MyEvents() {
             </div>
           ) : (
             <div className="space-y-4">
-              {hosted.map((opp) => (
-                <div key={opp.id} className="rounded-2xl border-2 border-border bg-card overflow-hidden">
+              {hosted.map((opp) => {
+                // SQLite returns 0/1; JS toggle sends true/false — handle both
+                const isClosed = opp.isAvailable === 0 || opp.isAvailable === false;
+                return (
+                <div key={opp.id} className={cn('rounded-2xl border-2 border-border bg-card overflow-hidden transition-opacity', isClosed && 'opacity-70')}>
                   {/* Card header */}
                   <div className="p-5 space-y-2">
                     <div className="flex items-start justify-between gap-4">
@@ -297,54 +284,12 @@ export default function MyEvents() {
                         <h3 className="font-heading font-bold text-lg text-foreground">{opp.title}</h3>
                         <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
                           <span className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5" />{opp.location}</span>
-                          {/* Quick spots inline editor */}
-                          {quickSpotsId === opp.id ? (
-                            <span className="flex items-center gap-1">
-                              <Users className="w-3.5 h-3.5 flex-shrink-0" />
-                              <span className="flex-shrink-0">{opp.signups.length}/</span>
-                              <input
-                                type="number"
-                                min={1}
-                                max={1000}
-                                value={quickSpotsValue}
-                                onChange={(e) => setQuickSpotsValue(parseInt(e.target.value) || 1)}
-                                className="w-14 h-5 text-xs border border-primary/40 rounded px-1 bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50"
-                                autoFocus
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') handleQuickSpotsUpdate(opp.id);
-                                  if (e.key === 'Escape') setQuickSpotsId(null);
-                                }}
-                              />
-                              <button
-                                onClick={() => handleQuickSpotsUpdate(opp.id)}
-                                disabled={savingQuickSpots}
-                                className="text-primary hover:text-primary/70 transition-colors disabled:opacity-50"
-                                title="Save"
-                              >
-                                {savingQuickSpots ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-                              </button>
-                              <button
-                                onClick={() => setQuickSpotsId(null)}
-                                className="text-muted-foreground hover:text-foreground transition-colors"
-                                title="Cancel"
-                              >
-                                <X className="w-3.5 h-3.5" />
-                              </button>
-                            </span>
-                          ) : (
-                            <button
-                              onClick={() => { setQuickSpotsId(opp.id); setQuickSpotsValue(opp.spots); }}
-                              className="flex items-center gap-1 hover:text-primary transition-colors group"
-                              title="Click to update total spots"
-                            >
-                              <Users className="w-3.5 h-3.5" />
-                              {opp.signups.length}/{opp.spots} signed up
-                              <Edit3 className="w-3 h-3 opacity-0 group-hover:opacity-50 transition-opacity" />
-                            </button>
-                          )}
                           <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" />{opp.duration}h</span>
                           {isPast(opp.date) && (
                             <span className="text-xs font-semibold text-muted-foreground bg-secondary px-2 py-0.5 rounded-full">Ended</span>
+                          )}
+                          {isClosed && !isPast(opp.date) && (
+                            <span className="text-xs font-semibold text-muted-foreground bg-secondary px-2 py-0.5 rounded-full">Closed</span>
                           )}
                         </div>
                       </div>
@@ -355,21 +300,21 @@ export default function MyEvents() {
                           disabled={togglingAvailId === opp.id}
                           className={cn(
                             'px-2.5 py-1 rounded-full text-xs font-semibold transition-all flex items-center gap-1 border disabled:opacity-60',
-                            opp.isAvailable !== false
+                            !isClosed
                               ? 'bg-green-500/10 border-green-400/30 text-green-600 hover:bg-green-500/20 dark:text-green-400'
                               : 'bg-muted/60 border-border text-muted-foreground hover:bg-muted'
                           )}
-                          title={opp.isAvailable !== false ? 'Accepting sign-ups — click to close' : 'Closed — click to reopen'}
+                          title={!isClosed ? 'Accepting sign-ups — click to close' : 'Closed — click to reopen'}
                         >
                           {togglingAvailId === opp.id ? (
                             <Loader2 className="w-3 h-3 animate-spin" />
                           ) : (
                             <span className={cn(
                               'w-1.5 h-1.5 rounded-full flex-shrink-0',
-                              opp.isAvailable !== false ? 'bg-green-500' : 'bg-muted-foreground'
+                              !isClosed ? 'bg-green-500' : 'bg-muted-foreground'
                             )} />
                           )}
-                          {opp.isAvailable !== false ? 'Open' : 'Closed'}
+                          {!isClosed ? 'Open' : 'Closed'}
                         </button>
                         <button
                           onClick={() => editingId === opp.id ? setEditingId(null) : startEdit(opp)}
@@ -474,7 +419,8 @@ export default function MyEvents() {
                     </div>
                   )}
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
