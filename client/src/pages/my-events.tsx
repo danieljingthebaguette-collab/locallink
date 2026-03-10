@@ -42,6 +42,16 @@ function isPast(dateStr: string) {
   return new Date(dateStr) < new Date();
 }
 
+/**
+ * SQLite stores isAvailable as INTEGER 0/1.
+ * The frontend may also set it to boolean true/false.
+ * undefined/null/1/true → open (default).
+ * 0/false → closed.
+ */
+function isOppClosed(opp: Opportunity): boolean {
+  return !opp.isAvailable && opp.isAvailable !== undefined && opp.isAvailable !== null;
+}
+
 export default function MyEvents() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
@@ -56,15 +66,13 @@ export default function MyEvents() {
   const [editForm, setEditForm] = useState<{
     title: string; description: string; category: Category;
     location: string; date: string; duration: number; spots: number; image: string;
-  }>({ title: '', description: '', category: 'volunteer', location: '', date: '', duration: 2, spots: 10, image: '' });
+    isAvailable: boolean;
+  }>({ title: '', description: '', category: 'volunteer', location: '', date: '', duration: 2, spots: 10, image: '', isAvailable: true });
   const [savingEdit, setSavingEdit] = useState(false);
   const [editImageFile, setEditImageFile] = useState<File | null>(null);
   const [editImagePreview, setEditImagePreview] = useState('');
   const editFileRef = useRef<HTMLInputElement>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
-
-  // Availability toggle
-  const [togglingAvailId, setTogglingAvailId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchOpportunities();
@@ -95,7 +103,14 @@ export default function MyEvents() {
   }
 
   const signedUp = getSignedUpEvents(currentUser.id);
-  const hosted = getHostedEvents(currentUser.id);
+  const hostedRaw = getHostedEvents(currentUser.id);
+  // Sort: active events first, closed & past events pushed to the end
+  const hosted = [...hostedRaw].sort((a, b) => {
+    const aInactive = isPast(a.date) || isOppClosed(a);
+    const bInactive = isPast(b.date) || isOppClosed(b);
+    if (aInactive === bInactive) return 0;
+    return aInactive ? 1 : -1;
+  });
   const upcoming = signedUp.filter(o => !isPast(o.date));
   const past = signedUp.filter(o => isPast(o.date));
 
@@ -128,18 +143,6 @@ export default function MyEvents() {
     }
   };
 
-  const handleToggleAvail = async (opp: Opportunity) => {
-    setTogglingAvailId(opp.id);
-    // SQLite returns 0/1 integers; JS booleans may come from optimistic updates.
-    // Treat anything falsy-and-not-undefined as "closed".
-    const currentlyOpen = opp.isAvailable !== 0 && opp.isAvailable !== false;
-    const success = await updateOpportunity(opp.id, { isAvailable: !currentlyOpen });
-    setTogglingAvailId(null);
-    if (!success) {
-      toast({ title: 'Failed to update availability', variant: 'destructive' });
-    }
-  };
-
   const startEdit = (opp: Opportunity) => {
     setEditingId(opp.id);
     setEditImageFile(null);
@@ -153,6 +156,7 @@ export default function MyEvents() {
       duration: opp.duration,
       spots: opp.spots,
       image: opp.image || '',
+      isAvailable: !isOppClosed(opp),
     });
   };
 
@@ -177,6 +181,7 @@ export default function MyEvents() {
       duration: editForm.duration,
       spots: editForm.spots,
       image: imageUrl,
+      isAvailable: editForm.isAvailable,
     });
     setSavingEdit(false);
     if (success) {
@@ -270,10 +275,10 @@ export default function MyEvents() {
           ) : (
             <div className="space-y-4">
               {hosted.map((opp) => {
-                // SQLite returns 0/1; JS toggle sends true/false — handle both
-                const isClosed = opp.isAvailable === 0 || opp.isAvailable === false;
+                const isClosed = isOppClosed(opp);
+                const inactive = isClosed || isPast(opp.date);
                 return (
-                <div key={opp.id} className={cn('rounded-2xl border-2 border-border bg-card overflow-hidden transition-opacity', isClosed && 'opacity-70')}>
+                <div key={opp.id} className={cn('rounded-2xl border-2 border-border bg-card overflow-hidden transition-opacity', inactive && 'opacity-70')}>
                   {/* Card header */}
                   <div className="p-5 space-y-2">
                     <div className="flex items-start justify-between gap-4">
@@ -285,37 +290,16 @@ export default function MyEvents() {
                         <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
                           <span className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5" />{opp.location}</span>
                           <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" />{opp.duration}h</span>
-                          {isPast(opp.date) && (
+                          {isPast(opp.date) ? (
                             <span className="text-xs font-semibold text-muted-foreground bg-secondary px-2 py-0.5 rounded-full">Ended</span>
-                          )}
-                          {isClosed && !isPast(opp.date) && (
+                          ) : isClosed ? (
                             <span className="text-xs font-semibold text-muted-foreground bg-secondary px-2 py-0.5 rounded-full">Closed</span>
+                          ) : (
+                            <span className="text-xs font-semibold text-green-600 dark:text-green-400 bg-green-500/10 px-2 py-0.5 rounded-full">Open</span>
                           )}
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        {/* Availability toggle */}
-                        <button
-                          onClick={() => handleToggleAvail(opp)}
-                          disabled={togglingAvailId === opp.id}
-                          className={cn(
-                            'px-2.5 py-1 rounded-full text-xs font-semibold transition-all flex items-center gap-1 border disabled:opacity-60',
-                            !isClosed
-                              ? 'bg-green-500/10 border-green-400/30 text-green-600 hover:bg-green-500/20 dark:text-green-400'
-                              : 'bg-muted/60 border-border text-muted-foreground hover:bg-muted'
-                          )}
-                          title={!isClosed ? 'Accepting sign-ups — click to close' : 'Closed — click to reopen'}
-                        >
-                          {togglingAvailId === opp.id ? (
-                            <Loader2 className="w-3 h-3 animate-spin" />
-                          ) : (
-                            <span className={cn(
-                              'w-1.5 h-1.5 rounded-full flex-shrink-0',
-                              !isClosed ? 'bg-green-500' : 'bg-muted-foreground'
-                            )} />
-                          )}
-                          {!isClosed ? 'Open' : 'Closed'}
-                        </button>
                         <button
                           onClick={() => editingId === opp.id ? setEditingId(null) : startEdit(opp)}
                           className="p-2 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary transition-colors"
@@ -376,8 +360,38 @@ export default function MyEvents() {
                             <Input type="number" min={0.5} max={24} step={0.5} value={editForm.duration} onChange={(e) => setEditForm({ ...editForm, duration: parseFloat(e.target.value) })} className="h-10 rounded-xl" />
                           </div>
                           <div className="space-y-1">
-                            <label className="text-xs font-medium text-muted-foreground">Total Spots</label>
+                            <label className="text-xs font-medium text-muted-foreground">Approx. Capacity</label>
                             <Input type="number" min={1} max={1000} value={editForm.spots} onChange={(e) => setEditForm({ ...editForm, spots: parseInt(e.target.value) })} className="h-10 rounded-xl" />
+                          </div>
+                        </div>
+                        {/* Availability */}
+                        <div className="space-y-1">
+                          <label className="text-xs font-medium text-muted-foreground">Availability</label>
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setEditForm({ ...editForm, isAvailable: true })}
+                              className={cn(
+                                'flex-1 h-10 rounded-xl text-sm font-semibold border transition-colors',
+                                editForm.isAvailable
+                                  ? 'bg-green-500/10 border-green-400/30 text-green-600 dark:text-green-400'
+                                  : 'border-input bg-background text-muted-foreground hover:bg-secondary/50'
+                              )}
+                            >
+                              Open
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setEditForm({ ...editForm, isAvailable: false })}
+                              className={cn(
+                                'flex-1 h-10 rounded-xl text-sm font-semibold border transition-colors',
+                                !editForm.isAvailable
+                                  ? 'bg-secondary border-border text-foreground'
+                                  : 'border-input bg-background text-muted-foreground hover:bg-secondary/50'
+                              )}
+                            >
+                              Closed
+                            </button>
                           </div>
                         </div>
                         {/* Image Upload */}
