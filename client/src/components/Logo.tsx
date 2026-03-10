@@ -19,78 +19,78 @@ export default function Logo({ size = 32, className = '' }: LogoProps) {
       className={className}
     >
       <defs>
-        {/* Clip ring-1's "front pass" to the lower half of the overlap,
-            creating the interlocked appearance */}
+        {/* Clips ring-1's front pass to the lower half of the overlap,
+            so ring-2 appears in front at the top crossing and
+            ring-1 appears in front at the bottom crossing — true interlock */}
         <clipPath id={clipId}>
-          <rect x="0" y="18" width="56" height="22" />
+          <rect x="0" y="19" width="56" height="21" />
         </clipPath>
       </defs>
 
-      {/* Left "L": vertical bar going down, horizontal bar at bottom going right */}
+      {/* Left "L" — thick corner bracket (vertical + bottom horizontal) */}
       <path
         d="M 7 4 L 7 36 L 19 36"
         stroke="currentColor"
-        strokeWidth="4.5"
+        strokeWidth="6.5"
         strokeLinecap="round"
         strokeLinejoin="round"
         fill="none"
       />
 
       {/* ── Interlocked chain links ──
-          Ring 1 (lower-left oval) and Ring 2 (upper-right oval), both
-          rotated –45 ° so their major axes run diagonally. The centres are
-          offset exactly along that axis so the rings interlock naturally.
+          Two oval rings, both rotated –45 ° so their long axes run diagonally.
+          Centers are offset along that same axis so they interlock naturally.
 
-          Drawing order (painter's algorithm):
-            1. Ring 1 — back pass (full outline, no fill)
-            2. Ring 2 — with a background-coloured fill to occlude ring 1
-               where ring 1 passes "behind" ring 2
-            3. Ring 1 — front pass, clipped to y ≥ 18, so ring 1's lower
-               arc reappears on top of ring 2 at the overlap
+          3-pass painter's algorithm:
+            1. Ring 1 (lower-left) — full outline behind everything
+            2. Ring 2 (upper-right) — background-coloured fill hides the
+               section of ring 1 that should pass "behind" ring 2
+            3. Ring 1 (lower-left) — re-drawn on top, clipped to y ≥ 19,
+               so its lower arc appears in front of ring 2 at the overlap
       */}
 
-      {/* Ring 1 back pass */}
+      {/* Ring 1 — back pass */}
       <ellipse
-        cx="24"
-        cy="24"
-        rx="7"
-        ry="3.5"
-        transform="rotate(-45 24 24)"
+        cx="23"
+        cy="26"
+        rx="10"
+        ry="5"
+        transform="rotate(-45 23 26)"
         stroke="currentColor"
-        strokeWidth="2.5"
+        strokeWidth="4"
         fill="none"
       />
 
-      {/* Ring 2 — background fill creates the occlusion of ring 1 */}
+      {/* Ring 2 — background fill creates the occlusion */}
       <ellipse
-        cx="32"
-        cy="16"
-        rx="7"
-        ry="3.5"
-        transform="rotate(-45 32 16)"
+        cx="33"
+        cy="14"
+        rx="10"
+        ry="5"
+        transform="rotate(-45 33 14)"
         stroke="currentColor"
-        strokeWidth="2.5"
+        strokeWidth="4"
         style={{ fill: 'hsl(var(--background))' }}
       />
 
-      {/* Ring 1 front pass — clipped so only the lower arc shows on top */}
+      {/* Ring 1 — front pass (only where it should be on top of ring 2) */}
       <ellipse
-        cx="24"
-        cy="24"
-        rx="7"
-        ry="3.5"
-        transform="rotate(-45 24 24)"
+        cx="23"
+        cy="26"
+        rx="10"
+        ry="5"
+        transform="rotate(-45 23 26)"
         stroke="currentColor"
-        strokeWidth="2.5"
+        strokeWidth="4"
         fill="none"
         clipPath={`url(#${clipId})`}
       />
 
-      {/* Right upside-down L ("-|"): horizontal bar at top, vertical bar on right going down */}
+      {/* Right upside-down L ("-|") — thick corner bracket (top horizontal + right vertical) */}
       <path
         d="M 37 4 L 49 4 L 49 36"
         stroke="currentColor"
-        strokeWidth="4.5"
+        strokeWidth="6.5"
         strokeLinecap="round"
         strokeLinejoin="round"
         fill="none"
