@@ -1,56 +1,50 @@
 interface LogoProps {
-  size?: number;
+  size?: number;   // controls height; width is auto-computed from 56:40 aspect ratio
   className?: string;
 }
 
 export default function Logo({ size = 32, className = '' }: LogoProps) {
+  // The logo is wider than it is tall (56 × 40 internal grid)
+  const w = Math.round(size * 1.4);
   return (
     <svg
-      width={size}
+      width={w}
       height={size}
-      viewBox="0 0 40 40"
+      viewBox="0 0 56 40"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
       className={className}
     >
-      {/* Left chain link ring */}
-      <rect
-        x="2"
-        y="13"
-        width="18"
-        height="14"
-        rx="7"
+      {/* Left "L": vertical bar going down, horizontal bar at bottom going right */}
+      <path
+        d="M 7 4 L 7 36 L 19 36"
         stroke="currentColor"
-        strokeWidth="3.5"
-        fill="none"
-      />
-      {/* Right chain link ring (overlapping) */}
-      <rect
-        x="20"
-        y="13"
-        width="18"
-        height="14"
-        rx="7"
-        stroke="currentColor"
-        strokeWidth="3.5"
-        fill="none"
-      />
-      {/* Map pin dot inside right ring */}
-      <circle
-        cx="29"
-        cy="19"
-        r="3"
-        fill="currentColor"
-      />
-      {/* Pin tail */}
-      <line
-        x1="29"
-        y1="22"
-        x2="29"
-        y2="26"
-        stroke="currentColor"
-        strokeWidth="2.5"
+        strokeWidth="4.5"
         strokeLinecap="round"
+        strokeLinejoin="round"
+        fill="none"
+      />
+
+      {/* Square chain link ring in the centre */}
+      <rect
+        x="21"
+        y="13"
+        width="14"
+        height="14"
+        rx="3"
+        stroke="currentColor"
+        strokeWidth="4"
+        fill="none"
+      />
+
+      {/* Right upside-down L ("-|"): horizontal bar at top, vertical bar on right going down */}
+      <path
+        d="M 37 4 L 49 4 L 49 36"
+        stroke="currentColor"
+        strokeWidth="4.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        fill="none"
       />
     </svg>
   );

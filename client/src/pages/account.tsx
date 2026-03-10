@@ -7,6 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Mail, Lock, User, MailCheck, Users, Building2, ShieldOff } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuthStore } from '@/lib/store';
+import Logo from '@/components/Logo';
 
 export default function Account() {
   const [, navigate] = useLocation();
@@ -191,8 +192,8 @@ export default function Account() {
           <div className="space-y-6">
             {/* Logo */}
             <div className="text-center mb-2">
-              <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary/10 mb-4">
-                <span className="text-3xl">🔗</span>
+              <div className="inline-flex items-center justify-center w-20 h-16 rounded-2xl bg-primary/10 mb-4">
+                <Logo size={36} className="text-primary" />
               </div>
             </div>
 
