@@ -18,6 +18,7 @@ export interface Opportunity {
   popularity: number;
   tags: string[];
   createdAt: string;
+  isAvailable?: boolean;  // true (default) = accepting sign-ups; false = closed by host
 }
 
 export interface AppUser {

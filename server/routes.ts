@@ -491,7 +491,7 @@ router.put('/api/opportunities/:id', requireAuth, (req: AuthRequest, res: Respon
     if (!opp) return res.status(404).json({ error: 'Opportunity not found' });
     if (opp.hostId !== userId && !req.isAdmin) return res.status(403).json({ error: 'Not authorized to edit this opportunity' });
 
-    const { title, description, category, location, date, duration, spots, spotsType, image, tags } = req.body;
+    const { title, description, category, location, date, duration, spots, spotsType, image, tags, isAvailable } = req.body;
     if (title !== undefined) db.prepare('UPDATE opportunities SET title = ? WHERE id = ?').run(title, oppId);
     if (description !== undefined) db.prepare('UPDATE opportunities SET description = ? WHERE id = ?').run(description, oppId);
     if (category !== undefined) db.prepare('UPDATE opportunities SET category = ? WHERE id = ?').run(category, oppId);
@@ -503,6 +503,9 @@ router.put('/api/opportunities/:id', requireAuth, (req: AuthRequest, res: Respon
     if (spotsType !== undefined) db.prepare('UPDATE opportunities SET spotsType = ? WHERE id = ?').run(spotsType, oppId);
     if (spots !== undefined) {
       db.prepare('UPDATE opportunities SET spots = ?, spotsRemaining = ? WHERE id = ?').run(spots, spots, oppId);
+    }
+    if (isAvailable !== undefined) {
+      db.prepare('UPDATE opportunities SET isAvailable = ? WHERE id = ?').run(isAvailable ? 1 : 0, oppId);
     }
 
     const updated = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(oppId) as any;

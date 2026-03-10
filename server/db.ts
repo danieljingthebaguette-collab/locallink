@@ -176,6 +176,13 @@ try {
   db.exec("ALTER TABLE users ADD COLUMN profileImage TEXT DEFAULT NULL");
 }
 
+// Migrate: add isAvailable column to opportunities if it doesn't exist yet
+try {
+  db.prepare('SELECT isAvailable FROM opportunities LIMIT 1').get();
+} catch {
+  db.exec("ALTER TABLE opportunities ADD COLUMN isAvailable INTEGER DEFAULT 1");
+}
+
 // Auto-grant admin and auto-verify the designated admin email
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'linklocal2@gmail.com';
 db.prepare('UPDATE users SET isAdmin = 1, emailVerified = 1 WHERE email = ?').run(ADMIN_EMAIL);
