@@ -385,7 +385,7 @@ router.get('/api/opportunities/:id', (req: Request, res: Response) => {
 // Creating an opportunity requires being logged in as an org account (or admin)
 router.post('/api/opportunities', requireAuth, (req: AuthRequest, res: Response) => {
   try {
-    const { title, description, category, location, date, duration, spots, spotsType, image, tags } = req.body;
+    const { title, description, category, location, date, duration, spots, spotsType, image, tags, isRecurring, recurringDay, recurringTime } = req.body;
     if (!title || !description || !category || !location || !date || !duration) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
@@ -405,9 +405,9 @@ router.post('/api/opportunities', requireAuth, (req: AuthRequest, res: Response)
     const resolvedSpots = resolvedSpotsType === 'limited' ? (spots || 0) : 0;
 
     db.prepare(
-      `INSERT INTO opportunities (id, title, description, category, location, date, duration, spots, spotsRemaining, spotsType, image, hostId, hostName, popularity, tags, createdAt)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`
-    ).run(id, title, description, category, location, date, duration, resolvedSpots, resolvedSpots, resolvedSpotsType, image || null, hostId, hostUser?.username || 'Unknown', tagsJson, createdAt);
+      `INSERT INTO opportunities (id, title, description, category, location, date, duration, spots, spotsRemaining, spotsType, image, hostId, hostName, popularity, tags, createdAt, isRecurring, recurringDay, recurringTime)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)`
+    ).run(id, title, description, category, location, date, duration, resolvedSpots, resolvedSpots, resolvedSpotsType, image || null, hostId, hostUser?.username || 'Unknown', tagsJson, createdAt, isRecurring ? 1 : 0, recurringDay ?? null, recurringTime ?? null);
 
     const opp = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(id) as any;
     return res.status(201).json({ ...opp, tags: JSON.parse(opp.tags || '[]'), signups: [] });
@@ -491,7 +491,7 @@ router.put('/api/opportunities/:id', requireAuth, (req: AuthRequest, res: Respon
     if (!opp) return res.status(404).json({ error: 'Opportunity not found' });
     if (opp.hostId !== userId && !req.isAdmin) return res.status(403).json({ error: 'Not authorized to edit this opportunity' });
 
-    const { title, description, category, location, date, duration, spots, spotsType, image, tags, isAvailable } = req.body;
+    const { title, description, category, location, date, duration, spots, spotsType, image, tags, isAvailable, isRecurring, recurringDay, recurringTime } = req.body;
     if (title !== undefined) db.prepare('UPDATE opportunities SET title = ? WHERE id = ?').run(title, oppId);
     if (description !== undefined) db.prepare('UPDATE opportunities SET description = ? WHERE id = ?').run(description, oppId);
     if (category !== undefined) db.prepare('UPDATE opportunities SET category = ? WHERE id = ?').run(category, oppId);
@@ -506,6 +506,15 @@ router.put('/api/opportunities/:id', requireAuth, (req: AuthRequest, res: Respon
     }
     if (isAvailable !== undefined) {
       db.prepare('UPDATE opportunities SET isAvailable = ? WHERE id = ?').run(isAvailable ? 1 : 0, oppId);
+    }
+    if (isRecurring !== undefined) {
+      db.prepare('UPDATE opportunities SET isRecurring = ? WHERE id = ?').run(isRecurring ? 1 : 0, oppId);
+    }
+    if (recurringDay !== undefined) {
+      db.prepare('UPDATE opportunities SET recurringDay = ? WHERE id = ?').run(recurringDay, oppId);
+    }
+    if (recurringTime !== undefined) {
+      db.prepare('UPDATE opportunities SET recurringTime = ? WHERE id = ?').run(recurringTime, oppId);
     }
 
     const updated = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(oppId) as any;
@@ -613,7 +622,17 @@ router.delete('/api/admin/users/:id', requireAdmin, (req: AuthRequest, res: Resp
     const existing = db.prepare('SELECT id FROM users WHERE id = ?').get(userId);
     if (!existing) return res.status(404).json({ error: 'User not found' });
 
+    // Clean up everything owned by this user:
+    // 1. Their signups on other events
     db.prepare('DELETE FROM signups WHERE userId = ?').run(userId);
+    // 2. All signups ON their hosted events (before deleting the events themselves)
+    const hostedIds = (db.prepare('SELECT id FROM opportunities WHERE hostId = ?').all(userId) as any[]).map(o => o.id);
+    for (const oppId of hostedIds) {
+      db.prepare('DELETE FROM signups WHERE opportunityId = ?').run(oppId);
+    }
+    // 3. Their hosted opportunities
+    db.prepare('DELETE FROM opportunities WHERE hostId = ?').run(userId);
+    // 4. The user record itself
     db.prepare('DELETE FROM users WHERE id = ?').run(userId);
     return res.json({ success: true });
   } catch (err: any) {
@@ -649,9 +668,9 @@ router.put('/api/admin/opportunities/:id', requireAdmin, (req: Request, res: Res
       }
     }
 
-    const updated = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(oppId);
+    const updated = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(oppId) as any;
     const signups = (db.prepare('SELECT userId FROM signups WHERE opportunityId = ?').all(oppId) as any[]).map(s => s.userId);
-    return res.json({ ...updated, signups });
+    return res.json({ ...updated, tags: JSON.parse(updated.tags || '[]'), signups });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }

@@ -27,6 +27,21 @@ const FIELD_TAGS = [
 type CreateStep = 'type' | 'tags' | 'details';
 type SpotsType = 'limited' | 'unlimited' | 'none';
 
+const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const DAY_FULL = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+/** Returns the ISO datetime string for the next upcoming occurrence of dayOfWeek at time "HH:MM" */
+function nextOccurrenceISO(day: number, time: string): string {
+  const [h, m] = time.split(':').map(Number);
+  const now = new Date();
+  let daysUntil = (day - now.getDay() + 7) % 7;
+  const next = new Date(now);
+  next.setDate(now.getDate() + daysUntil);
+  next.setHours(h, m, 0, 0);
+  if (next <= now) next.setDate(next.getDate() + 7); // already passed today → next week
+  return next.toISOString().slice(0, 16);
+}
+
 // ── Upload helper ────────────────────────────────────────────────────
 async function uploadImage(file: File): Promise<string | null> {
   const fd = new FormData();
@@ -65,6 +80,9 @@ export default function CreatePostModal({ open, onClose }: Props) {
   const [creating, setCreating] = useState(false);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [spotsType, setSpotsType] = useState<SpotsType>('limited');
+  const [isRecurring, setIsRecurring] = useState(false);
+  const [recurringDay, setRecurringDay] = useState(1);   // default: Monday
+  const [recurringTime, setRecurringTime] = useState('12:00');
   const [formData, setFormData] = useState({
     title: '', description: '', location: '', date: '', duration: 2, spots: 20,
   });
@@ -84,6 +102,9 @@ export default function CreatePostModal({ open, onClose }: Props) {
     setFormData({ title: '', description: '', location: '', date: '', duration: 2, spots: 20 });
     setFormErrors({});
     setSpotsType('limited');
+    setIsRecurring(false);
+    setRecurringDay(1);
+    setRecurringTime('12:00');
     onClose();
   };
 
@@ -113,8 +134,10 @@ export default function CreatePostModal({ open, onClose }: Props) {
     if (!formData.title.trim()) errors.title = 'Title is required';
     if (!formData.description.trim()) errors.description = 'Description is required';
     if (!formData.location.trim()) errors.location = 'Location is required';
-    if (!formData.date) errors.date = 'Date is required';
-    else if (new Date(formData.date) <= new Date()) errors.date = 'Date must be in the future';
+    if (!isRecurring) {
+      if (!formData.date) errors.date = 'Date is required';
+      else if (new Date(formData.date) <= new Date()) errors.date = 'Date must be in the future';
+    }
     if (spotsType === 'limited' && formData.spots < 1) errors.spots = 'At least 1 spot required';
     if (formData.duration < 0.5) errors.duration = 'Minimum 0.5 hrs';
     return errors;
@@ -136,12 +159,14 @@ export default function CreatePostModal({ open, onClose }: Props) {
     }
 
     const spots = spotsType === 'limited' ? formData.spots : 0;
+    // For recurring posts use the computed next occurrence as the stored date
+    const resolvedDate = isRecurring ? nextOccurrenceISO(recurringDay, recurringTime) : formData.date;
     const result = await addOpportunity({
       title: formData.title.trim(),
       description: formData.description.trim(),
       category: selectedType!,
       location: formData.location.trim(),
-      date: formData.date,
+      date: resolvedDate,
       duration: formData.duration,
       spots,
       spotsRemaining: spots,
@@ -150,6 +175,7 @@ export default function CreatePostModal({ open, onClose }: Props) {
       tags: selectedTags,
       hostId: currentUser?.id || '',
       hostName: currentUser?.username || '',
+      ...(isRecurring && { isRecurring: true, recurringDay, recurringTime }),
     });
     setCreating(false);
 
@@ -339,13 +365,69 @@ export default function CreatePostModal({ open, onClose }: Props) {
                             className={cn("rounded-xl bg-white/80 text-foreground border-0 text-sm h-9", formErrors.location && "ring-2 ring-red-400")} />
                           {formErrors.location && <p className="text-red-200 text-xs">{formErrors.location}</p>}
                         </div>
+
+                        {/* ── Schedule type toggle ── */}
                         <div>
-                          <label className="text-xs font-bold tracking-widest uppercase opacity-75 block mb-1">Date & Time *</label>
-                          <Input type="datetime-local" min={todayStr}
-                            value={formData.date}
-                            onChange={e => { setFormData({ ...formData, date: e.target.value }); setFormErrors({ ...formErrors, date: '' }); }}
-                            className={cn("rounded-xl bg-white/80 text-foreground border-0 text-sm h-9", formErrors.date && "ring-2 ring-red-400")} />
-                          {formErrors.date && <p className="text-red-200 text-xs">{formErrors.date}</p>}
+                          <label className="text-xs font-bold tracking-widest uppercase opacity-75 block mb-1.5">Schedule</label>
+                          <div className="flex gap-2 mb-2">
+                            <button type="button"
+                              onClick={() => setIsRecurring(false)}
+                              className={cn(
+                                "flex-1 h-9 rounded-xl text-sm font-semibold border transition-all",
+                                !isRecurring ? "bg-white text-primary border-white" : "bg-white/20 text-white border-white/30 hover:bg-white/30"
+                              )}>
+                              📅 One-time
+                            </button>
+                            <button type="button"
+                              onClick={() => setIsRecurring(true)}
+                              className={cn(
+                                "flex-1 h-9 rounded-xl text-sm font-semibold border transition-all",
+                                isRecurring ? "bg-white text-primary border-white" : "bg-white/20 text-white border-white/30 hover:bg-white/30"
+                              )}>
+                              🔁 Weekly
+                            </button>
+                          </div>
+
+                          {/* One-time: regular date picker */}
+                          {!isRecurring && (
+                            <div>
+                              <Input type="datetime-local" min={todayStr}
+                                value={formData.date}
+                                onChange={e => { setFormData({ ...formData, date: e.target.value }); setFormErrors({ ...formErrors, date: '' }); }}
+                                className={cn("rounded-xl bg-white/80 text-foreground border-0 text-sm h-9", formErrors.date && "ring-2 ring-red-400")} />
+                              {formErrors.date && <p className="text-red-200 text-xs mt-1">{formErrors.date}</p>}
+                            </div>
+                          )}
+
+                          {/* Weekly: day-of-week + time */}
+                          {isRecurring && (
+                            <div className="space-y-2">
+                              <div className="grid grid-cols-7 gap-1">
+                                {DAY_NAMES.map((name, idx) => (
+                                  <button key={name} type="button"
+                                    onClick={() => setRecurringDay(idx)}
+                                    className={cn(
+                                      "py-1.5 rounded-lg text-xs font-bold transition-all",
+                                      recurringDay === idx
+                                        ? "bg-white text-primary"
+                                        : "bg-white/20 text-white hover:bg-white/35"
+                                    )}>
+                                    {name}
+                                  </button>
+                                ))}
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs opacity-75 font-semibold whitespace-nowrap">At time:</span>
+                                <Input type="time"
+                                  value={recurringTime}
+                                  onChange={e => setRecurringTime(e.target.value)}
+                                  className="rounded-xl bg-white/80 text-foreground border-0 text-sm h-9 flex-1" />
+                              </div>
+                              <p className="text-white/60 text-xs">
+                                Opens every {DAY_FULL[recurringDay]} — closes at {recurringTime} and reopens the next day.
+                              </p>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>

@@ -3,6 +3,44 @@ import { type Opportunity, type AppUser, type Category } from './mockData';
 
 const API = '/api';
 
+// ─── Recurring schedule helper ───────────────────────────────────────────────
+// For a recurring post (dayOfWeek 0–6, time "HH:MM"):
+//   • CLOSED window  = from the most-recent occurrence until midnight of that same day
+//   • OPEN  window   = from midnight (post-event) through the next occurrence
+// Example: "Every Monday 12:00" → closed Mon 12pm–midnight, open Tue–Mon 11:59am
+export function getRecurringStatus(opp: { recurringDay?: number; recurringTime?: string }): {
+  isOpen: boolean;
+  nextOccurrence: Date;
+} | null {
+  if (opp.recurringDay === undefined || opp.recurringDay === null || !opp.recurringTime) return null;
+
+  const now = new Date();
+  const [h, m] = opp.recurringTime.split(':').map(Number);
+  const dayOfWeek = opp.recurringDay as number;
+
+  // How many days ago was the last occurrence of dayOfWeek?
+  let daysBack = (now.getDay() - dayOfWeek + 7) % 7;
+
+  const last = new Date(now);
+  last.setDate(now.getDate() - daysBack);
+  last.setHours(h, m, 0, 0);
+
+  // If that timestamp is still in the future (daysBack=0 and time hasn't come yet today)
+  // step back a full week
+  if (last > now) last.setDate(last.getDate() - 7);
+
+  // Closed window ends at midnight after the event day
+  const reopensAt = new Date(last);
+  reopensAt.setDate(reopensAt.getDate() + 1);
+  reopensAt.setHours(0, 0, 0, 0);
+
+  // Next occurrence = last + 7 days
+  const nextOccurrence = new Date(last);
+  nextOccurrence.setDate(nextOccurrence.getDate() + 7);
+
+  return { isOpen: now >= reopensAt, nextOccurrence };
+}
+
 // Returns headers with JWT token attached if the user is logged in
 function getAuthHeaders(): Record<string, string> {
   const token = localStorage.getItem('locallink_token');
@@ -232,11 +270,24 @@ export const useOpportunitiesStore = create<OpportunitiesState>((set, get) => ({
       filtered.sort((a, b) => b.popularity - a.popularity);
     }
 
-    // Always push past events to the bottom regardless of sort
+    // Sort order: open future → closed future → past
+    // Recurring posts never enter the "past" bucket — their open/closed state
+    // is computed dynamically from the current time vs. their weekly schedule.
     const now = new Date();
-    const future = filtered.filter(o => new Date(o.date) >= now);
-    const past = filtered.filter(o => new Date(o.date) < now);
-    return [...future, ...past];
+
+    const effectiveIsOpen = (o: Opportunity): boolean => {
+      if (o.isRecurring) {
+        const status = getRecurringStatus(o);
+        return status ? status.isOpen : true;
+      }
+      return o.isAvailable !== false && o.isAvailable !== 0;
+    };
+
+    const future = filtered.filter(o => o.isRecurring || new Date(o.date) >= now);
+    const past   = filtered.filter(o => !o.isRecurring && new Date(o.date) < now);
+    const futureOpen   = future.filter(o =>  effectiveIsOpen(o));
+    const futureClosed = future.filter(o => !effectiveIsOpen(o));
+    return [...futureOpen, ...futureClosed, ...past];
   },
 
   fetchOpportunities: async () => {

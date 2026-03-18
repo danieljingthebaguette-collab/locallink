@@ -9,8 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { getCardSize, isLargeCard, getTitleSize } from '@/lib/cardUtils';
 import { getCategoryColor, getModalGradient, getCategoryBorder, getCategoryLabel } from '@/lib/categoryUtils';
-import { useAuthStore, useOpportunitiesStore, useFavoritesStore } from '@/lib/store';
-import { CATEGORIES, type Category } from '@/lib/mockData';
+import { useAuthStore, useOpportunitiesStore, useFavoritesStore, getRecurringStatus } from '@/lib/store';
 import { CATEGORIES, type Category, type Opportunity } from '@/lib/mockData';
 import CreatePostModal from '@/components/CreatePostModal';
 
@@ -50,7 +49,11 @@ export default function Home() {
   const [submittingReport, setSubmittingReport] = useState(false);
   // Edit post state
   const [showEditForm, setShowEditForm] = useState(false);
-  const [editForm, setEditForm] = useState({ title: '', description: '', location: '', date: '', duration: 2, spots: 10, category: 'volunteer' as Category });
+  const [editForm, setEditForm] = useState({
+    title: '', description: '', location: '', date: '', duration: 2, spots: 0,
+    category: 'volunteer' as Category,
+    spotsType: 'none' as 'limited' | 'unlimited' | 'none',
+  });
   const [savingEdit, setSavingEdit] = useState(false);
 
   // Bump this key whenever sort/category/search changes so cards re-animate entrance
@@ -108,10 +111,26 @@ export default function Home() {
   const formatTime = (d: string) => new Date(d).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
   const isInterested = (opp: Opportunity) => currentUser ? opp.signups.includes(currentUser.id) : false;
 
-  const getSpotsDisplay = (opp: Opportunity) => {
-    if (opp.spotsType === 'unlimited') return 'Open to all';
-    if (opp.spotsType === 'none') return null;
-    return `${opp.spotsRemaining} spots left`;
+  const DAY_FULL = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const formatRecurringTime = (time: string) => {
+    const [h, m] = time.split(':').map(Number);
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    return `${h % 12 || 12}:${m.toString().padStart(2, '0')} ${ampm}`;
+  };
+
+  // Returns "Open", "Open (~20)", "Closed", or "Closed (~20)"
+  // For recurring posts the open/closed state is computed from the weekly schedule.
+  const getAvailabilityDisplay = (opp: Opportunity) => {
+    let isOpen: boolean;
+    if (opp.isRecurring) {
+      const status = getRecurringStatus(opp);
+      isOpen = status ? status.isOpen : true;
+    } else {
+      isOpen = opp.isAvailable !== false && opp.isAvailable !== 0;
+    }
+    const label = isOpen ? 'Open' : 'Closed';
+    if (opp.spotsType === 'limited' && opp.spots > 0) return `${label} (~${opp.spots})`;
+    return label;
   };
 
   // ── Open create modal with guard ───────────────────────────────────
@@ -177,8 +196,9 @@ export default function Home() {
       location: opp.location,
       date: opp.date,
       duration: opp.duration,
-      spots: opp.spots,
+      spots: opp.spots || 0,
       category: opp.category as Category,
+      spotsType: (opp.spotsType as 'limited' | 'unlimited' | 'none') || 'none',
     });
     setShowEditForm(true);
   };
@@ -334,13 +354,24 @@ export default function Home() {
                 const large = isLargeCard(opp.popularity);
                 const hasImage = opp.image && large;
                 const alreadyInterested = isInterested(opp);
-                const spotsDisplay = getSpotsDisplay(opp);
-                const isPast = new Date(opp.date) < new Date();
+                const availabilityDisplay = getAvailabilityDisplay(opp);
+                // Recurring posts are never "past"; their open/closed state is time-computed
+                const recurringStatus = opp.isRecurring ? getRecurringStatus(opp) : null;
+                const isPast = recurringStatus ? false : new Date(opp.date) < new Date();
+                const isClosed = recurringStatus
+                  ? !recurringStatus.isOpen
+                  : (opp.isAvailable === false || opp.isAvailable === 0);
                 return (
                   <motion.div
                     key={`${opp.id}-${listKey}`}
                     initial={{ opacity: 0, y: 22, scale: 0.96 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    animate={{
+                      // Opacity is set here so Framer Motion's inline style doesn't override
+                      // Tailwind opacity classes (inline styles always win over classes).
+                      opacity: isPast ? 0.5 : isClosed ? 0.6 : 1,
+                      y: 0,
+                      scale: 1,
+                    }}
                     transition={{
                       delay: Math.min(index * 0.045, 0.38),
                       duration: 0.38,
@@ -352,7 +383,8 @@ export default function Home() {
                     className={cn(
                       "group relative rounded-3xl overflow-hidden cursor-pointer border-4 shadow-sm hover:shadow-2xl transition-shadow duration-300",
                       getCategoryBorder(opp.category), getCardSize(opp.popularity),
-                      isPast && "opacity-50 grayscale"
+                      // grayscale is a CSS filter — FM doesn't touch filter, so class works fine
+                      (isPast || isClosed) && "grayscale"
                     )}>
                     {hasImage ? (
                       <div className="absolute inset-0">
@@ -367,7 +399,10 @@ export default function Home() {
                       <div className="space-y-2 border-b border-white/20 pb-3">
                         <div className="flex items-center gap-2 flex-wrap">
                           <p className="text-xs font-bold tracking-widest uppercase opacity-80">{getCategoryLabel(opp.category)}</p>
-                          {isPast && <span className="text-[10px] font-bold bg-white/20 text-white px-2 py-0.5 rounded-full">ENDED</span>}
+                          {opp.isRecurring && <span className="text-[10px] font-bold bg-blue-500/80 text-white px-2 py-0.5 rounded-full">🔁 WEEKLY</span>}
+                          {isPast && !isClosed && !opp.isRecurring && <span className="text-[10px] font-bold bg-white/20 text-white px-2 py-0.5 rounded-full">ENDED</span>}
+                          {isClosed && !opp.isRecurring && <span className="text-[10px] font-bold bg-red-500/80 text-white px-2 py-0.5 rounded-full">CLOSED</span>}
+                          {isClosed && opp.isRecurring && <span className="text-[10px] font-bold bg-orange-500/80 text-white px-2 py-0.5 rounded-full">CLOSED TODAY</span>}
                           {alreadyInterested && (
                             <motion.span
                               initial={{ scale: 0.7, opacity: 0 }}
@@ -392,12 +427,10 @@ export default function Home() {
                           <p className="text-sm line-clamp-2 opacity-95 font-medium">{opp.description}</p>
                           <p className="text-xs opacity-70 font-medium">by {opp.hostName}</p>
                           <div className="flex items-center justify-between pt-3 border-t border-white/20">
-                            {spotsDisplay && (
-                              <div className="flex items-center gap-2">
-                                <Users className="w-4 h-4" />
-                                <span className="font-bold text-sm">{spotsDisplay}</span>
-                              </div>
-                            )}
+                            <div className="flex items-center gap-2">
+                              <Users className="w-4 h-4" />
+                              <span className="font-bold text-sm">{availabilityDisplay}</span>
+                            </div>
                             <span className="text-xs opacity-70">{opp.signups.length} interested</span>
                           </div>
                           <div className="flex items-center gap-2 text-xs opacity-80">
@@ -410,7 +443,7 @@ export default function Home() {
                         <div className="flex items-center justify-between pt-3">
                           <div className="flex items-center gap-1.5">
                             <Users className="w-3.5 h-3.5 opacity-75" />
-                            <span className="text-xs font-bold">{spotsDisplay ?? 'No spots listed'}</span>
+                            <span className="text-xs font-bold">{availabilityDisplay}</span>
                           </div>
                           <span className="text-xs opacity-70">{opp.signups.length} interested</span>
                         </div>
@@ -524,7 +557,7 @@ export default function Home() {
                         rows={3}
                         className="w-full rounded-xl bg-white/80 text-foreground border-0 text-sm px-3 py-2 resize-none"
                       />
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                         <input
                           value={editForm.location}
                           onChange={e => setEditForm(f => ({ ...f, location: e.target.value }))}
@@ -540,16 +573,27 @@ export default function Home() {
                         <input
                           type="number" min={0.5} step={0.5}
                           value={editForm.duration}
-                          onChange={e => setEditForm(f => ({ ...f, duration: parseFloat(e.target.value) }))}
+                          onChange={e => setEditForm(f => ({ ...f, duration: parseFloat(e.target.value) || 0.5 }))}
                           placeholder="Duration (hrs)"
                           className="rounded-xl bg-white/80 text-foreground border-0 text-sm h-9 px-3"
                         />
+                      </div>
+                      {/* Optional approximate capacity */}
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs text-white/75 font-medium whitespace-nowrap">Approx. capacity (optional):</span>
                         <input
                           type="number" min={1}
-                          value={editForm.spots}
-                          onChange={e => setEditForm(f => ({ ...f, spots: parseInt(e.target.value) }))}
-                          placeholder="Spots"
-                          className="rounded-xl bg-white/80 text-foreground border-0 text-sm h-9 px-3"
+                          value={editForm.spots || ''}
+                          onChange={e => {
+                            const val = e.target.value;
+                            setEditForm(f => ({
+                              ...f,
+                              spots: val ? parseInt(val) : 0,
+                              spotsType: val ? 'limited' : 'none',
+                            }));
+                          }}
+                          placeholder="e.g. 20"
+                          className="rounded-xl bg-white/80 text-foreground border-0 text-sm h-9 px-3 w-28"
                         />
                       </div>
                       <div className="flex gap-2 pt-1">
@@ -578,10 +622,31 @@ export default function Home() {
                     <p className="text-xs font-bold tracking-widest uppercase opacity-75 mb-1.5">Location</p>
                     <p className="text-sm md:text-base font-semibold">{selectedCard.location}</p>
                   </div>
-                  {/* Date & Time — half width on mobile */}
+                  {/* Date & Time / Schedule */}
                   <div className="bg-white/15 backdrop-blur-md rounded-2xl p-3 md:p-4 border border-white/20">
-                    <p className="text-xs font-bold tracking-widest uppercase opacity-75 mb-1.5">Date & Time</p>
-                    <p className="text-sm md:text-base font-semibold">{formatDate(selectedCard.date)} · {formatTime(selectedCard.date)}</p>
+                    {selectedCard.isRecurring ? (
+                      <>
+                        <p className="text-xs font-bold tracking-widest uppercase opacity-75 mb-1.5">🔁 Weekly Schedule</p>
+                        <p className="text-sm md:text-base font-semibold">
+                          Every {DAY_FULL[selectedCard.recurringDay ?? 0]} at {formatRecurringTime(selectedCard.recurringTime ?? '00:00')}
+                        </p>
+                        {(() => {
+                          const rs = getRecurringStatus(selectedCard);
+                          if (!rs) return null;
+                          const label = rs.isOpen ? 'Open now · Next closes' : 'Closed · Reopens';
+                          return (
+                            <p className="text-xs opacity-70 mt-1">
+                              {label}: {formatDate(rs.nextOccurrence.toISOString())} at {formatTime(rs.nextOccurrence.toISOString())}
+                            </p>
+                          );
+                        })()}
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-xs font-bold tracking-widest uppercase opacity-75 mb-1.5">Date & Time</p>
+                        <p className="text-sm md:text-base font-semibold">{formatDate(selectedCard.date)} · {formatTime(selectedCard.date)}</p>
+                      </>
+                    )}
                   </div>
                   {/* Duration — half width on mobile */}
                   <div className="bg-white/15 backdrop-blur-md rounded-2xl p-3 md:p-4 border border-white/20">
@@ -599,9 +664,18 @@ export default function Home() {
                   <div className="bg-white/15 backdrop-blur-md rounded-2xl p-3 md:p-4 border border-white/20">
                     <p className="text-xs font-bold tracking-widest uppercase opacity-75 mb-1.5">Availability</p>
                     <p className="text-lg font-semibold">
-                      {selectedCard.spotsType === 'unlimited' ? 'Open to all' :
-                       selectedCard.spotsType === 'none' ? 'Not specified' :
-                       `${selectedCard.spotsRemaining} / ${selectedCard.spots} spots`}
+                      {(() => {
+                        let open: boolean;
+                        if (selectedCard.isRecurring) {
+                          const rs = getRecurringStatus(selectedCard);
+                          open = rs ? rs.isOpen : true;
+                        } else {
+                          open = selectedCard.isAvailable !== false && selectedCard.isAvailable !== 0;
+                        }
+                        return open ? 'Open' : 'Closed';
+                      })()}
+                      {selectedCard.spotsType === 'limited' && selectedCard.spots > 0
+                        ? ` (~${selectedCard.spots} people)` : ''}
                     </p>
                   </div>
                   <div className="relative bg-white/15 backdrop-blur-md rounded-2xl p-3 md:p-4 border border-white/20">

@@ -9,6 +9,30 @@ export default function Logo({ size = 32, className = '' }: LogoProps) {
   const clipId = useId();
   // The logo is wider than it is tall (56 × 40 internal grid)
   const w = Math.round(size * 1.4);
+
+  /*
+    ── Chain link geometry ──
+    Each link is a highly-elongated ellipse (rx=16, ry=6 → 2.67 : 1 ratio)
+    rotated -45° so the long axis runs diagonally — exactly like a chain
+    viewed at an angle.
+
+    Ring 1 centre (21, 26)  lower-left tip  ≈ (9.7, 37.3)   → tucks into left  L corner
+    Ring 2 centre (35, 14)  upper-right tip ≈ (46.3, 2.7)   → tucks into right L corner
+    Mid-point of centres = (28, 20)  → interlock clip boundary
+
+    Three-pass painter's algorithm:
+      Pass A  Ring 1 full  (behind everything)
+      Pass B  Ring 2 with background fill  (its interior erases the part of
+              ring 1 that passes "behind" ring 2 at the upper crossing)
+      Pass C  Ring 1 clipped to y ≥ 20  (makes ring 1 appear in front of
+              ring 2 at the lower crossing → true interlock)
+
+    L brackets are drawn AFTER the rings with a double stroke:
+      1. Thick background-coloured mask stroke   → hides the chain tip that
+         tucks behind the L corner (depth / clasping effect)
+      2. Thin coloured stroke on top             → the visible L bracket
+  */
+
   return (
     <svg
       width={w}
@@ -19,78 +43,74 @@ export default function Logo({ size = 32, className = '' }: LogoProps) {
       className={className}
     >
       <defs>
-        {/* Clips ring-1's front pass to the lower half of the overlap,
-            so ring-2 appears in front at the top crossing and
-            ring-1 appears in front at the bottom crossing — true interlock */}
+        {/* Reveal ring-1's front pass only below the interlock mid-line */}
         <clipPath id={clipId}>
-          <rect x="0" y="19" width="56" height="21" />
+          <rect x="0" y="20" width="56" height="20" />
         </clipPath>
       </defs>
 
-      {/* Left "L" — thick corner bracket (vertical + bottom horizontal) */}
+      {/* ── Pass A: Ring 1 — full outline, drawn first (behind ring 2) ── */}
+      <ellipse
+        cx="21" cy="26"
+        rx="16" ry="6"
+        transform="rotate(-45 21 26)"
+        stroke="currentColor"
+        strokeWidth="5"
+        fill="none"
+      />
+
+      {/* ── Pass B: Ring 2 — background fill erases ring-1 behind it ── */}
+      <ellipse
+        cx="35" cy="14"
+        rx="16" ry="6"
+        transform="rotate(-45 35 14)"
+        stroke="currentColor"
+        strokeWidth="5"
+        style={{ fill: 'hsl(var(--background))' }}
+      />
+
+      {/* ── Pass C: Ring 1 — front pass, only below y=20 (lower crossing) ── */}
+      <ellipse
+        cx="21" cy="26"
+        rx="16" ry="6"
+        transform="rotate(-45 21 26)"
+        stroke="currentColor"
+        strokeWidth="5"
+        fill="none"
+        clipPath={`url(#${clipId})`}
+      />
+
+      {/* ── Left "L"  ── mask first, then coloured stroke on top ── */}
+      <path
+        d="M 7 4 L 7 36 L 19 36"
+        style={{ stroke: 'hsl(var(--background))' }}
+        strokeWidth="16"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        fill="none"
+      />
       <path
         d="M 7 4 L 7 36 L 19 36"
         stroke="currentColor"
-        strokeWidth="6.5"
+        strokeWidth="8"
         strokeLinecap="round"
         strokeLinejoin="round"
         fill="none"
       />
 
-      {/* ── Interlocked chain links ──
-          Two oval rings, both rotated –45 ° so their long axes run diagonally.
-          Centers are offset along that same axis so they interlock naturally.
-
-          3-pass painter's algorithm:
-            1. Ring 1 (lower-left) — full outline behind everything
-            2. Ring 2 (upper-right) — background-coloured fill hides the
-               section of ring 1 that should pass "behind" ring 2
-            3. Ring 1 (lower-left) — re-drawn on top, clipped to y ≥ 19,
-               so its lower arc appears in front of ring 2 at the overlap
-      */}
-
-      {/* Ring 1 — back pass */}
-      <ellipse
-        cx="23"
-        cy="26"
-        rx="10"
-        ry="5"
-        transform="rotate(-45 23 26)"
-        stroke="currentColor"
-        strokeWidth="4"
+      {/* ── Right inverted "L"  ── mask first, then coloured stroke on top ── */}
+      <path
+        d="M 37 4 L 49 4 L 49 36"
+        style={{ stroke: 'hsl(var(--background))' }}
+        strokeWidth="16"
+        strokeLinecap="round"
+        strokeLinejoin="round"
         fill="none"
       />
-
-      {/* Ring 2 — background fill creates the occlusion */}
-      <ellipse
-        cx="33"
-        cy="14"
-        rx="10"
-        ry="5"
-        transform="rotate(-45 33 14)"
-        stroke="currentColor"
-        strokeWidth="4"
-        style={{ fill: 'hsl(var(--background))' }}
-      />
-
-      {/* Ring 1 — front pass (only where it should be on top of ring 2) */}
-      <ellipse
-        cx="23"
-        cy="26"
-        rx="10"
-        ry="5"
-        transform="rotate(-45 23 26)"
-        stroke="currentColor"
-        strokeWidth="4"
-        fill="none"
-        clipPath={`url(#${clipId})`}
-      />
-
-      {/* Right upside-down L ("-|") — thick corner bracket (top horizontal + right vertical) */}
       <path
         d="M 37 4 L 49 4 L 49 36"
         stroke="currentColor"
-        strokeWidth="6.5"
+        strokeWidth="8"
         strokeLinecap="round"
         strokeLinejoin="round"
         fill="none"

@@ -66,8 +66,7 @@ export default function MyEvents() {
   const [editForm, setEditForm] = useState<{
     title: string; description: string; category: Category;
     location: string; date: string; duration: number; spots: number; image: string;
-    isAvailable: boolean;
-  }>({ title: '', description: '', category: 'volunteer', location: '', date: '', duration: 2, spots: 10, image: '', isAvailable: true });
+  }>({ title: '', description: '', category: 'volunteer', location: '', date: '', duration: 2, spots: 10, image: '' });
   const [savingEdit, setSavingEdit] = useState(false);
   const [editImageFile, setEditImageFile] = useState<File | null>(null);
   const [editImagePreview, setEditImagePreview] = useState('');
@@ -156,7 +155,6 @@ export default function MyEvents() {
       duration: opp.duration,
       spots: opp.spots,
       image: opp.image || '',
-      isAvailable: !isOppClosed(opp),
     });
   };
 
@@ -180,8 +178,9 @@ export default function MyEvents() {
       date: editForm.date,
       duration: editForm.duration,
       spots: editForm.spots,
+      // Derive spotsType from whether the host entered a capacity number
+      spotsType: editForm.spots > 0 ? 'limited' : 'none',
       image: imageUrl,
-      isAvailable: editForm.isAvailable,
     });
     setSavingEdit(false);
     if (success) {
@@ -357,41 +356,11 @@ export default function MyEvents() {
                           </div>
                           <div className="space-y-1">
                             <label className="text-xs font-medium text-muted-foreground">Duration (hrs)</label>
-                            <Input type="number" min={0.5} max={24} step={0.5} value={editForm.duration} onChange={(e) => setEditForm({ ...editForm, duration: parseFloat(e.target.value) })} className="h-10 rounded-xl" />
+                            <Input type="number" min={0.5} max={24} step={0.5} value={editForm.duration} onChange={(e) => setEditForm({ ...editForm, duration: parseFloat(e.target.value) || 0.5 })} className="h-10 rounded-xl" />
                           </div>
                           <div className="space-y-1">
                             <label className="text-xs font-medium text-muted-foreground">Approx. Capacity</label>
-                            <Input type="number" min={1} max={1000} value={editForm.spots} onChange={(e) => setEditForm({ ...editForm, spots: parseInt(e.target.value) })} className="h-10 rounded-xl" />
-                          </div>
-                        </div>
-                        {/* Availability */}
-                        <div className="space-y-1">
-                          <label className="text-xs font-medium text-muted-foreground">Availability</label>
-                          <div className="flex gap-2">
-                            <button
-                              type="button"
-                              onClick={() => setEditForm({ ...editForm, isAvailable: true })}
-                              className={cn(
-                                'flex-1 h-10 rounded-xl text-sm font-semibold border transition-colors',
-                                editForm.isAvailable
-                                  ? 'bg-green-500/10 border-green-400/30 text-green-600 dark:text-green-400'
-                                  : 'border-input bg-background text-muted-foreground hover:bg-secondary/50'
-                              )}
-                            >
-                              Open
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setEditForm({ ...editForm, isAvailable: false })}
-                              className={cn(
-                                'flex-1 h-10 rounded-xl text-sm font-semibold border transition-colors',
-                                !editForm.isAvailable
-                                  ? 'bg-secondary border-border text-foreground'
-                                  : 'border-input bg-background text-muted-foreground hover:bg-secondary/50'
-                              )}
-                            >
-                              Closed
-                            </button>
+                            <Input type="number" min={0} max={1000} value={editForm.spots} onChange={(e) => setEditForm({ ...editForm, spots: parseInt(e.target.value) || 0 })} className="h-10 rounded-xl" />
                           </div>
                         </div>
                         {/* Image Upload */}

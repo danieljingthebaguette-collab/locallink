@@ -183,6 +183,27 @@ try {
   db.exec("ALTER TABLE opportunities ADD COLUMN isAvailable INTEGER DEFAULT 1");
 }
 
+// Migrate: add isRecurring column to opportunities if it doesn't exist yet
+try {
+  db.prepare('SELECT isRecurring FROM opportunities LIMIT 1').get();
+} catch {
+  db.exec('ALTER TABLE opportunities ADD COLUMN isRecurring INTEGER DEFAULT 0');
+}
+
+// Migrate: add recurringDay column to opportunities if it doesn't exist yet (0=Sun … 6=Sat)
+try {
+  db.prepare('SELECT recurringDay FROM opportunities LIMIT 1').get();
+} catch {
+  db.exec('ALTER TABLE opportunities ADD COLUMN recurringDay INTEGER DEFAULT NULL');
+}
+
+// Migrate: add recurringTime column to opportunities if it doesn't exist yet (e.g. "12:00")
+try {
+  db.prepare('SELECT recurringTime FROM opportunities LIMIT 1').get();
+} catch {
+  db.exec("ALTER TABLE opportunities ADD COLUMN recurringTime TEXT DEFAULT NULL");
+}
+
 // Auto-grant admin and auto-verify the designated admin email
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'linklocal2@gmail.com';
 db.prepare('UPDATE users SET isAdmin = 1, emailVerified = 1 WHERE email = ?').run(ADMIN_EMAIL);
