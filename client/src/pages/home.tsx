@@ -118,19 +118,10 @@ export default function Home() {
     return `${h % 12 || 12}:${m.toString().padStart(2, '0')} ${ampm}`;
   };
 
-  // Returns "Open", "Open (~20)", "Closed", or "Closed (~20)"
-  // For recurring posts the open/closed state is computed from the weekly schedule.
+  // Returns approximate capacity string if known, otherwise empty string.
   const getAvailabilityDisplay = (opp: Opportunity) => {
-    let isOpen: boolean;
-    if (opp.isRecurring) {
-      const status = getRecurringStatus(opp);
-      isOpen = status ? status.isOpen : true;
-    } else {
-      isOpen = opp.isAvailable !== false && opp.isAvailable !== 0;
-    }
-    const label = isOpen ? 'Open' : 'Closed';
-    if (opp.spotsType === 'limited' && opp.spots > 0) return `${label} (~${opp.spots})`;
-    return label;
+    if (opp.spotsType === 'limited' && opp.spots > 0) return `~${opp.spots} spots`;
+    return '';
   };
 
   // ── Open create modal with guard ───────────────────────────────────
@@ -358,9 +349,8 @@ export default function Home() {
                 // Recurring posts are never "past"; their open/closed state is time-computed
                 const recurringStatus = opp.isRecurring ? getRecurringStatus(opp) : null;
                 const isPast = recurringStatus ? false : new Date(opp.date) < new Date();
-                const isClosed = recurringStatus
-                  ? !recurringStatus.isOpen
-                  : (opp.isAvailable === false || opp.isAvailable === 0);
+                // For recurring posts: open/closed driven by schedule. For one-time posts: never "closed" manually.
+                const isClosed = recurringStatus ? !recurringStatus.isOpen : false;
                 return (
                   <motion.div
                     key={`${opp.id}-${listKey}`}
@@ -400,8 +390,7 @@ export default function Home() {
                         <div className="flex items-center gap-2 flex-wrap">
                           <p className="text-xs font-bold tracking-widest uppercase opacity-80">{getCategoryLabel(opp.category)}</p>
                           {opp.isRecurring && <span className="text-[10px] font-bold bg-blue-500/80 text-white px-2 py-0.5 rounded-full">🔁 WEEKLY</span>}
-                          {isPast && !isClosed && !opp.isRecurring && <span className="text-[10px] font-bold bg-white/20 text-white px-2 py-0.5 rounded-full">ENDED</span>}
-                          {isClosed && !opp.isRecurring && <span className="text-[10px] font-bold bg-red-500/80 text-white px-2 py-0.5 rounded-full">CLOSED</span>}
+                          {isPast && !opp.isRecurring && <span className="text-[10px] font-bold bg-white/20 text-white px-2 py-0.5 rounded-full">ENDED</span>}
                           {isClosed && opp.isRecurring && <span className="text-[10px] font-bold bg-orange-500/80 text-white px-2 py-0.5 rounded-full">CLOSED TODAY</span>}
                           {alreadyInterested && (
                             <motion.span
@@ -427,10 +416,12 @@ export default function Home() {
                           <p className="text-sm line-clamp-2 opacity-95 font-medium">{opp.description}</p>
                           <p className="text-xs opacity-70 font-medium">by {opp.hostName}</p>
                           <div className="flex items-center justify-between pt-3 border-t border-white/20">
-                            <div className="flex items-center gap-2">
-                              <Users className="w-4 h-4" />
-                              <span className="font-bold text-sm">{availabilityDisplay}</span>
-                            </div>
+                            {availabilityDisplay ? (
+                              <div className="flex items-center gap-2">
+                                <Users className="w-4 h-4" />
+                                <span className="font-bold text-sm">{availabilityDisplay}</span>
+                              </div>
+                            ) : <span />}
                             <span className="text-xs opacity-70">{opp.signups.length} interested</span>
                           </div>
                           <div className="flex items-center gap-2 text-xs opacity-80">
@@ -441,10 +432,12 @@ export default function Home() {
                         </div>
                       ) : (
                         <div className="flex items-center justify-between pt-3">
-                          <div className="flex items-center gap-1.5">
-                            <Users className="w-3.5 h-3.5 opacity-75" />
-                            <span className="text-xs font-bold">{availabilityDisplay}</span>
-                          </div>
+                          {availabilityDisplay ? (
+                            <div className="flex items-center gap-1.5">
+                              <Users className="w-3.5 h-3.5 opacity-75" />
+                              <span className="text-xs font-bold">{availabilityDisplay}</span>
+                            </div>
+                          ) : <span />}
                           <span className="text-xs opacity-70">{opp.signups.length} interested</span>
                         </div>
                       )}
@@ -655,29 +648,11 @@ export default function Home() {
                   </div>
                 </motion.div>
 
-                {/* Availability + Host */}
+                {/* Host */}
                 <motion.div
                   initial={{ opacity: 0, y: 14 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.17, duration: 0.32, ease: EASE_OUT }}
-                  className="grid grid-cols-2 gap-3">
-                  <div className="bg-white/15 backdrop-blur-md rounded-2xl p-3 md:p-4 border border-white/20">
-                    <p className="text-xs font-bold tracking-widest uppercase opacity-75 mb-1.5">Availability</p>
-                    <p className="text-lg font-semibold">
-                      {(() => {
-                        let open: boolean;
-                        if (selectedCard.isRecurring) {
-                          const rs = getRecurringStatus(selectedCard);
-                          open = rs ? rs.isOpen : true;
-                        } else {
-                          open = selectedCard.isAvailable !== false && selectedCard.isAvailable !== 0;
-                        }
-                        return open ? 'Open' : 'Closed';
-                      })()}
-                      {selectedCard.spotsType === 'limited' && selectedCard.spots > 0
-                        ? ` (~${selectedCard.spots} people)` : ''}
-                    </p>
-                  </div>
+                  transition={{ delay: 0.17, duration: 0.32, ease: EASE_OUT }}>
                   <div className="relative bg-white/15 backdrop-blur-md rounded-2xl p-3 md:p-4 border border-white/20">
                     <p className="text-xs font-bold tracking-widest uppercase opacity-75 mb-1.5">Host</p>
                     <div className="flex items-center gap-2 pr-8">

@@ -5,9 +5,9 @@ const API = '/api';
 
 // ─── Recurring schedule helper ───────────────────────────────────────────────
 // For a recurring post (dayOfWeek 0–6, time "HH:MM"):
-//   • CLOSED window  = from the most-recent occurrence until midnight of that same day
-//   • OPEN  window   = from midnight (post-event) through the next occurrence
-// Example: "Every Monday 12:00" → closed Mon 12pm–midnight, open Tue–Mon 11:59am
+//   • OPEN   window = midnight (00:00) of event day → event time
+//   • CLOSED window = event time → midnight of the same day next week
+// Example: "Every Monday 12:00" → open Mon 00:00–12:00, closed Mon 12:00–next Mon 00:00
 export function getRecurringStatus(opp: { recurringDay?: number; recurringTime?: string }): {
   isOpen: boolean;
   nextOccurrence: Date;
@@ -18,27 +18,29 @@ export function getRecurringStatus(opp: { recurringDay?: number; recurringTime?:
   const [h, m] = opp.recurringTime.split(':').map(Number);
   const dayOfWeek = opp.recurringDay as number;
 
-  // How many days ago was the last occurrence of dayOfWeek?
-  let daysBack = (now.getDay() - dayOfWeek + 7) % 7;
+  // How many days ago was the most recent occurrence of dayOfWeek?
+  const daysBack = (now.getDay() - dayOfWeek + 7) % 7;
 
-  const last = new Date(now);
-  last.setDate(now.getDate() - daysBack);
-  last.setHours(h, m, 0, 0);
+  // Midnight of this week's event day
+  const startOfThis = new Date(now);
+  startOfThis.setDate(now.getDate() - daysBack);
+  startOfThis.setHours(0, 0, 0, 0);
 
-  // If that timestamp is still in the future (daysBack=0 and time hasn't come yet today)
-  // step back a full week
-  if (last > now) last.setDate(last.getDate() - 7);
+  // Event time on that day — this is when the post closes
+  const closeTime = new Date(startOfThis);
+  closeTime.setHours(h, m, 0, 0);
 
-  // Closed window ends at midnight after the event day
-  const reopensAt = new Date(last);
-  reopensAt.setDate(reopensAt.getDate() + 1);
-  reopensAt.setHours(0, 0, 0, 0);
+  // OPEN: we're on the event day and the event time hasn't come yet
+  const isOpen = now >= startOfThis && now < closeTime;
 
-  // Next occurrence = last + 7 days
-  const nextOccurrence = new Date(last);
-  nextOccurrence.setDate(nextOccurrence.getDate() + 7);
+  // nextOccurrence:
+  //   • if open  → closeTime (when it closes today)
+  //   • if closed → midnight of the same day next week (when it re-opens)
+  const startOfNext = new Date(startOfThis);
+  startOfNext.setDate(startOfNext.getDate() + 7);
+  const nextOccurrence = isOpen ? closeTime : startOfNext;
 
-  return { isOpen: now >= reopensAt, nextOccurrence };
+  return { isOpen, nextOccurrence };
 }
 
 // Returns headers with JWT token attached if the user is logged in
