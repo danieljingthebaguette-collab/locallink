@@ -394,7 +394,6 @@ export const useOpportunitiesStore = create<OpportunitiesState>((set, get) => ({
       const res = await fetch(`${API}/opportunities/${oppId}/signup`, {
         method: 'DELETE',
         headers: getAuthHeaders(),
-        body: JSON.stringify({}),
       });
       if (res.ok) {
         const updated = await res.json();
@@ -610,7 +609,7 @@ export const useFavoritesStore = create<FavoritesState>((set, get) => ({
 export interface AppNotification {
   id: string;
   userId: string;
-  type: 'interest' | 'cancel';
+  type: 'interest' | 'cancel' | 'admin_delete' | 'admin_edit';
   message: string;
   postId: string | null;
   read: boolean;

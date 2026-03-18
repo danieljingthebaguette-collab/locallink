@@ -161,16 +161,16 @@ export default function Navigation() {
                                   <div className={cn(
                                     'w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5',
                                     n.type === 'interest' ? 'bg-green-500/15 text-green-600' :
-                                    n.type === 'disinterest' ? 'bg-orange-500/15 text-orange-500' :
+                                    n.type === 'cancel' ? 'bg-orange-500/15 text-orange-500' :
                                     n.type === 'admin_delete' ? 'bg-red-500/15 text-red-500' :
                                     n.type === 'admin_edit' ? 'bg-amber-500/15 text-amber-600' :
                                     'bg-primary/10 text-primary'
                                   )}>
                                     {n.type === 'interest' && <Users className="w-4 h-4" />}
-                                    {n.type === 'disinterest' && <UserMinus className="w-4 h-4" />}
+                                    {n.type === 'cancel' && <UserMinus className="w-4 h-4" />}
                                     {n.type === 'admin_delete' && <Trash2 className="w-4 h-4" />}
                                     {n.type === 'admin_edit' && <Edit3 className="w-4 h-4" />}
-                                    {!['interest','disinterest','admin_delete','admin_edit'].includes(n.type) && <Bell className="w-4 h-4" />}
+                                    {!['interest','cancel','admin_delete','admin_edit'].includes(n.type) && <Bell className="w-4 h-4" />}
                                   </div>
                                   <div className="flex-1 min-w-0">
                                     <p className="text-sm text-foreground leading-snug">{n.message}</p>
@@ -228,6 +228,41 @@ export default function Navigation() {
               </button>
             );
           })}
+
+          {/* Notification Bell — logged-in users only */}
+          {isLoggedIn && currentUser && (
+            <button
+              onClick={() => setNotifOpen(o => !o)}
+              className={cn(
+                "flex flex-col items-center gap-0.5 py-2 px-1 flex-1 transition-colors relative",
+                "text-muted-foreground"
+              )}
+            >
+              <span className="relative">
+                <Bell className="w-5 h-5" />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1.5 w-3.5 h-3.5 bg-red-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center leading-none">
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </span>
+                )}
+              </span>
+              <span className="text-[10px] font-medium">Alerts</span>
+            </button>
+          )}
+
+          {/* Admin — admin users only */}
+          {isLoggedIn && currentUser?.isAdmin && (
+            <button
+              onClick={() => navigate('/admin')}
+              className={cn(
+                "flex flex-col items-center gap-0.5 py-2 px-1 flex-1 transition-colors",
+                location === '/admin' ? "text-red-500" : "text-muted-foreground"
+              )}
+            >
+              <Shield className="w-5 h-5" />
+              <span className="text-[10px] font-medium">Admin</span>
+            </button>
+          )}
         </div>
       </nav>
     </>

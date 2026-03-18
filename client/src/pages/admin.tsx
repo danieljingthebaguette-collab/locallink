@@ -119,6 +119,9 @@ export default function Admin() {
               if (ok) {
                 toast({ title: 'User deleted' });
                 fetchStats(currentUser.id);
+                // Reset and refetch opportunities so deleted user's posts disappear from the feed
+                useOpportunitiesStore.setState({ loaded: false });
+                fetchOpportunities();
               } else {
                 toast({ title: 'Failed to delete user', variant: 'destructive' });
               }
@@ -306,7 +309,11 @@ function OverviewTab({ stats, users, opportunities }: { stats: any; users: AppUs
                 <p className="text-xs text-muted-foreground">{opp.category} · {opp.location}</p>
               </div>
               <div className="text-xs text-muted-foreground">
-                {opp.spotsRemaining}/{opp.spots} spots
+                {opp.spotsType === 'unlimited'
+                  ? 'Unlimited spots'
+                  : opp.spotsType === 'none'
+                  ? 'No capacity set'
+                  : `${opp.signups.length}/${opp.spots} interested`}
               </div>
             </div>
           ))}

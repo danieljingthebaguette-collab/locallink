@@ -376,8 +376,8 @@ export default function Profile() {
           )}
         </div>
 
-        {/* Notification Settings (organization accounts only) */}
-        {currentUser.accountType === 'organization' && (
+        {/* Notification Settings (organization accounts and admins) */}
+        {(currentUser.accountType === 'organization' || currentUser.isAdmin) && (
           <div className="rounded-2xl border-2 border-border bg-card p-6 mb-6">
             <h3 className="font-heading font-bold text-lg text-foreground mb-4 flex items-center gap-2">
               <Bell className="w-5 h-5 text-primary" />

@@ -424,7 +424,7 @@ export default function CreatePostModal({ open, onClose }: Props) {
                                   className="rounded-xl bg-white/80 text-foreground border-0 text-sm h-9 flex-1" />
                               </div>
                               <p className="text-white/60 text-xs">
-                                Opens every {DAY_FULL[recurringDay]} — closes at {recurringTime} and reopens the next day.
+                                Opens every {DAY_FULL[recurringDay]} at midnight — closes at {recurringTime} and reopens the following {DAY_FULL[recurringDay]}.
                               </p>
                             </div>
                           )}

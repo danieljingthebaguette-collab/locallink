@@ -604,9 +604,9 @@ router.delete('/api/favorites/:orgId', requireAuth, (req: AuthRequest, res: Resp
 router.get('/api/admin/users', requireAdmin, (_req: Request, res: Response) => {
   try {
     const users = db.prepare(
-      'SELECT id, username, email, isAdmin, accountType, createdAt FROM users ORDER BY createdAt DESC'
+      'SELECT id, username, email, isAdmin, accountType, banned, createdAt FROM users ORDER BY createdAt DESC'
     ).all();
-    return res.json((users as any[]).map(u => ({ ...u, isAdmin: !!u.isAdmin })));
+    return res.json((users as any[]).map(u => ({ ...u, isAdmin: !!u.isAdmin, banned: !!u.banned })));
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
@@ -632,7 +632,18 @@ router.delete('/api/admin/users/:id', requireAdmin, (req: AuthRequest, res: Resp
     }
     // 3. Their hosted opportunities
     db.prepare('DELETE FROM opportunities WHERE hostId = ?').run(userId);
-    // 4. The user record itself
+    // 4. Their notifications
+    db.prepare('DELETE FROM notifications WHERE userId = ?').run(userId);
+    // 5. Their favorites (as the favoriter) and others who favorited them (if they were an org)
+    db.prepare('DELETE FROM favorites WHERE userId = ?').run(userId);
+    db.prepare('DELETE FROM favorites WHERE orgId = ?').run(userId);
+    // 6. Their pending appeals
+    db.prepare('DELETE FROM appeals WHERE userId = ?').run(userId);
+    // 7. Reports they filed
+    db.prepare('DELETE FROM reports WHERE reporterId = ?').run(userId);
+    // 8. Anonymise feedback — preserve the rating/message data but remove the user link
+    db.prepare('UPDATE feedback SET userId = NULL WHERE userId = ?').run(userId);
+    // 9. The user record itself
     db.prepare('DELETE FROM users WHERE id = ?').run(userId);
     return res.json({ success: true });
   } catch (err: any) {
