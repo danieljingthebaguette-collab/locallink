@@ -138,7 +138,13 @@ export default function MyEvents() {
     if (success) {
       toast({ title: 'Event deleted' });
     } else {
-      toast({ title: 'Failed to delete event', variant: 'destructive' });
+      // If the token was cleared (401 session expired), redirect to login
+      if (!localStorage.getItem('locallink_token')) {
+        toast({ title: 'Session expired', description: 'Please log in again.' });
+        navigate('/account');
+      } else {
+        toast({ title: 'Failed to delete event', variant: 'destructive' });
+      }
     }
   };
 
@@ -189,7 +195,12 @@ export default function MyEvents() {
       setEditImageFile(null);
       setEditImagePreview('');
     } else {
-      toast({ title: 'Failed to update event', variant: 'destructive' });
+      if (!localStorage.getItem('locallink_token')) {
+        toast({ title: 'Session expired', description: 'Please log in again.' });
+        navigate('/account');
+      } else {
+        toast({ title: 'Failed to update event', variant: 'destructive' });
+      }
     }
   };
 

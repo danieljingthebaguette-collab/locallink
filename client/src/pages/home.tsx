@@ -347,7 +347,8 @@ export default function Home() {
                 const alreadyInterested = isInterested(opp);
                 const availabilityDisplay = getAvailabilityDisplay(opp);
                 // Recurring posts are never "past"; their open/closed state is time-computed
-                const recurringStatus = opp.isRecurring ? getRecurringStatus(opp) : null;
+                // !! coerces SQLite 0/1 integers to proper booleans (avoids rendering "0" in JSX)
+                const recurringStatus = !!opp.isRecurring ? getRecurringStatus(opp) : null;
                 const isPast = recurringStatus ? false : new Date(opp.date) < new Date();
                 // For recurring posts: open/closed driven by schedule. For one-time posts: never "closed" manually.
                 const isClosed = recurringStatus ? !recurringStatus.isOpen : false;
@@ -389,9 +390,9 @@ export default function Home() {
                       <div className="space-y-2 border-b border-white/20 pb-3">
                         <div className="flex items-center gap-2 flex-wrap">
                           <p className="text-xs font-bold tracking-widest uppercase opacity-80">{getCategoryLabel(opp.category)}</p>
-                          {opp.isRecurring && <span className="text-[10px] font-bold bg-blue-500/80 text-white px-2 py-0.5 rounded-full">🔁 WEEKLY</span>}
+                          {!!opp.isRecurring && <span className="text-[10px] font-bold bg-blue-500/80 text-white px-2 py-0.5 rounded-full">🔁 WEEKLY</span>}
                           {isPast && !opp.isRecurring && <span className="text-[10px] font-bold bg-white/20 text-white px-2 py-0.5 rounded-full">ENDED</span>}
-                          {isClosed && opp.isRecurring && <span className="text-[10px] font-bold bg-orange-500/80 text-white px-2 py-0.5 rounded-full">CLOSED TODAY</span>}
+                          {isClosed && !!opp.isRecurring && <span className="text-[10px] font-bold bg-orange-500/80 text-white px-2 py-0.5 rounded-full">CLOSED TODAY</span>}
                           {alreadyInterested && (
                             <motion.span
                               initial={{ scale: 0.7, opacity: 0 }}
@@ -617,7 +618,7 @@ export default function Home() {
                   </div>
                   {/* Date & Time / Schedule */}
                   <div className="bg-white/15 backdrop-blur-md rounded-2xl p-3 md:p-4 border border-white/20">
-                    {selectedCard.isRecurring ? (
+                    {!!selectedCard.isRecurring ? (
                       <>
                         <p className="text-xs font-bold tracking-widest uppercase opacity-75 mb-1.5">🔁 Weekly Schedule</p>
                         <p className="text-sm md:text-base font-semibold">

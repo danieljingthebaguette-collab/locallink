@@ -340,6 +340,8 @@ export const useOpportunitiesStore = create<OpportunitiesState>((set, get) => ({
         }));
         return true;
       }
+      // 401 = session expired — log the user out so the login screen reappears
+      if (res.status === 401) useAuthStore.getState().logout();
       return false;
     } catch {
       return false;
@@ -358,6 +360,8 @@ export const useOpportunitiesStore = create<OpportunitiesState>((set, get) => ({
         }));
         return true;
       }
+      // 401 = session expired — log the user out so the login screen reappears
+      if (res.status === 401) useAuthStore.getState().logout();
       return false;
     } catch {
       return false;

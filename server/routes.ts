@@ -167,7 +167,7 @@ router.post('/api/auth/login', async (req: Request, res: Response) => {
       });
     }
 
-    const token = jwt.sign({ userId: user.id, isAdmin: !!user.isAdmin }, JWT_SECRET, { expiresIn: '7d' });
+    const token = jwt.sign({ userId: user.id, isAdmin: !!user.isAdmin }, JWT_SECRET, { expiresIn: '30d' });
     // Never send the hashed password to the client
     const { password: _pwd, ...safeUser } = user;
     return res.json({ ...safeUser, isAdmin: !!user.isAdmin, emailVerified: true, notifyOnInterest: !!user.notifyOnInterest, profileImage: user.profileImage || null, token });
@@ -196,7 +196,7 @@ router.get('/api/auth/verify-email', (req: Request, res: Response) => {
 
     // Issue a JWT so the client can log the user in automatically
     const user = db.prepare('SELECT * FROM users WHERE id = ?').get(record.userId) as any;
-    const jwtToken = jwt.sign({ userId: user.id, isAdmin: !!user.isAdmin }, JWT_SECRET, { expiresIn: '7d' });
+    const jwtToken = jwt.sign({ userId: user.id, isAdmin: !!user.isAdmin }, JWT_SECRET, { expiresIn: '30d' });
     const { password: _pwd, ...safeUser } = user;
 
     return res.json({
