@@ -468,14 +468,19 @@ router.delete('/api/opportunities/:id/signup', requireAuth, (req: AuthRequest, r
     if (!existing) return res.status(404).json({ error: 'Not interested' });
 
     db.prepare('DELETE FROM signups WHERE opportunityId = ? AND userId = ?').run(oppId, userId);
-    // Notify the host that someone cancelled their interest
+    // Decrement popularity (floor at 0)
+    db.prepare('UPDATE opportunities SET popularity = MAX(0, popularity - 1) WHERE id = ?').run(oppId);
+    // Notify the host only if they have opted in to interest notifications
     const cancelOpp = db.prepare('SELECT title, hostId FROM opportunities WHERE id = ?').get(oppId) as any;
     if (cancelOpp && cancelOpp.hostId !== userId) {
-      const volunteer = db.prepare('SELECT username FROM users WHERE id = ?').get(userId) as any;
-      const volunteerName = volunteer?.username || 'Someone';
-      db.prepare('INSERT INTO notifications (id, userId, type, message, postId, read, createdAt) VALUES (?, ?, ?, ?, ?, 0, ?)').run(
-        randomUUID(), cancelOpp.hostId, 'cancel', `${volunteerName} removed interest from "${cancelOpp.title}"`, oppId, new Date().toISOString()
-      );
+      const host = db.prepare('SELECT notifyOnInterest FROM users WHERE id = ?').get(cancelOpp.hostId) as any;
+      if (host?.notifyOnInterest) {
+        const volunteer = db.prepare('SELECT username FROM users WHERE id = ?').get(userId) as any;
+        const volunteerName = volunteer?.username || 'Someone';
+        db.prepare('INSERT INTO notifications (id, userId, type, message, postId, read, createdAt) VALUES (?, ?, ?, ?, ?, 0, ?)').run(
+          randomUUID(), cancelOpp.hostId, 'cancel', `${volunteerName} removed interest from "${cancelOpp.title}"`, oppId, new Date().toISOString()
+        );
+      }
     }
     // Do NOT restore spotsRemaining — spots are informational only
 
@@ -542,6 +547,7 @@ router.delete('/api/opportunities/:id', requireAuth, (req: AuthRequest, res: Res
     if (opp.hostId !== userId && !req.isAdmin) return res.status(403).json({ error: 'Not authorized to delete this opportunity' });
 
     db.prepare('DELETE FROM signups WHERE opportunityId = ?').run(oppId);
+    db.prepare('DELETE FROM reports WHERE postId = ?').run(oppId);
     db.prepare('DELETE FROM opportunities WHERE id = ?').run(oppId);
     return res.json({ success: true });
   } catch (err: any) {
@@ -631,10 +637,11 @@ router.delete('/api/admin/users/:id', requireAdmin, (req: AuthRequest, res: Resp
     // Clean up everything owned by this user:
     // 1. Their signups on other events
     db.prepare('DELETE FROM signups WHERE userId = ?').run(userId);
-    // 2. All signups ON their hosted events (before deleting the events themselves)
+    // 2. All signups and reports ON their hosted events (before deleting the events themselves)
     const hostedIds = (db.prepare('SELECT id FROM opportunities WHERE hostId = ?').all(userId) as any[]).map(o => o.id);
     for (const oppId of hostedIds) {
       db.prepare('DELETE FROM signups WHERE opportunityId = ?').run(oppId);
+      db.prepare('DELETE FROM reports WHERE postId = ?').run(oppId);
     }
     // 3. Their hosted opportunities
     db.prepare('DELETE FROM opportunities WHERE hostId = ?').run(userId);
@@ -714,6 +721,7 @@ router.delete('/api/admin/opportunities/:id', requireAdmin, (req: Request, res: 
     }
 
     db.prepare('DELETE FROM signups WHERE opportunityId = ?').run(oppId);
+    db.prepare('DELETE FROM reports WHERE postId = ?').run(oppId);
     db.prepare('DELETE FROM opportunities WHERE id = ?').run(oppId);
     return res.json({ success: true });
   } catch (err: any) {

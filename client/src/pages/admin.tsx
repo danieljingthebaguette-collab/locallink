@@ -39,7 +39,6 @@ export default function Admin() {
   const { users, stats, loading, fetchUsers, fetchStats, deleteUser, deleteOpportunity, updateOpportunity, banUser, unbanUser } = useAdminStore();
   const { opportunities, fetchOpportunities } = useOpportunitiesStore();
   const [activeTab, setActiveTab] = useState<Tab>('overview');
-  const [searchQuery, setSearchQuery] = useState('');
 
   // Redirect non-admin users
   useEffect(() => {
@@ -112,8 +111,6 @@ export default function Admin() {
             users={users}
             adminUserId={currentUser.id}
             loading={loading}
-            searchQuery={searchQuery}
-            setSearchQuery={setSearchQuery}
             onDeleteUser={async (userId) => {
               const ok = await deleteUser(currentUser.id, userId);
               if (ok) {
@@ -142,8 +139,6 @@ export default function Admin() {
           <OpportunitiesTab
             opportunities={opportunities}
             adminUserId={currentUser.id}
-            searchQuery={searchQuery}
-            setSearchQuery={setSearchQuery}
             onDeleteOpportunity={async (oppId, reason) => {
               const ok = await deleteOpportunity(currentUser.id, oppId, reason);
               if (ok) {
@@ -328,8 +323,6 @@ function UsersTab({
   users,
   adminUserId,
   loading,
-  searchQuery,
-  setSearchQuery,
   onDeleteUser,
   onBanUser,
   onUnbanUser,
@@ -337,12 +330,11 @@ function UsersTab({
   users: AppUser[];
   adminUserId: string;
   loading: boolean;
-  searchQuery: string;
-  setSearchQuery: (q: string) => void;
   onDeleteUser: (userId: string) => Promise<void>;
   onBanUser: (userId: string) => Promise<void>;
   onUnbanUser: (userId: string) => Promise<void>;
 }) {
+  const [searchQuery, setSearchQuery] = useState('');
   const [confirmDeleteUser, setConfirmDeleteUser] = useState<AppUser | null>(null);
 
   const filteredUsers = users.filter(u =>
@@ -453,18 +445,15 @@ function UsersTab({
 function OpportunitiesTab({
   opportunities,
   adminUserId,
-  searchQuery,
-  setSearchQuery,
   onDeleteOpportunity,
   onUpdateOpportunity,
 }: {
   opportunities: Opportunity[];
   adminUserId: string;
-  searchQuery: string;
-  setSearchQuery: (q: string) => void;
   onDeleteOpportunity: (oppId: string, reason?: string) => Promise<void>;
   onUpdateOpportunity: (oppId: string, data: Record<string, any>, reason?: string) => Promise<boolean>;
 }) {
+  const [searchQuery, setSearchQuery] = useState('');
   const [confirmDeleteOpp, setConfirmDeleteOpp] = useState<Opportunity | null>(null);
   const [deleteReason, setDeleteReason] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -772,6 +761,8 @@ function AppealsTab({ toast, onUnbanUser }: { toast: any; onUnbanUser: (userId: 
     });
     if (res.ok) {
       setAppeals(a => a.filter(x => x.id !== appeal.id));
+      // Sync the Zustand users store so the Users tab reflects the unban immediately
+      await onUnbanUser(appeal.userId);
       toast({ title: `${appeal.username}'s account has been reinstated` });
     } else {
       toast({ title: 'Failed to approve appeal', variant: 'destructive' });

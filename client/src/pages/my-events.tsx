@@ -65,8 +65,9 @@ export default function MyEvents() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<{
     title: string; description: string; category: Category;
-    location: string; date: string; duration: number; spots: number; image: string;
-  }>({ title: '', description: '', category: 'volunteer', location: '', date: '', duration: 2, spots: 10, image: '' });
+    location: string; date: string; duration: number; spots: number;
+    spotsType: 'limited' | 'unlimited' | 'none'; image: string;
+  }>({ title: '', description: '', category: 'volunteer', location: '', date: '', duration: 2, spots: 10, spotsType: 'limited', image: '' });
   const [savingEdit, setSavingEdit] = useState(false);
   const [editImageFile, setEditImageFile] = useState<File | null>(null);
   const [editImagePreview, setEditImagePreview] = useState('');
@@ -105,13 +106,15 @@ export default function MyEvents() {
   const hostedRaw = getHostedEvents(currentUser.id);
   // Sort: active events first, closed & past events pushed to the end
   const hosted = [...hostedRaw].sort((a, b) => {
-    const aInactive = isPast(a.date) || isOppClosed(a);
-    const bInactive = isPast(b.date) || isOppClosed(b);
+    // Recurring events are never "past" — only check date for non-recurring
+    const aInactive = (!a.isRecurring && isPast(a.date)) || isOppClosed(a);
+    const bInactive = (!b.isRecurring && isPast(b.date)) || isOppClosed(b);
     if (aInactive === bInactive) return 0;
     return aInactive ? 1 : -1;
   });
-  const upcoming = signedUp.filter(o => !isPast(o.date));
-  const past = signedUp.filter(o => isPast(o.date));
+  // Recurring events always stay in "upcoming" — their stored date is the first occurrence
+  const upcoming = signedUp.filter(o => o.isRecurring || !isPast(o.date));
+  const past = signedUp.filter(o => !o.isRecurring && isPast(o.date));
 
   const handleCancel = async (opp: Opportunity) => {
     setCancellingId(opp.id);
@@ -160,6 +163,7 @@ export default function MyEvents() {
       date: opp.date,
       duration: opp.duration,
       spots: opp.spots,
+      spotsType: (opp.spotsType as 'limited' | 'unlimited' | 'none') || 'limited',
       image: opp.image || '',
     });
   };
@@ -185,7 +189,7 @@ export default function MyEvents() {
       duration: editForm.duration,
       spots: editForm.spots,
       // Derive spotsType from whether the host entered a capacity number
-      spotsType: editForm.spots > 0 ? 'limited' : 'none',
+      spotsType: editForm.spotsType,
       image: imageUrl,
     });
     setSavingEdit(false);

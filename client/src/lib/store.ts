@@ -270,7 +270,15 @@ export const useOpportunitiesStore = create<OpportunitiesState>((set, get) => ({
     } else if (sortBy === 'oldest') {
       filtered.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
     } else if (sortBy === 'soonest') {
-      filtered.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      // For recurring events use nextOccurrence instead of the stored (first) date
+      const effectiveDate = (o: Opportunity): number => {
+        if (o.isRecurring) {
+          const status = getRecurringStatus(o);
+          return status ? status.nextOccurrence.getTime() : new Date(o.date).getTime();
+        }
+        return new Date(o.date).getTime();
+      };
+      filtered.sort((a, b) => effectiveDate(a) - effectiveDate(b));
     } else if (sortBy === 'popular') {
       filtered.sort((a, b) => b.popularity - a.popularity);
     }
