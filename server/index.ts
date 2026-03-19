@@ -5,6 +5,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import rateLimit from 'express-rate-limit';
 import routes from './routes.js';
+import { startReopenScheduler } from './scheduler.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -51,6 +52,7 @@ app.get('/{*path}', (_req, res) => {
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`LocalLink server running on http://localhost:${PORT}`);
+  startReopenScheduler();
 });
 
 export default app;

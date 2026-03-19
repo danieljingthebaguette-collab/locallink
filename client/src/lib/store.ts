@@ -612,7 +612,7 @@ export const useFavoritesStore = create<FavoritesState>((set, get) => ({
 export interface AppNotification {
   id: string;
   userId: string;
-  type: 'interest' | 'cancel' | 'admin_delete' | 'admin_edit';
+  type: 'interest' | 'cancel' | 'admin_delete' | 'admin_edit' | 'reopen';
   message: string;
   postId: string | null;
   read: boolean;
