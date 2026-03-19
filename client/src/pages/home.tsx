@@ -12,6 +12,13 @@ import { getCategoryColor, getModalGradient, getCategoryBorder, getCategoryLabel
 import { useAuthStore, useOpportunitiesStore, useFavoritesStore, getRecurringStatus } from '@/lib/store';
 import { CATEGORIES, type Category, type Opportunity } from '@/lib/mockData';
 import CreatePostModal from '@/components/CreatePostModal';
+import CropEditor, {
+  type ImageTransform,
+  DEFAULT_TRANSFORM,
+  parseImageTransform,
+  serializeImageTransform,
+  imageTransformStyle,
+} from '@/components/CropEditor';
 
 const SORT_OPTIONS: { value: 'newest' | 'oldest' | 'soonest' | 'popular'; label: string }[] = [
   { value: 'newest',  label: 'Newest' },
@@ -19,18 +26,6 @@ const SORT_OPTIONS: { value: 'newest' | 'oldest' | 'soonest' | 'popular'; label:
   { value: 'soonest', label: 'Soonest' },
   { value: 'popular', label: 'Popular' },
 ];
-
-// 3×3 focal-point grid for image crop control
-const CROP_POSITIONS = [
-  ['top left',    'top',    'top right'   ],
-  ['left',        'center', 'right'       ],
-  ['bottom left', 'bottom', 'bottom right'],
-] as const;
-const CROP_ICONS = [
-  ['↖', '↑', '↗'],
-  ['←', '·', '→'],
-  ['↙', '↓', '↘'],
-] as const;
 
 // Easing curve used throughout — smooth deceleration
 const EASE_OUT = [0.25, 0.1, 0.25, 1] as const;
@@ -66,14 +61,14 @@ export default function Home() {
     duration: number; spots: number; category: Category;
     spotsType: 'limited' | 'unlimited' | 'none';
     recurringDay?: number; recurringTime?: string;
-    cardObjectPosition?: string | null;
-    modalObjectPosition?: string | null;
+    cardTransform: ImageTransform;
+    modalTransform: ImageTransform;
   }>({
     title: '', description: '', location: '', date: '', duration: 2, spots: 0,
     category: 'volunteer',
     spotsType: 'none',
-    cardObjectPosition: null,
-    modalObjectPosition: null,
+    cardTransform: DEFAULT_TRANSFORM,
+    modalTransform: DEFAULT_TRANSFORM,
   });
   const [savingEdit, setSavingEdit] = useState(false);
 
@@ -210,8 +205,8 @@ export default function Home() {
       spotsType: (opp.spotsType as 'limited' | 'unlimited' | 'none') || 'none',
       recurringDay: opp.recurringDay,
       recurringTime: opp.recurringTime,
-      cardObjectPosition: opp.cardObjectPosition ?? null,
-      modalObjectPosition: opp.modalObjectPosition ?? null,
+      cardTransform: parseImageTransform(opp.cardObjectPosition),
+      modalTransform: parseImageTransform(opp.modalObjectPosition),
     });
     setShowEditForm(true);
   };
@@ -235,8 +230,8 @@ export default function Home() {
     } else {
       payload.date = editForm.date;
     }
-    payload.cardObjectPosition = editForm.cardObjectPosition ?? null;
-    payload.modalObjectPosition = editForm.modalObjectPosition ?? null;
+    payload.cardObjectPosition = serializeImageTransform(editForm.cardTransform);
+    payload.modalObjectPosition = serializeImageTransform(editForm.modalTransform);
     const success = await updateOpportunity(selectedCard.id, payload as any);
     if (success) {
       // Refresh selected card from updated store
@@ -427,7 +422,7 @@ export default function Home() {
                     )}>
                     {hasImage ? (
                       <div className="absolute inset-0">
-                        <img src={opp.image} alt={opp.title} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" style={{ objectPosition: opp.cardObjectPosition || 'center' }} />
+                        <img src={opp.image} alt={opp.title} className="w-full h-full transition-transform duration-500 group-hover:scale-105" style={imageTransformStyle(parseImageTransform(opp.cardObjectPosition))} />
                         <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent" />
                       </div>
                     ) : (
@@ -538,7 +533,7 @@ export default function Home() {
               {/* Modal header image area */}
               <div className="relative h-48 md:h-64 overflow-hidden flex-shrink-0">
                 {selectedCard.image ? (
-                  <><img src={selectedCard.image} alt={selectedCard.title} className="absolute inset-0 w-full h-full object-cover" style={{ objectPosition: selectedCard.modalObjectPosition || 'center' }} />
+                  <><img src={selectedCard.image} alt={selectedCard.title} className="absolute inset-0 w-full h-full" style={imageTransformStyle(parseImageTransform(selectedCard.modalObjectPosition))} />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" /></>
                 ) : <div className="absolute inset-0 bg-gradient-to-br opacity-30" />}
                 <div className="absolute inset-0 flex items-end p-6 md:p-8 justify-between gap-3">
@@ -660,34 +655,23 @@ export default function Home() {
                           className="rounded-xl bg-white/80 text-foreground border-0 text-sm h-9 px-3 w-28"
                         />
                       </div>
-                      {/* Image crop focal-point pickers — only when post has an image */}
+                      {/* Image crop editors — drag to pan, scroll/pinch to zoom */}
                       {selectedCard.image && (
-                        <div className="flex gap-5 flex-wrap pt-1">
-                          {([
-                            { label: 'Board Card Crop', key: 'cardObjectPosition' as const },
-                            { label: 'Post Banner Crop', key: 'modalObjectPosition' as const },
-                          ]).map(({ label, key }) => (
-                            <div key={key} className="space-y-1">
-                              <p className="text-[10px] font-bold text-white/70 uppercase tracking-widest">{label}</p>
-                              <div className="grid grid-cols-3 gap-0.5">
-                                {CROP_POSITIONS.map((row, ri) =>
-                                  row.map((pos, ci) => (
-                                    <button key={pos} type="button"
-                                      onClick={() => setEditForm(f => ({ ...f, [key]: pos }))}
-                                      title={pos}
-                                      className={cn(
-                                        'w-6 h-6 rounded text-[11px] flex items-center justify-center transition-colors',
-                                        (editForm[key] || 'center') === pos
-                                          ? 'bg-white text-primary font-bold'
-                                          : 'bg-white/20 hover:bg-white/40 text-white'
-                                      )}>
-                                      {CROP_ICONS[ri][ci]}
-                                    </button>
-                                  ))
-                                )}
-                              </div>
-                            </div>
-                          ))}
+                        <div className="space-y-2 pt-1">
+                          <CropEditor
+                            src={selectedCard.image}
+                            label="Board Card Crop"
+                            value={editForm.cardTransform}
+                            onChange={t => setEditForm(f => ({ ...f, cardTransform: t }))}
+                            variant="dark"
+                          />
+                          <CropEditor
+                            src={selectedCard.image}
+                            label="Post Banner Crop"
+                            value={editForm.modalTransform}
+                            onChange={t => setEditForm(f => ({ ...f, modalTransform: t }))}
+                            variant="dark"
+                          />
                         </div>
                       )}
                       <div className="flex gap-2 pt-1">
