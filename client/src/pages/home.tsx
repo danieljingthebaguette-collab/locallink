@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'wouter';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
-import { Plus, MapPin, Users, Clock, Search, Loader2, Heart, Flag, X, Share2, Edit3, Save } from 'lucide-react';
+import { Plus, MapPin, Users, Clock, Search, Loader2, Heart, Flag, X, Share2, Edit3, Save, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -72,6 +72,7 @@ export default function Home() {
     modalTransform: DEFAULT_TRANSFORM,
   });
   const [savingEdit, setSavingEdit] = useState(false);
+  const [showSort, setShowSort] = useState(false);
 
   // Bump this key whenever sort/category/search changes so cards re-animate entrance
   const [listKey, setListKey] = useState(0);
@@ -332,18 +333,30 @@ export default function Home() {
                 </button>
               ))}
             </div>
-            {/* Sort pills */}
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mr-1">Sort:</span>
-              {SORT_OPTIONS.map(opt => (
-                <button key={opt.value} onClick={() => setSortBy(opt.value)}
-                  className={cn("px-3 py-1 rounded-full text-xs font-semibold transition-all border",
-                    sortBy === opt.value
-                      ? "bg-foreground text-background border-foreground"
-                      : "bg-background text-foreground border-border hover:border-foreground/50")}>
-                  {opt.label}
-                </button>
-              ))}
+            {/* Sort toggle + pills */}
+            <div>
+              <button
+                onClick={() => setShowSort(s => !s)}
+                className="flex items-center gap-1 text-xs font-semibold text-muted-foreground uppercase tracking-wide hover:text-foreground transition-colors mb-1.5">
+                <span>Sort: {SORT_OPTIONS.find(o => o.value === sortBy)?.label}</span>
+                <ChevronDown className={cn("w-3.5 h-3.5 transition-transform duration-200", showSort && "rotate-180")} />
+              </button>
+              <div className={cn(
+                "overflow-hidden transition-all duration-300 ease-in-out",
+                showSort ? "max-h-20 opacity-100" : "max-h-0 opacity-0 pointer-events-none"
+              )}>
+                <div className="flex items-center gap-2 flex-wrap pb-1">
+                  {SORT_OPTIONS.map(opt => (
+                    <button key={opt.value} onClick={() => { setSortBy(opt.value); setShowSort(false); }}
+                      className={cn("px-3 py-1 rounded-full text-xs font-semibold transition-all border",
+                        sortBy === opt.value
+                          ? "bg-foreground text-background border-foreground"
+                          : "bg-background text-foreground border-border hover:border-foreground/50")}>
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
         </div>
