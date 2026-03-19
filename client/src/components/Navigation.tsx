@@ -57,7 +57,7 @@ export default function Navigation() {
           <div className="flex items-center justify-between h-16">
             {/* Logo */}
             <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigate('/')}>
-              <Logo size={28} className="text-foreground" />
+              <Logo size={38} />
               <div className="flex flex-col">
                 <h1 className="font-heading font-semibold tracking-tight text-foreground text-xl leading-none">
                   LocalLink
