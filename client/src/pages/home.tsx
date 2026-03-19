@@ -516,10 +516,10 @@ export default function Home() {
               exit={{ scale: 0.9, opacity: 0, y: 24 }}
               transition={{ type: 'spring', stiffness: 420, damping: 36 }}
               onClick={e => e.stopPropagation()}
-              className={cn("bg-gradient-to-br rounded-3xl w-full max-w-3xl overflow-hidden border-2 border-white/20 shadow-2xl max-h-[90vh] overflow-y-auto", getModalGradient(selectedCard.category))}>
+              className={cn("bg-gradient-to-br rounded-3xl w-full max-w-3xl overflow-hidden border-2 border-white/20 shadow-2xl max-h-[90vh] flex flex-col", getModalGradient(selectedCard.category))}>
 
               {/* Modal header image area */}
-              <div className="relative h-48 md:h-64 overflow-hidden">
+              <div className="relative h-48 md:h-64 overflow-hidden flex-shrink-0">
                 {selectedCard.image ? (
                   <><img src={selectedCard.image} alt={selectedCard.title} className="absolute inset-0 w-full h-full object-cover" />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent" /></>
@@ -557,7 +557,7 @@ export default function Home() {
               </div>
 
               {/* Modal body */}
-              <div className="p-6 md:p-8 space-y-6 text-white">
+              <div className="p-6 md:p-8 space-y-6 text-white overflow-y-auto">
 
                 {/* Inline Edit Form — host/admin only */}
                 <AnimatePresence>
