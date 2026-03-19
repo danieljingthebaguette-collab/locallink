@@ -74,6 +74,7 @@ export default function MyEvents() {
   const [editImagePreview, setEditImagePreview] = useState('');
   const editFileRef = useRef<HTMLInputElement>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchOpportunities();
@@ -213,6 +214,14 @@ export default function MyEvents() {
     }
   };
 
+  const handleToggleAvailability = async (opp: Opportunity) => {
+    setTogglingId(opp.id);
+    const nowOpen = !isOppClosed(opp);
+    await updateOpportunity(opp.id, { isAvailable: !nowOpen });
+    setTogglingId(null);
+    toast({ title: nowOpen ? 'Event closed' : 'Event opened' });
+  };
+
   return (
     <div className="min-h-screen bg-background pb-24 font-sans">
       <main className="container mx-auto px-4 py-8">
@@ -316,18 +325,59 @@ export default function MyEvents() {
                           <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" />{opp.duration}h</span>
                           {opp.isRecurring ? (
                             isClosed ? (
-                              <span className="text-xs font-semibold text-muted-foreground bg-secondary px-2 py-0.5 rounded-full">Closed</span>
+                              // Host manually closed — clickable to reopen
+                              <button
+                                onClick={() => handleToggleAvailability(opp)}
+                                disabled={togglingId === opp.id}
+                                title="Click to reopen"
+                                className="text-xs font-semibold text-muted-foreground bg-secondary hover:bg-red-500/10 hover:text-red-500 px-2 py-0.5 rounded-full transition-colors cursor-pointer disabled:opacity-50"
+                              >
+                                {togglingId === opp.id ? '…' : 'Closed'}
+                              </button>
                             ) : (recurringStatus?.isOpen ?? true) ? (
-                              <span className="text-xs font-semibold text-green-600 dark:text-green-400 bg-green-500/10 px-2 py-0.5 rounded-full">Open</span>
+                              // Schedule says open — clickable to force-close
+                              <button
+                                onClick={() => handleToggleAvailability(opp)}
+                                disabled={togglingId === opp.id}
+                                title="Click to close"
+                                className="text-xs font-semibold text-green-600 dark:text-green-400 bg-green-500/10 hover:bg-red-500/10 hover:text-red-500 px-2 py-0.5 rounded-full transition-colors cursor-pointer disabled:opacity-50"
+                              >
+                                {togglingId === opp.id ? '…' : 'Open'}
+                              </button>
                             ) : (
-                              <span className="text-xs font-semibold text-muted-foreground bg-secondary px-2 py-0.5 rounded-full">Closed</span>
+                              // Schedule says closed (auto) — not manually closeable, but can force-open
+                              <button
+                                onClick={() => handleToggleAvailability(opp)}
+                                disabled={togglingId === opp.id}
+                                title="Click to force open"
+                                className="text-xs font-semibold text-muted-foreground bg-secondary hover:bg-green-500/10 hover:text-green-600 px-2 py-0.5 rounded-full transition-colors cursor-pointer disabled:opacity-50"
+                              >
+                                {togglingId === opp.id ? '…' : 'Closed'}
+                              </button>
                             )
                           ) : isPast(opp.date) ? (
+                            // Past one-time event — ended, not togglable
                             <span className="text-xs font-semibold text-muted-foreground bg-secondary px-2 py-0.5 rounded-full">Ended</span>
                           ) : isClosed ? (
-                            <span className="text-xs font-semibold text-muted-foreground bg-secondary px-2 py-0.5 rounded-full">Closed</span>
+                            // One-time event, manually closed — clickable to reopen
+                            <button
+                              onClick={() => handleToggleAvailability(opp)}
+                              disabled={togglingId === opp.id}
+                              title="Click to reopen"
+                              className="text-xs font-semibold text-muted-foreground bg-secondary hover:bg-green-500/10 hover:text-green-600 px-2 py-0.5 rounded-full transition-colors cursor-pointer disabled:opacity-50"
+                            >
+                              {togglingId === opp.id ? '…' : 'Closed'}
+                            </button>
                           ) : (
-                            <span className="text-xs font-semibold text-green-600 dark:text-green-400 bg-green-500/10 px-2 py-0.5 rounded-full">Open</span>
+                            // One-time event, open — clickable to close
+                            <button
+                              onClick={() => handleToggleAvailability(opp)}
+                              disabled={togglingId === opp.id}
+                              title="Click to close"
+                              className="text-xs font-semibold text-green-600 dark:text-green-400 bg-green-500/10 hover:bg-red-500/10 hover:text-red-500 px-2 py-0.5 rounded-full transition-colors cursor-pointer disabled:opacity-50"
+                            >
+                              {togglingId === opp.id ? '…' : 'Open'}
+                            </button>
                           )}
                         </div>
                       </div>
