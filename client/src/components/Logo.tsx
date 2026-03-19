@@ -12,21 +12,21 @@ export default function Logo({ size = 32, className = '' }: LogoProps) {
     ── Logo geometry (100 × 100 square viewBox) ──
 
     Two solid filled L-brackets in primary blue:
-      Left  "L"  — vertical bar (left) + horizontal bar (bottom)
-      Right "⌐"  — horizontal bar (top) + vertical bar (right)
+      Left  "L"  — vertical bar (left side) + horizontal bar (bottom)
+      Right "⌐"  — horizontal bar (top) + vertical bar (right side)
+      Both are positioned diagonally: left-L in lower-left, right-⌐ in upper-right.
 
-    Interlocked chain links in currentColor (dark gray):
-      Ring 1 centre (35, 63)  — lower-left link
-      Ring 2 centre (65, 37)  — upper-right link
-      Mid-point = (50, 50)    — clip boundary for interlock
+    Two interlocked chain links in currentColor (dark charcoal):
+      Ring 1 centre (36, 63) — lower-left link
+      Ring 2 centre (64, 37) — upper-right link
+      Both rotated -45 deg; midpoint (50, 50) is the clip boundary.
 
-    Three-pass painter's algorithm (same as before):
+    Three-pass painter's algorithm for interlock illusion:
       Pass A  Ring 1 full outline  (behind ring 2)
-      Pass B  Ring 2 with background fill  (erases ring 1 behind it)
-      Pass C  Ring 1 clipped to y ≥ 50  (front crossing → true interlock)
+      Pass B  Ring 2 with background fill  (erases ring 1 "behind" it at upper crossing)
+      Pass C  Ring 1 clipped to y ≥ 50  (makes ring 1 appear in front at lower crossing)
 
-    L-brackets drawn AFTER chains so they appear in front,
-    using solid filled rects (no masking stroke needed).
+    L-brackets are drawn LAST so they sit on top of the chain where they overlap.
   */
 
   return (
@@ -39,54 +39,49 @@ export default function Logo({ size = 32, className = '' }: LogoProps) {
       className={className}
     >
       <defs>
-        {/* Reveal ring-1's front pass only below the interlock mid-line */}
         <clipPath id={clipId}>
           <rect x="0" y="50" width="100" height="50" />
         </clipPath>
       </defs>
 
-      {/* ── Pass A: Ring 1 — full outline, drawn first (behind ring 2) ── */}
+      {/* ── Pass A: Ring 1 — full outline, behind ring 2 ── */}
       <ellipse
-        cx="35" cy="63"
-        rx="22" ry="8.5"
-        transform="rotate(-45 35 63)"
+        cx="36" cy="63"
+        rx="29" ry="11"
+        transform="rotate(-45 36 63)"
         stroke="currentColor"
-        strokeWidth="6"
+        strokeWidth="5"
         fill="none"
       />
 
-      {/* ── Pass B: Ring 2 — background fill erases ring-1 behind it ── */}
+      {/* ── Pass B: Ring 2 — background fill erases ring 1 behind it ── */}
       <ellipse
-        cx="65" cy="37"
-        rx="22" ry="8.5"
-        transform="rotate(-45 65 37)"
+        cx="64" cy="37"
+        rx="29" ry="11"
+        transform="rotate(-45 64 37)"
         stroke="currentColor"
-        strokeWidth="6"
+        strokeWidth="5"
         style={{ fill: 'hsl(var(--background))' }}
       />
 
-      {/* ── Pass C: Ring 1 — front pass, only below y=50 (lower crossing) ── */}
+      {/* ── Pass C: Ring 1 — front pass, clipped to lower half (lower crossing) ── */}
       <ellipse
-        cx="35" cy="63"
-        rx="22" ry="8.5"
-        transform="rotate(-45 35 63)"
+        cx="36" cy="63"
+        rx="29" ry="11"
+        transform="rotate(-45 36 63)"
         stroke="currentColor"
-        strokeWidth="6"
+        strokeWidth="5"
         fill="none"
         clipPath={`url(#${clipId})`}
       />
 
-      {/* ── Left "L" bracket — solid primary-coloured filled rectangles ── */}
-      {/* Vertical bar */}
-      <rect x="8"  y="20" width="15" height="62" rx="3" fill="hsl(var(--primary))" />
-      {/* Horizontal bar */}
-      <rect x="8"  y="67" width="40" height="15" rx="3" fill="hsl(var(--primary))" />
+      {/* ── Left "L" bracket — vertical bar + bottom horizontal bar ── */}
+      <rect x="28" y="27" width="13" height="57" rx="3" fill="hsl(var(--primary))" />
+      <rect x="28" y="71" width="27" height="13" rx="3" fill="hsl(var(--primary))" />
 
-      {/* ── Right inverted "L" bracket — solid primary-coloured filled rectangles ── */}
-      {/* Horizontal bar */}
-      <rect x="52" y="18" width="40" height="15" rx="3" fill="hsl(var(--primary))" />
-      {/* Vertical bar */}
-      <rect x="77" y="18" width="15" height="62" rx="3" fill="hsl(var(--primary))" />
+      {/* ── Right "⌐" bracket — top horizontal bar + right vertical bar ── */}
+      <rect x="44" y="16" width="29" height="13" rx="3" fill="hsl(var(--primary))" />
+      <rect x="60" y="16" width="13" height="55" rx="3" fill="hsl(var(--primary))" />
     </svg>
   );
 }
