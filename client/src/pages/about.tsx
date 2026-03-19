@@ -38,8 +38,8 @@ export default function About() {
 
         {/* Hero */}
         <div className="text-center space-y-4 mb-14">
-          <div className="inline-flex items-center justify-center w-20 h-16 rounded-2xl bg-primary/10 mb-2">
-            <Logo size={36} className="text-primary" />
+          <div className="inline-flex items-center justify-center mb-2">
+            <Logo size={96} />
           </div>
           <h1 className="text-4xl font-heading font-bold text-foreground">About LocalLink</h1>
           <p className="text-lg text-muted-foreground leading-relaxed max-w-xl mx-auto">
