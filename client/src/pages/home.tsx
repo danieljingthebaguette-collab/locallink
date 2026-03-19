@@ -47,6 +47,7 @@ export default function Home() {
   // Card / modal state
   const [selectedCard, setSelectedCard] = useState<Opportunity | null>(null);
   const [hostProfile, setHostProfile] = useState<{ profileImage: string | null } | null>(null);
+  const [hostProfileLoading, setHostProfileLoading] = useState(false);
   const [signingUp, setSigningUp] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [togglingFav, setTogglingFav] = useState(false);
@@ -110,10 +111,12 @@ export default function Home() {
   // Fetch host profile image when a card modal opens — public endpoint, no auth needed
   useEffect(() => {
     if (!selectedCard) { setHostProfile(null); return; }
+    setHostProfileLoading(true);
     fetch(`/api/users/${selectedCard.hostId}/profile`)
       .then(r => r.ok ? r.json() : null)
       .then(data => setHostProfile(data ? { profileImage: data.profileImage || null } : null))
-      .catch(() => setHostProfile(null));
+      .catch(() => setHostProfile(null))
+      .finally(() => setHostProfileLoading(false));
   }, [selectedCard?.hostId]);
 
   const filteredOpportunities = getFiltered();
@@ -179,6 +182,15 @@ export default function Home() {
       const fresh = useOpportunitiesStore.getState().opportunities.find(o => o.id === oppId);
       if (fresh) setSelectedCard(fresh); else setSelectedCard(null);
     } finally { setSigningUp(false); }
+  };
+
+  // ── Close modal — confirm if edit form has unsaved changes ────────
+  const handleCloseModal = () => {
+    if (showEditForm && window.confirm('You have unsaved changes. Close anyway?')) {
+      setSelectedCard(null); setShowReportModal(false); setReportReason(''); setReportNote(''); setShowEditForm(false);
+    } else if (!showEditForm) {
+      setSelectedCard(null); setShowReportModal(false); setReportReason(''); setReportNote('');
+    }
   };
 
   // ── Share post ────────────────────────────────────────────────────
@@ -520,7 +532,7 @@ export default function Home() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.22 }}
-            onClick={() => { setSelectedCard(null); setShowReportModal(false); setReportReason(''); setReportNote(''); setShowEditForm(false); }}
+            onClick={handleCloseModal}
             className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
             <motion.div
               initial={{ scale: 0.88, opacity: 0, y: 36 }}
@@ -561,7 +573,7 @@ export default function Home() {
                         <Edit3 className="w-4 h-4" />
                       </button>
                     )}
-                    <button onClick={() => { setSelectedCard(null); setShowEditForm(false); }} className="p-2 rounded-full bg-white/20 hover:bg-white/30 text-white transition-colors text-lg leading-none">
+                    <button onClick={handleCloseModal} className="p-2 rounded-full bg-white/20 hover:bg-white/30 text-white transition-colors text-lg leading-none">
                       <X className="w-4 h-4" />
                     </button>
                   </div>
@@ -741,9 +753,11 @@ export default function Home() {
                   <div className="relative bg-white/15 backdrop-blur-md rounded-2xl p-3 md:p-4 border border-white/20">
                     <p className="text-xs font-bold tracking-widest uppercase opacity-75 mb-1.5">Host</p>
                     <div className="flex items-center gap-3 pr-8">
-                      {/* Host avatar */}
+                      {/* Host avatar — skeleton while loading, then image or initial */}
                       <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0 bg-white/20 flex items-center justify-center ring-2 ring-white/30">
-                        {hostProfile?.profileImage ? (
+                        {hostProfileLoading ? (
+                          <div className="w-full h-full animate-pulse bg-white/30 rounded-full" />
+                        ) : hostProfile?.profileImage ? (
                           <img
                             src={hostProfile.profileImage}
                             alt={selectedCard.hostName}

@@ -48,6 +48,26 @@ const JWT_SECRET = process.env.JWT_SECRET || 'locallink-dev-secret-change-in-pro
 const SALT_ROUNDS = 12;
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'linklocal2@gmail.com';
 
+// ===== Shared helpers =====
+
+/** Safe JSON.parse — returns `fallback` instead of throwing on malformed input */
+function safeJsonParse<T>(raw: string | null | undefined, fallback: T): T {
+  if (!raw) return fallback;
+  try { return JSON.parse(raw) as T; } catch { return fallback; }
+}
+
+/** Attach validated tags JSON to an opportunity row */
+function withTags(opp: any, signups: string[] = []) {
+  return { ...opp, tags: safeJsonParse<string[]>(opp.tags, []), signups };
+}
+
+// Allowed enum values — validated server-side to prevent garbage data
+const VALID_SPOTS_TYPES  = ['limited', 'unlimited', 'none'] as const;
+const VALID_CATEGORIES   = ['volunteer', 'education', 'sports', 'environment', 'community', 'arts', 'health', 'other'] as const;
+const VALID_PINNED_SIZES = ['small', 'medium', 'large'] as const;
+
+type SpotsType = typeof VALID_SPOTS_TYPES[number];
+
 // ===== Auth Middleware =====
 
 interface AuthRequest extends Request {
@@ -379,11 +399,9 @@ router.get('/api/opportunities', (_req: Request, res: Response) => {
   try {
     const opportunities = db.prepare('SELECT * FROM opportunities ORDER BY createdAt DESC').all();
     const getSignups = db.prepare('SELECT userId FROM signups WHERE opportunityId = ?');
-    const result = (opportunities as any[]).map(opp => ({
-      ...opp,
-      tags: JSON.parse(opp.tags || '[]'),
-      signups: (getSignups.all(opp.id) as any[]).map(s => s.userId),
-    }));
+    const result = (opportunities as any[]).map(opp =>
+      withTags(opp, (getSignups.all(opp.id) as any[]).map(s => s.userId))
+    );
     return res.json(result);
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
@@ -395,7 +413,7 @@ router.get('/api/opportunities/:id', (req: Request, res: Response) => {
     const opp = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(req.params.id) as any;
     if (!opp) return res.status(404).json({ error: 'Opportunity not found' });
     const signups = (db.prepare('SELECT userId FROM signups WHERE opportunityId = ?').all(opp.id) as any[]).map(s => s.userId);
-    return res.json({ ...opp, tags: JSON.parse(opp.tags || '[]'), signups });
+    return res.json(withTags(opp, signups));
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
@@ -429,7 +447,7 @@ router.post('/api/opportunities', requireAuth, (req: AuthRequest, res: Response)
     ).run(id, title, description, category, location, date, duration, resolvedSpots, resolvedSpots, resolvedSpotsType, image || null, hostId, hostUser?.username || 'Unknown', tagsJson, createdAt, isRecurring ? 1 : 0, recurringDay ?? null, recurringTime ?? null);
 
     const opp = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(id) as any;
-    return res.status(201).json({ ...opp, tags: JSON.parse(opp.tags || '[]'), signups: [] });
+    return res.status(201).json(withTags(opp, []));
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
@@ -466,7 +484,7 @@ router.post('/api/opportunities/:id/signup', requireAuth, (req: AuthRequest, res
 
     const updated = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(oppId) as any;
     const signups = (db.prepare('SELECT userId FROM signups WHERE opportunityId = ?').all(oppId) as any[]).map(s => s.userId);
-    return res.json({ ...updated, tags: JSON.parse(updated.tags || '[]'), signups });
+    return res.json(withTags(updated, signups));
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
@@ -499,7 +517,7 @@ router.delete('/api/opportunities/:id/signup', requireAuth, (req: AuthRequest, r
 
     const updated = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(oppId) as any;
     const signups = (db.prepare('SELECT userId FROM signups WHERE opportunityId = ?').all(oppId) as any[]).map(s => s.userId);
-    return res.json({ ...updated, tags: JSON.parse(updated.tags || '[]'), signups });
+    return res.json(withTags(updated, signups));
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
@@ -516,40 +534,53 @@ router.put('/api/opportunities/:id', requireAuth, (req: AuthRequest, res: Respon
     if (opp.hostId !== userId && !req.isAdmin) return res.status(403).json({ error: 'Not authorized to edit this opportunity' });
 
     const { title, description, category, location, date, duration, spots, spotsType, image, tags, isAvailable, isRecurring, recurringDay, recurringTime, cardObjectPosition, modalObjectPosition } = req.body;
-    if (title !== undefined) db.prepare('UPDATE opportunities SET title = ? WHERE id = ?').run(title, oppId);
-    if (description !== undefined) db.prepare('UPDATE opportunities SET description = ? WHERE id = ?').run(description, oppId);
-    if (category !== undefined) db.prepare('UPDATE opportunities SET category = ? WHERE id = ?').run(category, oppId);
-    if (location !== undefined) db.prepare('UPDATE opportunities SET location = ? WHERE id = ?').run(location, oppId);
-    if (date !== undefined) db.prepare('UPDATE opportunities SET date = ? WHERE id = ?').run(date, oppId);
-    if (duration !== undefined) db.prepare('UPDATE opportunities SET duration = ? WHERE id = ?').run(duration, oppId);
-    if (image !== undefined) db.prepare('UPDATE opportunities SET image = ? WHERE id = ?').run(image || null, oppId);
-    if (tags !== undefined) db.prepare('UPDATE opportunities SET tags = ? WHERE id = ?').run(JSON.stringify(Array.isArray(tags) ? tags : []), oppId);
-    if (spotsType !== undefined) db.prepare('UPDATE opportunities SET spotsType = ? WHERE id = ?').run(spotsType, oppId);
-    if (spots !== undefined) {
-      db.prepare('UPDATE opportunities SET spots = ?, spotsRemaining = ? WHERE id = ?').run(spots, spots, oppId);
+
+    // --- Input validation ---
+    if (spotsType !== undefined && !VALID_SPOTS_TYPES.includes(spotsType)) {
+      return res.status(400).json({ error: `Invalid spotsType. Must be one of: ${VALID_SPOTS_TYPES.join(', ')}` });
     }
-    if (isAvailable !== undefined) {
-      db.prepare('UPDATE opportunities SET isAvailable = ? WHERE id = ?').run(isAvailable ? 1 : 0, oppId);
+    if (category !== undefined && !VALID_CATEGORIES.includes(category)) {
+      return res.status(400).json({ error: `Invalid category. Must be one of: ${VALID_CATEGORIES.join(', ')}` });
     }
-    if (isRecurring !== undefined) {
-      db.prepare('UPDATE opportunities SET isRecurring = ? WHERE id = ?').run(isRecurring ? 1 : 0, oppId);
+    if (spots !== undefined && (typeof spots !== 'number' || spots < 0)) {
+      return res.status(400).json({ error: 'spots must be a non-negative number' });
+    }
+    if (duration !== undefined && (typeof duration !== 'number' || duration <= 0)) {
+      return res.status(400).json({ error: 'duration must be a positive number' });
     }
     if (recurringDay !== undefined) {
-      db.prepare('UPDATE opportunities SET recurringDay = ? WHERE id = ?').run(recurringDay, oppId);
+      const day = Number(recurringDay);
+      if (!Number.isInteger(day) || day < 0 || day > 6) {
+        return res.status(400).json({ error: 'recurringDay must be an integer 0–6' });
+      }
     }
-    if (recurringTime !== undefined) {
-      db.prepare('UPDATE opportunities SET recurringTime = ? WHERE id = ?').run(recurringTime, oppId);
+    if (recurringTime !== undefined && !/^\d{2}:\d{2}$/.test(recurringTime)) {
+      return res.status(400).json({ error: 'recurringTime must be in HH:MM format' });
     }
-    if (cardObjectPosition !== undefined) {
-      db.prepare('UPDATE opportunities SET cardObjectPosition = ? WHERE id = ?').run(cardObjectPosition || null, oppId);
-    }
-    if (modalObjectPosition !== undefined) {
-      db.prepare('UPDATE opportunities SET modalObjectPosition = ? WHERE id = ?').run(modalObjectPosition || null, oppId);
-    }
+
+    // --- Apply updates (all inside a transaction so they're atomic) ---
+    db.transaction(() => {
+      if (title       !== undefined) db.prepare('UPDATE opportunities SET title = ? WHERE id = ?').run(String(title).trim(), oppId);
+      if (description !== undefined) db.prepare('UPDATE opportunities SET description = ? WHERE id = ?').run(String(description).trim(), oppId);
+      if (category    !== undefined) db.prepare('UPDATE opportunities SET category = ? WHERE id = ?').run(category, oppId);
+      if (location    !== undefined) db.prepare('UPDATE opportunities SET location = ? WHERE id = ?').run(String(location).trim(), oppId);
+      if (date        !== undefined) db.prepare('UPDATE opportunities SET date = ? WHERE id = ?').run(date, oppId);
+      if (duration    !== undefined) db.prepare('UPDATE opportunities SET duration = ? WHERE id = ?').run(duration, oppId);
+      if (image       !== undefined) db.prepare('UPDATE opportunities SET image = ? WHERE id = ?').run(image || null, oppId);
+      if (tags        !== undefined) db.prepare('UPDATE opportunities SET tags = ? WHERE id = ?').run(JSON.stringify(Array.isArray(tags) ? tags : []), oppId);
+      if (spotsType   !== undefined) db.prepare('UPDATE opportunities SET spotsType = ? WHERE id = ?').run(spotsType, oppId);
+      if (spots       !== undefined) db.prepare('UPDATE opportunities SET spots = ?, spotsRemaining = ? WHERE id = ?').run(spots, spots, oppId);
+      if (isAvailable !== undefined) db.prepare('UPDATE opportunities SET isAvailable = ? WHERE id = ?').run(isAvailable ? 1 : 0, oppId);
+      if (isRecurring !== undefined) db.prepare('UPDATE opportunities SET isRecurring = ? WHERE id = ?').run(isRecurring ? 1 : 0, oppId);
+      if (recurringDay   !== undefined) db.prepare('UPDATE opportunities SET recurringDay = ? WHERE id = ?').run(Number(recurringDay), oppId);
+      if (recurringTime  !== undefined) db.prepare('UPDATE opportunities SET recurringTime = ? WHERE id = ?').run(recurringTime, oppId);
+      if (cardObjectPosition  !== undefined) db.prepare('UPDATE opportunities SET cardObjectPosition = ? WHERE id = ?').run(cardObjectPosition || null, oppId);
+      if (modalObjectPosition !== undefined) db.prepare('UPDATE opportunities SET modalObjectPosition = ? WHERE id = ?').run(modalObjectPosition || null, oppId);
+    })();
 
     const updated = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(oppId) as any;
     const signups = (db.prepare('SELECT userId FROM signups WHERE opportunityId = ?').all(oppId) as any[]).map(s => s.userId);
-    return res.json({ ...updated, tags: JSON.parse(updated.tags || '[]'), signups });
+    return res.json(withTags(updated, signups));
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
@@ -565,9 +596,11 @@ router.delete('/api/opportunities/:id', requireAuth, (req: AuthRequest, res: Res
     if (!opp) return res.status(404).json({ error: 'Opportunity not found' });
     if (opp.hostId !== userId && !req.isAdmin) return res.status(403).json({ error: 'Not authorized to delete this opportunity' });
 
-    db.prepare('DELETE FROM signups WHERE opportunityId = ?').run(oppId);
-    db.prepare('DELETE FROM reports WHERE postId = ?').run(oppId);
-    db.prepare('DELETE FROM opportunities WHERE id = ?').run(oppId);
+    db.transaction(() => {
+      db.prepare('DELETE FROM signups WHERE opportunityId = ?').run(oppId);
+      db.prepare('DELETE FROM reports WHERE postId = ?').run(oppId);
+      db.prepare('DELETE FROM opportunities WHERE id = ?').run(oppId);
+    })();
     return res.json({ success: true });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
@@ -653,30 +686,32 @@ router.delete('/api/admin/users/:id', requireAdmin, (req: AuthRequest, res: Resp
     const existing = db.prepare('SELECT id FROM users WHERE id = ?').get(userId);
     if (!existing) return res.status(404).json({ error: 'User not found' });
 
-    // Clean up everything owned by this user:
-    // 1. Their signups on other events
-    db.prepare('DELETE FROM signups WHERE userId = ?').run(userId);
-    // 2. All signups and reports ON their hosted events (before deleting the events themselves)
-    const hostedIds = (db.prepare('SELECT id FROM opportunities WHERE hostId = ?').all(userId) as any[]).map(o => o.id);
-    for (const oppId of hostedIds) {
-      db.prepare('DELETE FROM signups WHERE opportunityId = ?').run(oppId);
-      db.prepare('DELETE FROM reports WHERE postId = ?').run(oppId);
-    }
-    // 3. Their hosted opportunities
-    db.prepare('DELETE FROM opportunities WHERE hostId = ?').run(userId);
-    // 4. Their notifications
-    db.prepare('DELETE FROM notifications WHERE userId = ?').run(userId);
-    // 5. Their favorites (as the favoriter) and others who favorited them (if they were an org)
-    db.prepare('DELETE FROM favorites WHERE userId = ?').run(userId);
-    db.prepare('DELETE FROM favorites WHERE orgId = ?').run(userId);
-    // 6. Their pending appeals
-    db.prepare('DELETE FROM appeals WHERE userId = ?').run(userId);
-    // 7. Reports they filed
-    db.prepare('DELETE FROM reports WHERE reporterId = ?').run(userId);
-    // 8. Anonymise feedback — preserve the rating/message data but remove the user link
-    db.prepare('UPDATE feedback SET userId = NULL WHERE userId = ?').run(userId);
-    // 9. The user record itself
-    db.prepare('DELETE FROM users WHERE id = ?').run(userId);
+    // Clean up everything owned by this user — all inside a transaction so it's atomic
+    db.transaction(() => {
+      // 1. Their signups on other events
+      db.prepare('DELETE FROM signups WHERE userId = ?').run(userId);
+      // 2. All signups and reports ON their hosted events (before deleting the events themselves)
+      const hostedIds = (db.prepare('SELECT id FROM opportunities WHERE hostId = ?').all(userId) as any[]).map((o: any) => o.id);
+      for (const oppId of hostedIds) {
+        db.prepare('DELETE FROM signups WHERE opportunityId = ?').run(oppId);
+        db.prepare('DELETE FROM reports WHERE postId = ?').run(oppId);
+      }
+      // 3. Their hosted opportunities
+      db.prepare('DELETE FROM opportunities WHERE hostId = ?').run(userId);
+      // 4. Their notifications
+      db.prepare('DELETE FROM notifications WHERE userId = ?').run(userId);
+      // 5. Their favorites (as the favoriter) and others who favorited them (if they were an org)
+      db.prepare('DELETE FROM favorites WHERE userId = ?').run(userId);
+      db.prepare('DELETE FROM favorites WHERE orgId = ?').run(userId);
+      // 6. Their pending appeals
+      db.prepare('DELETE FROM appeals WHERE userId = ?').run(userId);
+      // 7. Reports they filed
+      db.prepare('DELETE FROM reports WHERE reporterId = ?').run(userId);
+      // 8. Anonymise feedback — preserve the rating/message data but remove the user link
+      db.prepare('UPDATE feedback SET userId = NULL WHERE userId = ?').run(userId);
+      // 9. The user record itself
+      db.prepare('DELETE FROM users WHERE id = ?').run(userId);
+    })();
     return res.json({ success: true });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
@@ -691,20 +726,34 @@ router.put('/api/admin/opportunities/:id', requireAdmin, (req: Request, res: Res
     const opp = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(oppId) as any;
     if (!opp) return res.status(404).json({ error: 'Opportunity not found' });
 
-    if (title !== undefined) db.prepare('UPDATE opportunities SET title = ? WHERE id = ?').run(title, oppId);
-    if (description !== undefined) db.prepare('UPDATE opportunities SET description = ? WHERE id = ?').run(description, oppId);
+    // --- Input validation ---
+    if (category !== undefined && !VALID_CATEGORIES.includes(category)) {
+      return res.status(400).json({ error: `Invalid category. Must be one of: ${VALID_CATEGORIES.join(', ')}` });
+    }
+    if (spots !== undefined && (typeof spots !== 'number' || spots < 0)) {
+      return res.status(400).json({ error: 'spots must be a non-negative number' });
+    }
+    if (spotsRemaining !== undefined && (typeof spotsRemaining !== 'number' || spotsRemaining < 0)) {
+      return res.status(400).json({ error: 'spotsRemaining must be a non-negative number' });
+    }
+    if (duration !== undefined && (typeof duration !== 'number' || duration <= 0)) {
+      return res.status(400).json({ error: 'duration must be a positive number' });
+    }
+    if (pinnedSize !== undefined && pinnedSize !== null && !VALID_PINNED_SIZES.includes(pinnedSize)) {
+      return res.status(400).json({ error: `Invalid pinnedSize. Must be one of: ${VALID_PINNED_SIZES.join(', ')}, or null` });
+    }
+
+    if (title !== undefined) db.prepare('UPDATE opportunities SET title = ? WHERE id = ?').run(String(title).trim(), oppId);
+    if (description !== undefined) db.prepare('UPDATE opportunities SET description = ? WHERE id = ?').run(String(description).trim(), oppId);
     if (category !== undefined) db.prepare('UPDATE opportunities SET category = ? WHERE id = ?').run(category, oppId);
-    if (location !== undefined) db.prepare('UPDATE opportunities SET location = ? WHERE id = ?').run(location, oppId);
+    if (location !== undefined) db.prepare('UPDATE opportunities SET location = ? WHERE id = ?').run(String(location).trim(), oppId);
     if (date !== undefined) db.prepare('UPDATE opportunities SET date = ? WHERE id = ?').run(date, oppId);
     if (duration !== undefined) db.prepare('UPDATE opportunities SET duration = ? WHERE id = ?').run(duration, oppId);
     if (spots !== undefined) db.prepare('UPDATE opportunities SET spots = ? WHERE id = ?').run(spots, oppId);
     if (spotsRemaining !== undefined) db.prepare('UPDATE opportunities SET spotsRemaining = ? WHERE id = ?').run(spotsRemaining, oppId);
     // pinnedSize: admin-only card size override ('small' | 'medium' | 'large' | null = auto)
     if (pinnedSize !== undefined) {
-      const validSizes = ['small', 'medium', 'large', null];
-      if (validSizes.includes(pinnedSize)) {
-        db.prepare('UPDATE opportunities SET pinnedSize = ? WHERE id = ?').run(pinnedSize, oppId);
-      }
+      db.prepare('UPDATE opportunities SET pinnedSize = ? WHERE id = ?').run(pinnedSize, oppId);
     }
 
     // Notify host if a reason was provided
@@ -720,7 +769,7 @@ router.put('/api/admin/opportunities/:id', requireAdmin, (req: Request, res: Res
 
     const updated = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(oppId) as any;
     const signups = (db.prepare('SELECT userId FROM signups WHERE opportunityId = ?').all(oppId) as any[]).map(s => s.userId);
-    return res.json({ ...updated, tags: JSON.parse(updated.tags || '[]'), signups });
+    return res.json(withTags(updated, signups));
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
@@ -746,9 +795,11 @@ router.delete('/api/admin/opportunities/:id', requireAdmin, (req: Request, res: 
       }
     }
 
-    db.prepare('DELETE FROM signups WHERE opportunityId = ?').run(oppId);
-    db.prepare('DELETE FROM reports WHERE postId = ?').run(oppId);
-    db.prepare('DELETE FROM opportunities WHERE id = ?').run(oppId);
+    db.transaction(() => {
+      db.prepare('DELETE FROM signups WHERE opportunityId = ?').run(oppId);
+      db.prepare('DELETE FROM reports WHERE postId = ?').run(oppId);
+      db.prepare('DELETE FROM opportunities WHERE id = ?').run(oppId);
+    })();
     return res.json({ success: true });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });

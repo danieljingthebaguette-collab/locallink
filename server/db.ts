@@ -234,6 +234,12 @@ try {
 }
 
 // Auto-grant admin and auto-verify the designated admin email
+if (!process.env.ADMIN_EMAIL) {
+  console.warn(
+    '[SECURITY WARNING] ADMIN_EMAIL environment variable is not set. ' +
+    'Falling back to hardcoded default — set ADMIN_EMAIL in your .env / deployment config.'
+  );
+}
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'linklocal2@gmail.com';
 db.prepare('UPDATE users SET isAdmin = 1, emailVerified = 1 WHERE email = ?').run(ADMIN_EMAIL);
 

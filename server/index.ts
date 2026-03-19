@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import express from 'express';
+import express, { type Request, type Response, type NextFunction } from 'express';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -48,6 +48,16 @@ const distPath = path.join(__dirname, '..', 'dist');
 app.use(express.static(distPath));
 app.get('/{*path}', (_req, res) => {
   res.sendFile(path.join(distPath, 'index.html'));
+});
+
+// Global error handler — catches any unhandled error thrown by route handlers or middleware.
+// Must have 4 parameters so Express recognises it as an error handler.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+  console.error('[unhandled error]', err);
+  const status = typeof err.status === 'number' ? err.status : 500;
+  const message = process.env.NODE_ENV === 'production' ? 'Internal server error' : (err.message || 'Internal server error');
+  res.status(status).json({ error: message });
 });
 
 app.listen(PORT, '0.0.0.0', () => {
