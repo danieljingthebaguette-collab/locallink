@@ -54,6 +54,8 @@ export const SAMPLE_OPPORTUNITIES: Opportunity[] = [
     hostName: 'EcoWarriors',
     signups: [],
     popularity: 38,
+    spotsType: 'limited',
+    tags: [],
     createdAt: new Date().toISOString()
   },
   {
@@ -71,6 +73,8 @@ export const SAMPLE_OPPORTUNITIES: Opportunity[] = [
     hostName: 'MathGenius',
     signups: [],
     popularity: 5,
+    spotsType: 'limited',
+    tags: [],
     createdAt: new Date().toISOString()
   },
   {
@@ -88,6 +92,8 @@ export const SAMPLE_OPPORTUNITIES: Opportunity[] = [
     hostName: 'SportsClub',
     signups: [],
     popularity: 22,
+    spotsType: 'limited',
+    tags: [],
     createdAt: new Date().toISOString()
   },
   {
@@ -105,6 +111,8 @@ export const SAMPLE_OPPORTUNITIES: Opportunity[] = [
     hostName: 'FoodForAll',
     signups: [],
     popularity: 25,
+    spotsType: 'limited',
+    tags: [],
     createdAt: new Date().toISOString()
   },
   {
@@ -122,6 +130,8 @@ export const SAMPLE_OPPORTUNITIES: Opportunity[] = [
     hostName: 'GreenFuture',
     signups: [],
     popularity: 18,
+    spotsType: 'limited',
+    tags: [],
     createdAt: new Date().toISOString()
   },
   {
@@ -139,6 +149,8 @@ export const SAMPLE_OPPORTUNITIES: Opportunity[] = [
     hostName: 'GreenThumb',
     signups: [],
     popularity: 15,
+    spotsType: 'limited',
+    tags: [],
     createdAt: new Date().toISOString()
   }
 ];
