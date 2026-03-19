@@ -126,6 +126,7 @@ export default function Home() {
   // Returns approximate capacity string if known, otherwise empty string.
   const getAvailabilityDisplay = (opp: Opportunity) => {
     if (opp.spotsType === 'limited' && opp.spots > 0) return `~${opp.spots} spots`;
+    if (opp.spotsType === 'unlimited') return 'Unlimited';
     return '';
   };
 
