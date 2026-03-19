@@ -173,7 +173,11 @@ export default function MyEvents() {
   };
 
   const handleSaveEdit = async (oppId: string) => {
-    if (!editForm.title || !editForm.description || !editForm.location || !editForm.date) {
+    const editingOpp = hosted.find(o => o.id === oppId);
+    const isRecurringEdit = !!editingOpp?.isRecurring;
+    const missingFields = !editForm.title || !editForm.description || !editForm.location
+      || (isRecurringEdit ? !editForm.recurringTime : !editForm.date);
+    if (missingFields) {
       toast({ title: 'Please fill in all required fields', variant: 'destructive' });
       return;
     }
@@ -345,15 +349,13 @@ export default function MyEvents() {
                                 {togglingId === opp.id ? '…' : 'Open'}
                               </button>
                             ) : (
-                              // Schedule says closed (auto) — not manually closeable, but can force-open
-                              <button
-                                onClick={() => handleToggleAvailability(opp)}
-                                disabled={togglingId === opp.id}
-                                title="Click to force open"
-                                className="text-xs font-semibold text-muted-foreground bg-secondary hover:bg-green-500/10 hover:text-green-600 px-2 py-0.5 rounded-full transition-colors cursor-pointer disabled:opacity-50"
+                              // Schedule says closed (auto) — non-clickable; reopens next Monday
+                              <span
+                                title={recurringStatus ? `Reopens ${recurringStatus.nextOccurrence.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}` : 'Closed until next week'}
+                                className="text-xs font-semibold text-muted-foreground bg-secondary px-2 py-0.5 rounded-full cursor-default"
                               >
-                                {togglingId === opp.id ? '…' : 'Closed'}
-                              </button>
+                                Closed
+                              </span>
                             )
                           ) : isPast(opp.date) ? (
                             // Past one-time event — ended, not togglable

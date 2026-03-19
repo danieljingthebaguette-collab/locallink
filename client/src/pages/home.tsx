@@ -49,10 +49,15 @@ export default function Home() {
   const [submittingReport, setSubmittingReport] = useState(false);
   // Edit post state
   const [showEditForm, setShowEditForm] = useState(false);
-  const [editForm, setEditForm] = useState({
+  const [editForm, setEditForm] = useState<{
+    title: string; description: string; location: string; date: string;
+    duration: number; spots: number; category: Category;
+    spotsType: 'limited' | 'unlimited' | 'none';
+    recurringDay?: number; recurringTime?: string;
+  }>({
     title: '', description: '', location: '', date: '', duration: 2, spots: 0,
-    category: 'volunteer' as Category,
-    spotsType: 'none' as 'limited' | 'unlimited' | 'none',
+    category: 'volunteer',
+    spotsType: 'none',
   });
   const [savingEdit, setSavingEdit] = useState(false);
 
@@ -190,6 +195,8 @@ export default function Home() {
       spots: opp.spots || 0,
       category: opp.category as Category,
       spotsType: (opp.spotsType as 'limited' | 'unlimited' | 'none') || 'none',
+      recurringDay: opp.recurringDay,
+      recurringTime: opp.recurringTime,
     });
     setShowEditForm(true);
   };
@@ -197,7 +204,23 @@ export default function Home() {
   const handleSaveEdit = async () => {
     if (!selectedCard) return;
     setSavingEdit(true);
-    const success = await updateOpportunity(selectedCard.id, editForm);
+    // Build update payload — recurring events update day/time schedule; one-time events update date
+    const payload: Record<string, any> = {
+      title: editForm.title,
+      description: editForm.description,
+      location: editForm.location,
+      duration: editForm.duration,
+      spots: editForm.spots,
+      category: editForm.category,
+      spotsType: editForm.spotsType,
+    };
+    if (selectedCard.isRecurring) {
+      if (editForm.recurringDay !== undefined) payload.recurringDay = editForm.recurringDay;
+      if (editForm.recurringTime) payload.recurringTime = editForm.recurringTime;
+    } else {
+      payload.date = editForm.date;
+    }
+    const success = await updateOpportunity(selectedCard.id, payload as any);
     if (success) {
       // Refresh selected card from updated store
       const updated = useOpportunitiesStore.getState().opportunities.find(o => o.id === selectedCard.id);
@@ -350,8 +373,9 @@ export default function Home() {
                 // !! coerces SQLite 0/1 integers to proper booleans (avoids rendering "0" in JSX)
                 const recurringStatus = !!opp.isRecurring ? getRecurringStatus(opp) : null;
                 const isPast = recurringStatus ? false : new Date(opp.date) < new Date();
-                // For recurring posts: open/closed driven by schedule. For one-time posts: never "closed" manually.
-                const isClosed = recurringStatus ? !recurringStatus.isOpen : false;
+                // Manual host-close always wins; for recurring events schedule also contributes
+                const manualClosed = opp.isAvailable === false || (opp.isAvailable as any) === 0;
+                const isClosed = manualClosed || (recurringStatus ? !recurringStatus.isOpen : false);
                 return (
                   <motion.div
                     key={`${opp.id}-${listKey}`}
@@ -558,12 +582,34 @@ export default function Home() {
                           placeholder="Location"
                           className="rounded-xl bg-white/80 text-foreground border-0 text-sm h-9 px-3"
                         />
-                        <input
-                          type="datetime-local"
-                          value={editForm.date}
-                          onChange={e => setEditForm(f => ({ ...f, date: e.target.value }))}
-                          className="rounded-xl bg-white/80 text-foreground border-0 text-sm h-9 px-3"
-                        />
+                        {selectedCard?.isRecurring ? (
+                          /* Recurring events: day-of-week dropdown + time picker */
+                          <div className="flex gap-1">
+                            <select
+                              value={editForm.recurringDay ?? 1}
+                              onChange={e => setEditForm(f => ({ ...f, recurringDay: parseInt(e.target.value) }))}
+                              className="flex-1 rounded-xl bg-white/80 text-foreground border-0 text-sm h-9 px-2"
+                            >
+                              {['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'].map((d, i) => (
+                                <option key={d} value={i}>{d}</option>
+                              ))}
+                            </select>
+                            <input
+                              type="time"
+                              value={editForm.recurringTime ?? '09:00'}
+                              onChange={e => setEditForm(f => ({ ...f, recurringTime: e.target.value }))}
+                              className="w-28 rounded-xl bg-white/80 text-foreground border-0 text-sm h-9 px-2"
+                            />
+                          </div>
+                        ) : (
+                          /* One-time events: full datetime-local picker */
+                          <input
+                            type="datetime-local"
+                            value={editForm.date}
+                            onChange={e => setEditForm(f => ({ ...f, date: e.target.value }))}
+                            className="rounded-xl bg-white/80 text-foreground border-0 text-sm h-9 px-3"
+                          />
+                        )}
                         <input
                           type="number" min={0.5} step={0.5}
                           value={editForm.duration}

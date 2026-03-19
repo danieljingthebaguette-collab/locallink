@@ -289,11 +289,13 @@ export const useOpportunitiesStore = create<OpportunitiesState>((set, get) => ({
     const now = new Date();
 
     const effectiveIsOpen = (o: Opportunity): boolean => {
+      // Manual host-close (isAvailable=0/false) always overrides the schedule
+      if (o.isAvailable === false || (o.isAvailable as any) === 0) return false;
       if (o.isRecurring) {
         const status = getRecurringStatus(o);
         return status ? status.isOpen : true;
       }
-      return o.isAvailable !== false && o.isAvailable !== 0;
+      return true;
     };
 
     const future = filtered.filter(o => o.isRecurring || new Date(o.date) >= now);
