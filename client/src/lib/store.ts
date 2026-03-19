@@ -5,9 +5,9 @@ const API = '/api';
 
 // ─── Recurring schedule helper ───────────────────────────────────────────────
 // For a recurring post (dayOfWeek 0–6, time "HH:MM"):
-//   • OPEN   window = midnight (00:00) of event day → event time
-//   • CLOSED window = event time → midnight of the same day next week
-// Example: "Every Monday 12:00" → open Mon 00:00–12:00, closed Mon 12:00–next Mon 00:00
+//   • OPEN   window = Monday 00:00 of the current week → event time on event day
+//   • CLOSED window = event time → Monday 00:00 of the following week
+// Example: "Every Wednesday 14:00" → open Mon 00:00–Wed 14:00, closed Wed 14:00–next Mon 00:00
 export function getRecurringStatus(opp: { recurringDay?: number; recurringTime?: string }): {
   isOpen: boolean;
   nextOccurrence: Date;
@@ -16,29 +16,32 @@ export function getRecurringStatus(opp: { recurringDay?: number; recurringTime?:
 
   const now = new Date();
   const [h, m] = opp.recurringTime.split(':').map(Number);
-  const dayOfWeek = opp.recurringDay as number;
+  const dayOfWeek = opp.recurringDay as number; // 0=Sun, 1=Mon, …, 6=Sat
 
-  // How many days ago was the most recent occurrence of dayOfWeek?
-  const daysBack = (now.getDay() - dayOfWeek + 7) % 7;
+  // Monday 00:00 of the current week.
+  // JS getDay(): 0=Sun, 1=Mon, …, 6=Sat
+  // (day + 6) % 7 → 0 for Monday, 6 for Sunday (days elapsed since Monday)
+  const daysSinceMonday = (now.getDay() + 6) % 7;
+  const mondayThisWeek = new Date(now);
+  mondayThisWeek.setDate(now.getDate() - daysSinceMonday);
+  mondayThisWeek.setHours(0, 0, 0, 0);
 
-  // Midnight of this week's event day
-  const startOfThis = new Date(now);
-  startOfThis.setDate(now.getDate() - daysBack);
-  startOfThis.setHours(0, 0, 0, 0);
-
-  // Event time on that day — this is when the post closes
-  const closeTime = new Date(startOfThis);
+  // Close time = event time on the event day within this week.
+  // (dayOfWeek + 6) % 7 converts JS day-of-week → days-from-Monday (0=Mon, 6=Sun).
+  const daysFromMonday = (dayOfWeek + 6) % 7;
+  const closeTime = new Date(mondayThisWeek);
+  closeTime.setDate(mondayThisWeek.getDate() + daysFromMonday);
   closeTime.setHours(h, m, 0, 0);
 
-  // OPEN: we're on the event day and the event time hasn't come yet
-  const isOpen = now >= startOfThis && now < closeTime;
+  // OPEN: from Monday 00:00 until event time on event day
+  const isOpen = now >= mondayThisWeek && now < closeTime;
 
   // nextOccurrence:
-  //   • if open  → closeTime (when it closes today)
-  //   • if closed → midnight of the same day next week (when it re-opens)
-  const startOfNext = new Date(startOfThis);
-  startOfNext.setDate(startOfNext.getDate() + 7);
-  const nextOccurrence = isOpen ? closeTime : startOfNext;
+  //   • if open  → closeTime (when it closes)
+  //   • if closed → Monday 00:00 of next week (when it re-opens)
+  const nextMondayReopen = new Date(mondayThisWeek);
+  nextMondayReopen.setDate(nextMondayReopen.getDate() + 7);
+  const nextOccurrence = isOpen ? closeTime : nextMondayReopen;
 
   return { isOpen, nextOccurrence };
 }
