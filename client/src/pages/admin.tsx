@@ -305,10 +305,10 @@ function OverviewTab({ stats, users, opportunities }: { stats: any; users: AppUs
               </div>
               <div className="text-xs text-muted-foreground">
                 {opp.spotsType === 'unlimited'
-                  ? 'Unlimited spots'
-                  : opp.spotsType === 'none'
-                  ? 'No capacity set'
-                  : `${opp.signups.length}/${opp.spots} interested`}
+                  ? `${opp.signups.length} interested · Unlimited`
+                  : opp.spotsType === 'none' || opp.spots === 0
+                  ? `${opp.signups.length} interested · No cap`
+                  : `${opp.signups.length}/${opp.spots} interested${opp.signups.length >= opp.spots ? ' · Full' : ''}`}
               </div>
             </div>
           ))}

@@ -133,9 +133,12 @@ export default function Home() {
     return `${h % 12 || 12}:${m.toString().padStart(2, '0')} ${ampm}`;
   };
 
-  // Returns approximate capacity string if known, otherwise empty string.
+  // Returns capacity/availability string shown on cards.
   const getAvailabilityDisplay = (opp: Opportunity) => {
-    if (opp.spotsType === 'limited' && opp.spots > 0) return `~${opp.spots} spots`;
+    if (opp.spotsType === 'limited' && opp.spots > 0) {
+      if (opp.signups.length >= opp.spots) return 'Full';
+      return `~${opp.spots} spots`;
+    }
     if (opp.spotsType === 'unlimited') return 'Unlimited';
     return '';
   };
@@ -819,34 +822,56 @@ export default function Home() {
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.29, duration: 0.3, ease: EASE_OUT }}>
-                  <p className="text-white/60 text-sm text-center mb-4">{selectedCard.signups.length} {selectedCard.signups.length === 1 ? 'person' : 'people'} interested</p>
-                  {isInterested(selectedCard) ? (
-                    <div className="space-y-2">
-                      <motion.div
-                        initial={{ scale: 0.95 }}
-                        animate={{ scale: 1 }}
-                        className="rounded-2xl py-3 font-semibold text-center bg-green-500/30 border border-green-300/40 text-white text-lg">
-                        Interested ✓
-                      </motion.div>
-                      <button onClick={() => handleCancelSignup(selectedCard.id)} disabled={signingUp}
-                        className="w-full rounded-2xl py-2 font-medium text-white/60 hover:text-white/80 text-sm transition-colors">
-                        {signingUp ? 'Removing...' : 'Remove interest'}
-                      </button>
-                    </div>
-                  ) : (
-                    <motion.button
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.97 }}
-                      onClick={() => handleSignup(selectedCard.id)}
-                      disabled={signingUp}
-                      className={cn(
-                        "w-full rounded-2xl py-3 font-semibold transition-colors border border-white/40 text-white text-lg flex items-center justify-center gap-2",
-                        signingUp ? "bg-white/20 cursor-not-allowed opacity-70" : "bg-white/30 hover:bg-white/40"
-                      )}>
-                      {signingUp && <Loader2 className="w-5 h-5 animate-spin" />}
-                      {signingUp ? 'Registering...' : "I'm Interested"}
-                    </motion.button>
-                  )}
+                  {/* Show "X / Y interested" when there's a cap, otherwise just the count */}
+                  {(() => {
+                    const { spotsType, spots, signups: sups } = selectedCard;
+                    const hasCap = spotsType === 'limited' && spots > 0;
+                    const countText = hasCap
+                      ? `${sups.length} / ${spots} interested`
+                      : `${sups.length} ${sups.length === 1 ? 'person' : 'people'} interested`;
+                    return <p className="text-white/60 text-sm text-center mb-4">{countText}</p>;
+                  })()}
+                  {(() => {
+                    const { spotsType, spots, signups: sups } = selectedCard;
+                    const isFull = spotsType === 'limited' && spots > 0 && sups.length >= spots;
+                    if (isInterested(selectedCard)) {
+                      return (
+                        <div className="space-y-2">
+                          <motion.div
+                            initial={{ scale: 0.95 }}
+                            animate={{ scale: 1 }}
+                            className="rounded-2xl py-3 font-semibold text-center bg-green-500/30 border border-green-300/40 text-white text-lg">
+                            Interested ✓
+                          </motion.div>
+                          <button onClick={() => handleCancelSignup(selectedCard.id)} disabled={signingUp}
+                            className="w-full rounded-2xl py-2 font-medium text-white/60 hover:text-white/80 text-sm transition-colors">
+                            {signingUp ? 'Removing...' : 'Remove interest'}
+                          </button>
+                        </div>
+                      );
+                    }
+                    if (isFull) {
+                      return (
+                        <div className="w-full rounded-2xl py-3 font-semibold text-center bg-white/10 border border-white/20 text-white/50 text-lg cursor-not-allowed">
+                          Event Full
+                        </div>
+                      );
+                    }
+                    return (
+                      <motion.button
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.97 }}
+                        onClick={() => handleSignup(selectedCard.id)}
+                        disabled={signingUp}
+                        className={cn(
+                          "w-full rounded-2xl py-3 font-semibold transition-colors border border-white/40 text-white text-lg flex items-center justify-center gap-2",
+                          signingUp ? "bg-white/20 cursor-not-allowed opacity-70" : "bg-white/30 hover:bg-white/40"
+                        )}>
+                        {signingUp && <Loader2 className="w-5 h-5 animate-spin" />}
+                        {signingUp ? 'Registering...' : "I'm Interested"}
+                      </motion.button>
+                    );
+                  })()}
                 </motion.div>
                 {/* Report button */}
                 {isLoggedIn && currentUser?.id !== selectedCard.hostId && (

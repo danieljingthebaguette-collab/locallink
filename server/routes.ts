@@ -467,8 +467,16 @@ router.post('/api/opportunities/:id/signup', requireAuth, (req: AuthRequest, res
     const existing = db.prepare('SELECT id FROM signups WHERE opportunityId = ? AND userId = ?').get(oppId, userId);
     if (existing) return res.status(409).json({ error: 'Already interested' });
 
+    // Enforce spot limit: block if event is limited, has a cap set, and is already full
+    if (opp.spotsType === 'limited' && opp.spots > 0) {
+      const currentCount = (db.prepare('SELECT COUNT(*) as count FROM signups WHERE opportunityId = ?').get(oppId) as any).count;
+      if (currentCount >= opp.spots) {
+        return res.status(409).json({ error: 'This event is full' });
+      }
+    }
+
     db.prepare('INSERT INTO signups (opportunityId, userId, createdAt) VALUES (?, ?, ?)').run(oppId, userId, new Date().toISOString());
-    // Increment popularity but do NOT decrement spotsRemaining
+    // Increment popularity
     db.prepare('UPDATE opportunities SET popularity = popularity + 1 WHERE id = ?').run(oppId);
     // Notify the host that someone is interested (only if host has opted in; skip own signups)
     if (opp.hostId !== userId) {
