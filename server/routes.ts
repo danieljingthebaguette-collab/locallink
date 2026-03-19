@@ -502,7 +502,7 @@ router.put('/api/opportunities/:id', requireAuth, (req: AuthRequest, res: Respon
     if (!opp) return res.status(404).json({ error: 'Opportunity not found' });
     if (opp.hostId !== userId && !req.isAdmin) return res.status(403).json({ error: 'Not authorized to edit this opportunity' });
 
-    const { title, description, category, location, date, duration, spots, spotsType, image, tags, isAvailable, isRecurring, recurringDay, recurringTime } = req.body;
+    const { title, description, category, location, date, duration, spots, spotsType, image, tags, isAvailable, isRecurring, recurringDay, recurringTime, cardObjectPosition, modalObjectPosition } = req.body;
     if (title !== undefined) db.prepare('UPDATE opportunities SET title = ? WHERE id = ?').run(title, oppId);
     if (description !== undefined) db.prepare('UPDATE opportunities SET description = ? WHERE id = ?').run(description, oppId);
     if (category !== undefined) db.prepare('UPDATE opportunities SET category = ? WHERE id = ?').run(category, oppId);
@@ -526,6 +526,12 @@ router.put('/api/opportunities/:id', requireAuth, (req: AuthRequest, res: Respon
     }
     if (recurringTime !== undefined) {
       db.prepare('UPDATE opportunities SET recurringTime = ? WHERE id = ?').run(recurringTime, oppId);
+    }
+    if (cardObjectPosition !== undefined) {
+      db.prepare('UPDATE opportunities SET cardObjectPosition = ? WHERE id = ?').run(cardObjectPosition || null, oppId);
+    }
+    if (modalObjectPosition !== undefined) {
+      db.prepare('UPDATE opportunities SET modalObjectPosition = ? WHERE id = ?').run(modalObjectPosition || null, oppId);
     }
 
     const updated = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(oppId) as any;

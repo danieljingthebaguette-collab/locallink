@@ -23,6 +23,8 @@ export interface Opportunity {
   recurringDay?: number;  // 0 = Sunday … 6 = Saturday
   recurringTime?: string; // "HH:MM" (24-hour), e.g. "12:00"
   pinnedSize?: 'small' | 'medium' | 'large' | null; // admin-only card size override (null = auto)
+  cardObjectPosition?: string | null;   // CSS object-position for the board card image
+  modalObjectPosition?: string | null;  // CSS object-position for the post detail banner
 }
 
 export interface AppUser {

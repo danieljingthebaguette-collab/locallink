@@ -38,6 +38,18 @@ const CATEGORY_BG: Record<string, string> = {
   environment: 'bg-cat-environment',
 };
 
+// 3×3 focal-point grid for image crop control
+const CROP_POSITIONS = [
+  ['top left',    'top',    'top right'   ],
+  ['left',        'center', 'right'       ],
+  ['bottom left', 'bottom', 'bottom right'],
+] as const;
+const CROP_ICONS = [
+  ['↖', '↑', '↗'],
+  ['←', '·', '→'],
+  ['↙', '↓', '↘'],
+] as const;
+
 function isPast(dateStr: string) {
   return new Date(dateStr) < new Date();
 }
@@ -68,7 +80,9 @@ export default function MyEvents() {
     location: string; date: string; duration: number; spots: number;
     spotsType: 'limited' | 'unlimited' | 'none'; image: string;
     recurringDay?: number; recurringTime?: string;
-  }>({ title: '', description: '', category: 'volunteer', location: '', date: '', duration: 2, spots: 10, spotsType: 'limited', image: '' });
+    cardObjectPosition?: string | null;
+    modalObjectPosition?: string | null;
+  }>({ title: '', description: '', category: 'volunteer', location: '', date: '', duration: 2, spots: 10, spotsType: 'limited', image: '', cardObjectPosition: null, modalObjectPosition: null });
   const [savingEdit, setSavingEdit] = useState(false);
   const [editImageFile, setEditImageFile] = useState<File | null>(null);
   const [editImagePreview, setEditImagePreview] = useState('');
@@ -169,6 +183,8 @@ export default function MyEvents() {
       image: opp.image || '',
       recurringDay: opp.recurringDay,
       recurringTime: opp.recurringTime,
+      cardObjectPosition: opp.cardObjectPosition ?? null,
+      modalObjectPosition: opp.modalObjectPosition ?? null,
     });
   };
 
@@ -201,6 +217,8 @@ export default function MyEvents() {
       // Recurring-specific fields — only sent when present
       ...(editForm.recurringDay !== undefined && { recurringDay: editForm.recurringDay }),
       ...(editForm.recurringTime !== undefined && { recurringTime: editForm.recurringTime }),
+      cardObjectPosition: editForm.cardObjectPosition ?? null,
+      modalObjectPosition: editForm.modalObjectPosition ?? null,
     });
     setSavingEdit(false);
     if (success) {
@@ -491,12 +509,42 @@ export default function MyEvents() {
                           </button>
                           {(editImagePreview || editForm.image) && (
                             <div className="relative rounded-xl overflow-hidden h-24 bg-secondary mt-1">
-                              <img src={editImagePreview || editForm.image} alt="Preview" className="w-full h-full object-cover" />
+                              <img src={editImagePreview || editForm.image} alt="Preview" className="w-full h-full object-cover" style={{ objectPosition: editForm.cardObjectPosition || 'center' }} />
                               <button type="button"
                                 onClick={() => { setEditImageFile(null); setEditImagePreview(''); setEditForm({ ...editForm, image: '' }); if (editFileRef.current) editFileRef.current.value = ''; }}
                                 className="absolute top-1 right-1 bg-black/60 rounded-full p-1 text-white hover:bg-black/80 transition-colors">
                                 <X className="w-3 h-3" />
                               </button>
+                            </div>
+                          )}
+                          {/* Image crop focal-point pickers — only when an image is set */}
+                          {(editImagePreview || editForm.image) && (
+                            <div className="flex gap-5 flex-wrap pt-2">
+                              {([
+                                { label: 'Board Card Crop', key: 'cardObjectPosition' as const },
+                                { label: 'Post Banner Crop', key: 'modalObjectPosition' as const },
+                              ]).map(({ label, key }) => (
+                                <div key={key} className="space-y-1">
+                                  <p className="text-xs font-medium text-muted-foreground">{label}</p>
+                                  <div className="grid grid-cols-3 gap-0.5">
+                                    {CROP_POSITIONS.map((row, ri) =>
+                                      row.map((pos, ci) => (
+                                        <button key={pos} type="button"
+                                          onClick={() => setEditForm(f => ({ ...f, [key]: pos }))}
+                                          title={pos}
+                                          className={cn(
+                                            'w-7 h-7 rounded text-xs flex items-center justify-center transition-colors border',
+                                            (editForm[key] || 'center') === pos
+                                              ? 'bg-primary text-primary-foreground border-primary'
+                                              : 'bg-background hover:bg-secondary border-input'
+                                          )}>
+                                          {CROP_ICONS[ri][ci]}
+                                        </button>
+                                      ))
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
                             </div>
                           )}
                         </div>

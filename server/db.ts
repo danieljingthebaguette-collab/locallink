@@ -219,6 +219,20 @@ try {
   db.exec("ALTER TABLE opportunities ADD COLUMN pinnedSize TEXT DEFAULT NULL");
 }
 
+// Migrate: add cardObjectPosition — CSS object-position for the board card image
+try {
+  db.prepare('SELECT cardObjectPosition FROM opportunities LIMIT 1').get();
+} catch {
+  db.exec("ALTER TABLE opportunities ADD COLUMN cardObjectPosition TEXT DEFAULT NULL");
+}
+
+// Migrate: add modalObjectPosition — CSS object-position for the post detail banner
+try {
+  db.prepare('SELECT modalObjectPosition FROM opportunities LIMIT 1').get();
+} catch {
+  db.exec("ALTER TABLE opportunities ADD COLUMN modalObjectPosition TEXT DEFAULT NULL");
+}
+
 // Auto-grant admin and auto-verify the designated admin email
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'linklocal2@gmail.com';
 db.prepare('UPDATE users SET isAdmin = 1, emailVerified = 1 WHERE email = ?').run(ADMIN_EMAIL);
