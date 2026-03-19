@@ -360,6 +360,19 @@ router.get('/api/auth/user/:id', requireAuth, (req: AuthRequest, res: Response) 
   }
 });
 
+// Public host profile — returns only username + profileImage, no auth required
+router.get('/api/users/:id/profile', (req: Request, res: Response) => {
+  try {
+    const user = db.prepare(
+      'SELECT username, profileImage FROM users WHERE id = ?'
+    ).get(req.params.id) as any;
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    return res.json({ username: user.username, profileImage: user.profileImage || null });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // ===== OPPORTUNITIES =====
 
 router.get('/api/opportunities', (_req: Request, res: Response) => {

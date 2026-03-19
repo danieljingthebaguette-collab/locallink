@@ -112,14 +112,10 @@ export default function Home() {
     return () => clearTimeout(t);
   }, [searchQuery]);
 
-  // Fetch host profile image when a card modal opens
+  // Fetch host profile image when a card modal opens — public endpoint, no auth needed
   useEffect(() => {
     if (!selectedCard) { setHostProfile(null); return; }
-    const token = localStorage.getItem('locallink_token');
-    if (!token) { setHostProfile(null); return; }
-    fetch(`/api/auth/user/${selectedCard.hostId}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    fetch(`/api/users/${selectedCard.hostId}/profile`)
       .then(r => r.ok ? r.json() : null)
       .then(data => setHostProfile(data ? { profileImage: data.profileImage || null } : null))
       .catch(() => setHostProfile(null));
@@ -760,9 +756,9 @@ export default function Home() {
                   transition={{ delay: 0.17, duration: 0.32, ease: EASE_OUT }}>
                   <div className="relative bg-white/15 backdrop-blur-md rounded-2xl p-3 md:p-4 border border-white/20">
                     <p className="text-xs font-bold tracking-widest uppercase opacity-75 mb-1.5">Host</p>
-                    <div className="flex items-center gap-2 pr-8">
+                    <div className="flex items-center gap-3 pr-8">
                       {/* Host avatar */}
-                      <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0 bg-white/20 flex items-center justify-center">
+                      <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0 bg-white/20 flex items-center justify-center ring-2 ring-white/30">
                         {hostProfile?.profileImage ? (
                           <img
                             src={hostProfile.profileImage}
@@ -770,7 +766,7 @@ export default function Home() {
                             className="w-full h-full object-cover"
                           />
                         ) : (
-                          <span className="text-sm font-bold text-white">
+                          <span className="text-base font-bold text-white">
                             {selectedCard.hostName.charAt(0).toUpperCase()}
                           </span>
                         )}
