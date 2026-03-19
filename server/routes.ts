@@ -667,7 +667,7 @@ router.delete('/api/admin/users/:id', requireAdmin, (req: AuthRequest, res: Resp
 router.put('/api/admin/opportunities/:id', requireAdmin, (req: Request, res: Response) => {
   try {
     const oppId = req.params.id;
-    const { title, description, category, location, date, duration, spots, spotsRemaining, adminReason } = req.body;
+    const { title, description, category, location, date, duration, spots, spotsRemaining, adminReason, pinnedSize } = req.body;
 
     const opp = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(oppId) as any;
     if (!opp) return res.status(404).json({ error: 'Opportunity not found' });
@@ -680,6 +680,13 @@ router.put('/api/admin/opportunities/:id', requireAdmin, (req: Request, res: Res
     if (duration !== undefined) db.prepare('UPDATE opportunities SET duration = ? WHERE id = ?').run(duration, oppId);
     if (spots !== undefined) db.prepare('UPDATE opportunities SET spots = ? WHERE id = ?').run(spots, oppId);
     if (spotsRemaining !== undefined) db.prepare('UPDATE opportunities SET spotsRemaining = ? WHERE id = ?').run(spotsRemaining, oppId);
+    // pinnedSize: admin-only card size override ('small' | 'medium' | 'large' | null = auto)
+    if (pinnedSize !== undefined) {
+      const validSizes = ['small', 'medium', 'large', null];
+      if (validSizes.includes(pinnedSize)) {
+        db.prepare('UPDATE opportunities SET pinnedSize = ? WHERE id = ?').run(pinnedSize, oppId);
+      }
+    }
 
     // Notify host if a reason was provided
     if (adminReason?.trim() && opp.hostId) {

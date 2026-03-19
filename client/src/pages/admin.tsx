@@ -460,7 +460,8 @@ function OpportunitiesTab({
   const [editForm, setEditForm] = useState<{
     title: string; description: string; category: Category;
     location: string; date: string; duration: number; spots: number;
-  }>({ title: '', description: '', category: 'volunteer', location: '', date: '', duration: 2, spots: 10 });
+    pinnedSize: 'small' | 'medium' | 'large' | null;
+  }>({ title: '', description: '', category: 'volunteer', location: '', date: '', duration: 2, spots: 10, pinnedSize: null });
   const [editReason, setEditReason] = useState('');
   const [savingEdit, setSavingEdit] = useState(false);
 
@@ -481,6 +482,7 @@ function OpportunitiesTab({
       date: opp.date,
       duration: opp.duration,
       spots: opp.spots,
+      pinnedSize: (opp.pinnedSize as 'small' | 'medium' | 'large' | null) ?? null,
     });
   };
 
@@ -635,6 +637,20 @@ function OpportunitiesTab({
                       value={editForm.spots}
                       onChange={e => setEditForm({ ...editForm, spots: parseInt(e.target.value) })}
                       className="h-9 rounded-xl text-sm" />
+                  </div>
+                  {/* Admin-only: card size override */}
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">Card Size:</span>
+                    <select
+                      value={editForm.pinnedSize ?? 'auto'}
+                      onChange={e => setEditForm({ ...editForm, pinnedSize: e.target.value === 'auto' ? null : e.target.value as 'small' | 'medium' | 'large' })}
+                      className="h-9 flex-1 rounded-xl border border-input bg-background px-3 text-sm"
+                    >
+                      <option value="auto">Auto — by interest count</option>
+                      <option value="small">Small (1×1)</option>
+                      <option value="medium">Medium (2×1)</option>
+                      <option value="large">Large (2×2, hero)</option>
+                    </select>
                   </div>
                   <div className="relative">
                     <Textarea

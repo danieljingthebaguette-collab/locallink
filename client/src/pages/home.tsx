@@ -365,7 +365,14 @@ export default function Home() {
 
               {/* Opportunity Cards */}
               {filteredOpportunities.map((opp, index) => {
-                const large = isLargeCard(opp.popularity);
+                // pinnedSize: admin override → map to a synthetic popularity so the existing
+                // cardUtils functions work unchanged ('large'=2×2, 'medium'=2×1, 'small'=1×1)
+                const effectivePopularity =
+                  opp.pinnedSize === 'large'  ? 30 :
+                  opp.pinnedSize === 'medium' ? 15 :
+                  opp.pinnedSize === 'small'  ?  0 :
+                  opp.popularity;
+                const large = isLargeCard(effectivePopularity);
                 const hasImage = opp.image && large;
                 const alreadyInterested = isInterested(opp);
                 const availabilityDisplay = getAvailabilityDisplay(opp);
@@ -397,7 +404,7 @@ export default function Home() {
                     onClick={() => setSelectedCard(opp)}
                     className={cn(
                       "group relative rounded-3xl overflow-hidden cursor-pointer border-4 shadow-sm hover:shadow-2xl transition-shadow duration-300",
-                      getCategoryBorder(opp.category), getCardSize(opp.popularity),
+                      getCategoryBorder(opp.category), getCardSize(effectivePopularity),
                       // grayscale is a CSS filter — FM doesn't touch filter, so class works fine
                       (isPast || isClosed) && "grayscale"
                     )}>
@@ -426,7 +433,7 @@ export default function Home() {
                             </motion.span>
                           )}
                         </div>
-                        <h3 className={cn("font-heading font-bold leading-tight", getTitleSize(opp.popularity))}>{opp.title}</h3>
+                        <h3 className={cn("font-heading font-bold leading-tight", getTitleSize(effectivePopularity))}>{opp.title}</h3>
                         {opp.tags && opp.tags.length > 0 && (
                           <div className="flex flex-wrap gap-1 pt-1">
                             {opp.tags.slice(0, 2).map(tag => (

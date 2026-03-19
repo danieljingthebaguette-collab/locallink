@@ -22,6 +22,7 @@ export interface Opportunity {
   isRecurring?: boolean;  // true = repeats every week on recurringDay at recurringTime
   recurringDay?: number;  // 0 = Sunday … 6 = Saturday
   recurringTime?: string; // "HH:MM" (24-hour), e.g. "12:00"
+  pinnedSize?: 'small' | 'medium' | 'large' | null; // admin-only card size override (null = auto)
 }
 
 export interface AppUser {

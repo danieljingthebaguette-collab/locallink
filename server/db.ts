@@ -211,6 +211,14 @@ try {
   db.exec("ALTER TABLE opportunities ADD COLUMN recurringTime TEXT DEFAULT NULL");
 }
 
+// Migrate: add pinnedSize column to opportunities if it doesn't exist yet
+// NULL = auto (driven by popularity); 'small' | 'medium' | 'large' = admin override
+try {
+  db.prepare('SELECT pinnedSize FROM opportunities LIMIT 1').get();
+} catch {
+  db.exec("ALTER TABLE opportunities ADD COLUMN pinnedSize TEXT DEFAULT NULL");
+}
+
 // Auto-grant admin and auto-verify the designated admin email
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'linklocal2@gmail.com';
 db.prepare('UPDATE users SET isAdmin = 1, emailVerified = 1 WHERE email = ?').run(ADMIN_EMAIL);
