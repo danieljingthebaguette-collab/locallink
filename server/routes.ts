@@ -170,7 +170,7 @@ router.post('/api/auth/login', async (req: Request, res: Response) => {
     const token = jwt.sign({ userId: user.id, isAdmin: !!user.isAdmin }, JWT_SECRET, { expiresIn: '30d' });
     // Never send the hashed password to the client
     const { password: _pwd, ...safeUser } = user;
-    return res.json({ ...safeUser, isAdmin: !!user.isAdmin, emailVerified: true, notifyOnInterest: !!user.notifyOnInterest, profileImage: user.profileImage || null, token });
+    return res.json({ ...safeUser, isAdmin: !!user.isAdmin, emailVerified: true, notifyOnInterest: !!user.notifyOnInterest, notifyOnReopen: user.notifyOnReopen !== 0, profileImage: user.profileImage || null, token });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
@@ -207,6 +207,7 @@ router.get('/api/auth/verify-email', (req: Request, res: Response) => {
       isAdmin: !!user.isAdmin,
       emailVerified: true,
       notifyOnInterest: !!user.notifyOnInterest,
+      notifyOnReopen: user.notifyOnReopen !== 0,
       profileImage: user.profileImage || null,
     });
   } catch (err: any) {
@@ -298,7 +299,7 @@ router.post('/api/auth/reset-password', async (req: Request, res: Response) => {
 // Edit profile (username and/or password and/or notification settings and/or profile image)
 router.put('/api/auth/profile', requireAuth, async (req: AuthRequest, res: Response) => {
   try {
-    const { username, currentPassword, newPassword, notifyOnInterest, profileImage } = req.body;
+    const { username, currentPassword, newPassword, notifyOnInterest, notifyOnReopen, profileImage } = req.body;
     const userId = req.userId!;
 
     const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId) as any;
@@ -323,18 +324,23 @@ router.put('/api/auth/profile', requireAuth, async (req: AuthRequest, res: Respo
       db.prepare('UPDATE users SET notifyOnInterest = ? WHERE id = ?').run(notifyOnInterest ? 1 : 0, userId);
     }
 
+    if (typeof notifyOnReopen === 'boolean') {
+      db.prepare('UPDATE users SET notifyOnReopen = ? WHERE id = ?').run(notifyOnReopen ? 1 : 0, userId);
+    }
+
     if (profileImage !== undefined) {
       db.prepare('UPDATE users SET profileImage = ? WHERE id = ?').run(profileImage || null, userId);
     }
 
     const updated = db.prepare(
-      'SELECT id, username, email, isAdmin, emailVerified, accountType, notifyOnInterest, profileImage, createdAt FROM users WHERE id = ?'
+      'SELECT id, username, email, isAdmin, emailVerified, accountType, notifyOnInterest, notifyOnReopen, profileImage, createdAt FROM users WHERE id = ?'
     ).get(userId) as any;
     return res.json({
       ...updated,
       isAdmin: !!updated.isAdmin,
       emailVerified: !!updated.emailVerified,
       notifyOnInterest: !!updated.notifyOnInterest,
+      notifyOnReopen: updated.notifyOnReopen !== 0,
       profileImage: updated.profileImage || null,
     });
   } catch (err: any) {

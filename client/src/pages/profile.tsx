@@ -136,6 +136,16 @@ export default function Profile() {
     }
   };
 
+  const handleToggleNotifyOnReopen = async () => {
+    const newValue = !(currentUser.notifyOnReopen ?? true);
+    const result = await updateProfile({ notifyOnReopen: newValue });
+    if (result.success) {
+      toast({ title: newValue ? 'Reopen email reminders enabled' : 'Reopen email reminders disabled' });
+    } else {
+      toast({ title: result.error || 'Failed to update setting', variant: 'destructive' });
+    }
+  };
+
   const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!fileInputRef.current) return;
@@ -376,14 +386,41 @@ export default function Profile() {
           )}
         </div>
 
-        {/* Notification Settings (organization accounts and admins) */}
-        {(currentUser.accountType === 'organization' || currentUser.isAdmin) && (
-          <div className="rounded-2xl border-2 border-border bg-card p-6 mb-6">
-            <h3 className="font-heading font-bold text-lg text-foreground mb-4 flex items-center gap-2">
-              <Bell className="w-5 h-5 text-primary" />
-              Notification Settings
-            </h3>
-            <div className="flex items-center justify-between py-2">
+        {/* Notification Settings — shown to all logged-in users */}
+        <div className="rounded-2xl border-2 border-border bg-card p-6 mb-6">
+          <h3 className="font-heading font-bold text-lg text-foreground mb-4 flex items-center gap-2">
+            <Bell className="w-5 h-5 text-primary" />
+            Notification Settings
+          </h3>
+
+          {/* Reopen email reminder — all users */}
+          <div className="flex items-center justify-between py-2">
+            <div className="flex-1 pr-4">
+              <p className="text-sm font-semibold text-foreground">Recurring event email reminders</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Get a Gmail reminder the day before a recurring event you signed up for reopens
+              </p>
+            </div>
+            <button
+              onClick={handleToggleNotifyOnReopen}
+              title={(currentUser.notifyOnReopen ?? true) ? 'Disable reopen email reminders' : 'Enable reopen email reminders'}
+              className={cn(
+                'relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none',
+                (currentUser.notifyOnReopen ?? true) ? 'bg-primary' : 'bg-muted-foreground/30'
+              )}
+            >
+              <span
+                className={cn(
+                  'inline-block h-4 w-4 rounded-full bg-white shadow transition-transform',
+                  (currentUser.notifyOnReopen ?? true) ? 'translate-x-6' : 'translate-x-1'
+                )}
+              />
+            </button>
+          </div>
+
+          {/* Interest notifications — org accounts and admins only */}
+          {(currentUser.accountType === 'organization' || currentUser.isAdmin) && (
+            <div className="flex items-center justify-between py-2 border-t border-border mt-2">
               <div className="flex-1 pr-4">
                 <p className="text-sm font-semibold text-foreground">Interest notifications</p>
                 <p className="text-xs text-muted-foreground mt-0.5">
@@ -406,8 +443,8 @@ export default function Profile() {
                 />
               </button>
             </div>
-          </div>
-        )}
+          )}
+        </div>
 
         {/* Favorite Organizations */}
         <div className="rounded-2xl border-2 border-border bg-card p-6 mb-8">

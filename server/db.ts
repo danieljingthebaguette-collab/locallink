@@ -169,6 +169,13 @@ try {
   db.exec("ALTER TABLE users ADD COLUMN notifyOnInterest INTEGER DEFAULT 0");
 }
 
+// Migrate: add notifyOnReopen column to users if it doesn't exist yet (default 1 = opted in)
+try {
+  db.prepare('SELECT notifyOnReopen FROM users LIMIT 1').get();
+} catch {
+  db.exec("ALTER TABLE users ADD COLUMN notifyOnReopen INTEGER DEFAULT 1");
+}
+
 // Migrate: add profileImage column to users if it doesn't exist yet
 try {
   db.prepare('SELECT profileImage FROM users LIMIT 1').get();

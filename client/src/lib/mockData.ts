@@ -33,6 +33,7 @@ export interface AppUser {
   accountType: 'volunteer' | 'organization';
   banned?: boolean;
   notifyOnInterest?: boolean;
+  notifyOnReopen?: boolean;
   profileImage?: string | null;
   createdAt: string;
 }

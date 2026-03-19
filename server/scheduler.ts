@@ -22,6 +22,7 @@ type SignupRow = {
   userId: string;
   email: string;
   username: string;
+  notifyOnReopen: number; // 0 or 1 from SQLite
 };
 
 async function checkAndNotify(): Promise<void> {
@@ -38,11 +39,12 @@ async function checkAndNotify(): Promise<void> {
     // All users signed up for recurring opportunities (exclude banned accounts)
     const rows = db.prepare(`
       SELECT
-        o.id        AS postId,
-        o.title     AS title,
-        u.id        AS userId,
-        u.email     AS email,
-        u.username  AS username
+        o.id              AS postId,
+        o.title           AS title,
+        u.id              AS userId,
+        u.email           AS email,
+        u.username        AS username,
+        u.notifyOnReopen  AS notifyOnReopen
       FROM opportunities o
       JOIN signups s ON s.opportunityId = o.id
       JOIN users   u ON u.id = s.userId
@@ -77,13 +79,16 @@ async function checkAndNotify(): Promise<void> {
       const createdAt = now.toISOString();
       const message = `"${row.title}" reopens tomorrow (Monday) — sign up again!`;
 
-      // Insert in-app notification
+      // Insert in-app notification (always)
       insertNotif.run(randomUUID(), row.userId, message, row.postId, createdAt);
 
-      // Send email (failures are caught per-user so one bad address doesn't block the rest)
-      sendReopenReminderEmail(row.email, row.username, row.title).catch((err: Error) => {
-        console.error(`[Scheduler] Email failed for ${row.email}: ${err.message}`);
-      });
+      // Send email only if the user has email reminders enabled (default: on)
+      // notifyOnReopen is stored as 0/1; NULL (new column, not yet set) defaults to ON
+      if (row.notifyOnReopen !== 0) {
+        sendReopenReminderEmail(row.email, row.username, row.title).catch((err: Error) => {
+          console.error(`[Scheduler] Email failed for ${row.email}: ${err.message}`);
+        });
+      }
 
       notified++;
     }
