@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
-import { useAuthStore, useOpportunitiesStore } from '@/lib/store';
+import { useAuthStore, useOpportunitiesStore, getRecurringStatus } from '@/lib/store';
 import { getCategoryLabel } from '@/lib/categoryUtils';
 import { CATEGORIES, type Category, type Opportunity } from '@/lib/mockData';
 import {
@@ -67,6 +67,7 @@ export default function MyEvents() {
     title: string; description: string; category: Category;
     location: string; date: string; duration: number; spots: number;
     spotsType: 'limited' | 'unlimited' | 'none'; image: string;
+    recurringDay?: number; recurringTime?: string;
   }>({ title: '', description: '', category: 'volunteer', location: '', date: '', duration: 2, spots: 10, spotsType: 'limited', image: '' });
   const [savingEdit, setSavingEdit] = useState(false);
   const [editImageFile, setEditImageFile] = useState<File | null>(null);
@@ -165,6 +166,8 @@ export default function MyEvents() {
       spots: opp.spots,
       spotsType: (opp.spotsType as 'limited' | 'unlimited' | 'none') || 'limited',
       image: opp.image || '',
+      recurringDay: opp.recurringDay,
+      recurringTime: opp.recurringTime,
     });
   };
 
@@ -188,9 +191,11 @@ export default function MyEvents() {
       date: editForm.date,
       duration: editForm.duration,
       spots: editForm.spots,
-      // Derive spotsType from whether the host entered a capacity number
       spotsType: editForm.spotsType,
       image: imageUrl,
+      // Recurring-specific fields — only sent when present
+      ...(editForm.recurringDay !== undefined && { recurringDay: editForm.recurringDay }),
+      ...(editForm.recurringTime !== undefined && { recurringTime: editForm.recurringTime }),
     });
     setSavingEdit(false);
     if (success) {
@@ -290,7 +295,12 @@ export default function MyEvents() {
             <div className="space-y-4">
               {hosted.map((opp) => {
                 const isClosed = isOppClosed(opp);
-                const inactive = isClosed || isPast(opp.date);
+                // For recurring events, derive open/closed from the weekly schedule
+                const recurringStatus = opp.isRecurring ? getRecurringStatus(opp) : null;
+                const effectiveOpen = opp.isRecurring
+                  ? !isClosed && (recurringStatus?.isOpen ?? true)
+                  : !isClosed && !isPast(opp.date);
+                const inactive = !effectiveOpen;
                 return (
                 <div key={opp.id} className={cn('rounded-2xl border-2 border-border bg-card overflow-hidden transition-opacity', inactive && 'opacity-70')}>
                   {/* Card header */}
@@ -304,7 +314,15 @@ export default function MyEvents() {
                         <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
                           <span className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5" />{opp.location}</span>
                           <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" />{opp.duration}h</span>
-                          {isPast(opp.date) ? (
+                          {opp.isRecurring ? (
+                            isClosed ? (
+                              <span className="text-xs font-semibold text-muted-foreground bg-secondary px-2 py-0.5 rounded-full">Closed</span>
+                            ) : (recurringStatus?.isOpen ?? true) ? (
+                              <span className="text-xs font-semibold text-green-600 dark:text-green-400 bg-green-500/10 px-2 py-0.5 rounded-full">Open</span>
+                            ) : (
+                              <span className="text-xs font-semibold text-muted-foreground bg-secondary px-2 py-0.5 rounded-full">Closed</span>
+                            )
+                          ) : isPast(opp.date) ? (
                             <span className="text-xs font-semibold text-muted-foreground bg-secondary px-2 py-0.5 rounded-full">Ended</span>
                           ) : isClosed ? (
                             <span className="text-xs font-semibold text-muted-foreground bg-secondary px-2 py-0.5 rounded-full">Closed</span>
@@ -365,10 +383,36 @@ export default function MyEvents() {
                           </div>
                         </div>
                         <div className="grid grid-cols-3 gap-3">
-                          <div className="space-y-1">
-                            <label className="text-xs font-medium text-muted-foreground">Date & Time *</label>
-                            <Input type="datetime-local" value={editForm.date} onChange={(e) => setEditForm({ ...editForm, date: e.target.value })} className="h-10 rounded-xl" />
-                          </div>
+                          {opp.isRecurring ? (
+                            <>
+                              <div className="space-y-1">
+                                <label className="text-xs font-medium text-muted-foreground">Day of Week</label>
+                                <select
+                                  value={editForm.recurringDay ?? 1}
+                                  onChange={(e) => setEditForm({ ...editForm, recurringDay: parseInt(e.target.value) })}
+                                  className="w-full h-10 rounded-xl border border-input bg-background px-3 text-sm"
+                                >
+                                  {['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'].map((d, i) => (
+                                    <option key={d} value={i}>{d}</option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div className="space-y-1">
+                                <label className="text-xs font-medium text-muted-foreground">Time</label>
+                                <Input
+                                  type="time"
+                                  value={editForm.recurringTime ?? '09:00'}
+                                  onChange={(e) => setEditForm({ ...editForm, recurringTime: e.target.value })}
+                                  className="h-10 rounded-xl"
+                                />
+                              </div>
+                            </>
+                          ) : (
+                            <div className="space-y-1">
+                              <label className="text-xs font-medium text-muted-foreground">Date & Time *</label>
+                              <Input type="datetime-local" value={editForm.date} onChange={(e) => setEditForm({ ...editForm, date: e.target.value })} className="h-10 rounded-xl" />
+                            </div>
+                          )}
                           <div className="space-y-1">
                             <label className="text-xs font-medium text-muted-foreground">Duration (hrs)</label>
                             <Input type="number" min={0.5} max={24} step={0.5} value={editForm.duration} onChange={(e) => setEditForm({ ...editForm, duration: parseFloat(e.target.value) || 0.5 })} className="h-10 rounded-xl" />
