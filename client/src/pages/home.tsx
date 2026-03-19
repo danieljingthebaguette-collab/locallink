@@ -523,7 +523,7 @@ export default function Home() {
               <div className="relative h-48 md:h-64 overflow-hidden flex-shrink-0">
                 {selectedCard.image ? (
                   <><img src={selectedCard.image} alt={selectedCard.title} className="absolute inset-0 w-full h-full object-cover" />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent" /></>
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" /></>
                 ) : <div className="absolute inset-0 bg-gradient-to-br opacity-30" />}
                 <div className="absolute inset-0 flex items-end p-6 md:p-8 justify-between gap-3">
                   <motion.h2
