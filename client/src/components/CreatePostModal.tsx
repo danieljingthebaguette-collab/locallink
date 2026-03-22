@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { X, Upload, ChevronRight, Loader2 } from 'lucide-react';
@@ -88,6 +88,11 @@ export default function CreatePostModal({ open, onClose }: Props) {
   });
   const fileInputRef = useRef<HTMLInputElement>(null);
   const todayStr = new Date().toISOString().slice(0, 16);
+
+  // Revoke blob URL when the preview changes or modal unmounts to prevent memory leaks
+  useEffect(() => {
+    return () => { if (imagePreview) URL.revokeObjectURL(imagePreview); };
+  }, [imagePreview]);
 
   const filteredTags = FIELD_TAGS.filter(t => t.toLowerCase().includes(tagSearch.toLowerCase()));
 

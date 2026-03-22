@@ -393,8 +393,15 @@ function UsersTab({
   onBanUser: (userId: string) => Promise<void>;
   onUnbanUser: (userId: string) => Promise<void>;
 }) {
+  const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [confirmDeleteUser, setConfirmDeleteUser] = useState<AppUser | null>(null);
+
+  // Debounce search — avoids filtering on every keystroke
+  useEffect(() => {
+    const t = setTimeout(() => setSearchQuery(searchInput), 300);
+    return () => clearTimeout(t);
+  }, [searchInput]);
 
   const filteredUsers = users.filter(u =>
     u.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -408,8 +415,8 @@ function UsersTab({
         <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
         <Input
           placeholder="Search users..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
           className="pl-11 h-11 rounded-xl border-2 border-border"
         />
       </div>
@@ -438,6 +445,11 @@ function UsersTab({
 
       {loading ? (
         <div className="text-center py-12 text-muted-foreground">Loading users...</div>
+      ) : filteredUsers.length === 0 ? (
+        <div className="text-center py-16 text-muted-foreground">
+          <Users className="w-10 h-10 mx-auto mb-3 opacity-30" />
+          <p>{searchQuery ? `No users matching "${searchQuery}"` : 'No users yet'}</p>
+        </div>
       ) : (
         <div className="space-y-3">
           {filteredUsers.map((user) => (
@@ -512,6 +524,7 @@ function OpportunitiesTab({
   onDeleteOpportunity: (oppId: string, reason?: string) => Promise<void>;
   onUpdateOpportunity: (oppId: string, data: Record<string, any>, reason?: string) => Promise<boolean>;
 }) {
+  const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [confirmDeleteOpp, setConfirmDeleteOpp] = useState<Opportunity | null>(null);
   const [deleteReason, setDeleteReason] = useState('');
@@ -523,6 +536,11 @@ function OpportunitiesTab({
   }>({ title: '', description: '', category: 'volunteer', location: '', date: '', duration: 2, spots: 10, pinnedSize: null });
   const [editReason, setEditReason] = useState('');
   const [savingEdit, setSavingEdit] = useState(false);
+
+  useEffect(() => {
+    const t = setTimeout(() => setSearchQuery(searchInput), 300);
+    return () => clearTimeout(t);
+  }, [searchInput]);
 
   const filteredOpps = opportunities.filter(o =>
     o.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -560,8 +578,8 @@ function OpportunitiesTab({
         <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
         <Input
           placeholder="Search opportunities..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
           className="pl-11 h-11 rounded-xl border-2 border-border"
         />
       </div>
@@ -607,6 +625,12 @@ function OpportunitiesTab({
 
       <p className="text-sm text-muted-foreground">{filteredOpps.length} opportunities found</p>
 
+      {filteredOpps.length === 0 ? (
+        <div className="text-center py-16 text-muted-foreground">
+          <MapPin className="w-10 h-10 mx-auto mb-3 opacity-30" />
+          <p>{searchQuery ? `No opportunities matching "${searchQuery}"` : 'No opportunities yet'}</p>
+        </div>
+      ) : (
       <div className="space-y-3">
         {filteredOpps.map((opp) => (
           <div key={opp.id} className="rounded-2xl bg-card border border-border overflow-hidden">
@@ -686,13 +710,14 @@ function OpportunitiesTab({
                   </div>
                   <div className="grid grid-cols-3 gap-2">
                     <Input type="datetime-local" value={editForm.date}
+                      min={new Date().toISOString().slice(0, 16)}
                       onChange={e => setEditForm({ ...editForm, date: e.target.value })}
                       className="h-9 rounded-xl text-sm" />
                     <Input type="number" placeholder="Duration (hrs)" min={0.5} step={0.5}
                       value={editForm.duration}
                       onChange={e => setEditForm({ ...editForm, duration: parseFloat(e.target.value) })}
                       className="h-9 rounded-xl text-sm" />
-                    <Input type="number" placeholder="Spots" min={1}
+                    <Input type="number" placeholder="Capacity" min={1}
                       value={editForm.spots}
                       onChange={e => setEditForm({ ...editForm, spots: parseInt(e.target.value) })}
                       className="h-9 rounded-xl text-sm" />
@@ -738,6 +763,7 @@ function OpportunitiesTab({
           </div>
         ))}
       </div>
+      )}
     </div>
   );
 }
@@ -772,6 +798,11 @@ function ReportsTab({ toast }: { toast: any }) {
     spam: 'Spam or misleading', inappropriate: 'Inappropriate content', fake: 'Fake or scam', other: 'Other',
   };
 
+  const PAGE_SIZE = 10;
+  const [page, setPage] = useState(0);
+  const totalPages = Math.ceil(reports.length / PAGE_SIZE);
+  const pageReports = reports.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+
   if (loading) return <div className="flex justify-center py-16"><Loader2 className="w-8 h-8 animate-spin text-muted-foreground" /></div>;
 
   return (
@@ -785,8 +816,9 @@ function ReportsTab({ toast }: { toast: any }) {
           <p>No reports yet — all clear!</p>
         </div>
       ) : (
+        <>
         <div className="space-y-3">
-          {reports.map(r => (
+          {pageReports.map(r => (
             <div key={r.id} className="rounded-2xl bg-card border border-border p-4 space-y-2">
               <div className="flex items-start justify-between gap-3">
                 <div className="flex-1 min-w-0">
@@ -806,6 +838,14 @@ function ReportsTab({ toast }: { toast: any }) {
             </div>
           ))}
         </div>
+        {totalPages > 1 && (
+          <div className="flex items-center justify-center gap-2 pt-2">
+            <Button variant="outline" size="sm" className="rounded-full" onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}>← Prev</Button>
+            <span className="text-xs text-muted-foreground">{page + 1} / {totalPages}</span>
+            <Button variant="outline" size="sm" className="rounded-full" onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page === totalPages - 1}>Next →</Button>
+          </div>
+        )}
+        </>
       )}
     </div>
   );
@@ -856,6 +896,11 @@ function AppealsTab({ toast, onUnbanUser }: { toast: any; onUnbanUser: (userId: 
     }
   };
 
+  const APPEALS_PAGE_SIZE = 10;
+  const [appealsPage, setAppealsPage] = useState(0);
+  const appealsTotalPages = Math.ceil(appeals.length / APPEALS_PAGE_SIZE);
+  const pageAppeals = appeals.slice(appealsPage * APPEALS_PAGE_SIZE, (appealsPage + 1) * APPEALS_PAGE_SIZE);
+
   if (loading) return <div className="flex justify-center py-16"><Loader2 className="w-8 h-8 animate-spin text-muted-foreground" /></div>;
 
   return (
@@ -871,8 +916,9 @@ function AppealsTab({ toast, onUnbanUser }: { toast: any; onUnbanUser: (userId: 
           <p>No pending appeals.</p>
         </div>
       ) : (
+        <>
         <div className="space-y-3">
-          {appeals.map(a => (
+          {pageAppeals.map(a => (
             <div key={a.id} className="rounded-2xl bg-card border border-border p-4 space-y-3">
               <div className="flex items-start gap-3">
                 <div className="w-9 h-9 rounded-full bg-amber-500/10 flex items-center justify-center text-sm font-bold text-amber-600 flex-shrink-0">
@@ -910,6 +956,14 @@ function AppealsTab({ toast, onUnbanUser }: { toast: any; onUnbanUser: (userId: 
             </div>
           ))}
         </div>
+        {appealsTotalPages > 1 && (
+          <div className="flex items-center justify-center gap-2 pt-2">
+            <Button variant="outline" size="sm" className="rounded-full" onClick={() => setAppealsPage(p => Math.max(0, p - 1))} disabled={appealsPage === 0}>← Prev</Button>
+            <span className="text-xs text-muted-foreground">{appealsPage + 1} / {appealsTotalPages}</span>
+            <Button variant="outline" size="sm" className="rounded-full" onClick={() => setAppealsPage(p => Math.min(appealsTotalPages - 1, p + 1))} disabled={appealsPage === appealsTotalPages - 1}>Next →</Button>
+          </div>
+        )}
+        </>
       )}
     </div>
   );

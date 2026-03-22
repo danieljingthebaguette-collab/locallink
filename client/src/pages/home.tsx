@@ -20,6 +20,9 @@ import CropEditor, {
   imageTransformStyle,
 } from '@/components/CropEditor';
 
+// Module-level cache so host profile images survive re-renders and modal re-opens
+const hostProfileCache = new Map<string, { profileImage: string | null }>();
+
 const SORT_OPTIONS: { value: 'newest' | 'oldest' | 'soonest' | 'popular'; label: string }[] = [
   { value: 'newest',  label: 'Newest' },
   { value: 'oldest',  label: 'Oldest' },
@@ -109,13 +112,20 @@ export default function Home() {
     return () => clearTimeout(t);
   }, [searchQuery]);
 
-  // Fetch host profile image when a card modal opens — public endpoint, no auth needed
+  // Fetch host profile image when a card modal opens — public endpoint, no auth needed.
+  // Results are cached in hostProfileCache so re-opening the same post is instant.
   useEffect(() => {
     if (!selectedCard) { setHostProfile(null); return; }
+    const cached = hostProfileCache.get(selectedCard.hostId);
+    if (cached) { setHostProfile(cached); return; }
     setHostProfileLoading(true);
     fetch(`/api/users/${selectedCard.hostId}/profile`)
       .then(r => r.ok ? r.json() : null)
-      .then(data => setHostProfile(data ? { profileImage: data.profileImage || null } : null))
+      .then(data => {
+        const profile = data ? { profileImage: data.profileImage || null } : { profileImage: null };
+        hostProfileCache.set(selectedCard.hostId, profile);
+        setHostProfile(profile);
+      })
       .catch(() => setHostProfile(null))
       .finally(() => setHostProfileLoading(false));
   }, [selectedCard?.hostId]);
@@ -127,11 +137,21 @@ export default function Home() {
   const formatTime = (d: string) => new Date(d).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
   const isInterested = (opp: Opportunity) => currentUser ? opp.signups.includes(currentUser.id) : false;
 
-  const DAY_FULL = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const DAY_FULL  = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const DAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const formatRecurringTime = (time: string) => {
     const [h, m] = time.split(':').map(Number);
     const ampm = h >= 12 ? 'PM' : 'AM';
     return `${h % 12 || 12}:${m.toString().padStart(2, '0')} ${ampm}`;
+  };
+  const formatRecurringShort = (opp: Opportunity) => {
+    const day = DAY_SHORT[opp.recurringDay ?? 0];
+    if (!opp.recurringTime) return `🔁 ${day}`;
+    const [h, m] = opp.recurringTime.split(':').map(Number);
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    const hr = h % 12 || 12;
+    const min = m === 0 ? '' : `:${m.toString().padStart(2, '0')}`;
+    return `🔁 ${day} ${hr}${min}${ampm}`;
   };
 
   // Returns capacity/availability string shown on cards.
@@ -461,7 +481,7 @@ export default function Home() {
                       <div className="space-y-2 border-b border-white/20 pb-3">
                         <div className="flex items-center gap-2 flex-wrap">
                           <p className="text-xs font-bold tracking-widest uppercase opacity-80">{getCategoryLabel(opp.category)}</p>
-                          {!!opp.isRecurring && <span className="text-[10px] font-bold bg-blue-500/80 text-white px-2 py-0.5 rounded-full">🔁 WEEKLY</span>}
+                          {!!opp.isRecurring && <span className="text-[10px] font-bold bg-blue-500/80 text-white px-2 py-0.5 rounded-full">{formatRecurringShort(opp)}</span>}
                           {isPast && !opp.isRecurring && <span className="text-[10px] font-bold bg-white/20 text-white px-2 py-0.5 rounded-full">ENDED</span>}
                           {isClosed && !!opp.isRecurring && <span className="text-[10px] font-bold bg-orange-500/80 text-white px-2 py-0.5 rounded-full">CLOSED</span>}
                           {alreadyInterested && (

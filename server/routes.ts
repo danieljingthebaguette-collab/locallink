@@ -63,7 +63,7 @@ function withTags(opp: any, signups: string[] = []) {
 
 // Allowed enum values — validated server-side to prevent garbage data
 const VALID_SPOTS_TYPES  = ['limited', 'unlimited', 'none'] as const;
-const VALID_CATEGORIES   = ['volunteer', 'education', 'sports', 'environment', 'community', 'arts', 'health', 'other'] as const;
+const VALID_CATEGORIES   = ['volunteer', 'education', 'sports', 'environment', 'community'] as const;
 const VALID_PINNED_SIZES = ['small', 'medium', 'large'] as const;
 
 type SpotsType = typeof VALID_SPOTS_TYPES[number];

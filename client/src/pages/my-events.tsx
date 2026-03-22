@@ -90,6 +90,11 @@ export default function MyEvents() {
     fetchOpportunities();
   }, [fetchOpportunities]);
 
+  // Revoke blob URL when the preview changes or the component unmounts to prevent memory leaks
+  useEffect(() => {
+    return () => { if (editImagePreview) URL.revokeObjectURL(editImagePreview); };
+  }, [editImagePreview]);
+
   if (!isLoggedIn || !currentUser) {
     return (
       <div className="min-h-screen bg-background pb-24 font-sans">
