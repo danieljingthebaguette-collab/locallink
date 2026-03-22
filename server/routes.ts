@@ -838,15 +838,19 @@ router.post('/api/admin/users/:id/unban', requireAdmin, (req: AuthRequest, res: 
   }
 });
 
-router.get('/api/admin/analytics', requireAdmin, (_req: Request, res: Response) => {
+router.get('/api/admin/analytics', requireAdmin, (req: Request, res: Response) => {
   try {
+    const ALLOWED_DAYS = [7, 14, 30, 365];
+    const requested = parseInt(req.query.days as string, 10);
+    const numDays = ALLOWED_DAYS.includes(requested) ? requested : 14;
+
     const days: { date: string; signups: number; users: number }[] = [];
-    for (let i = 13; i >= 0; i--) {
+    for (let i = numDays - 1; i >= 0; i--) {
       const d = new Date();
       d.setDate(d.getDate() - i);
       const dateStr = d.toISOString().slice(0, 10);
       const signups = db.prepare("SELECT COUNT(*) as count FROM signups WHERE date(createdAt) = ?").get(dateStr) as any;
-      const users = db.prepare("SELECT COUNT(*) as count FROM users WHERE date(createdAt) = ?").get(dateStr) as any;
+      const users   = db.prepare("SELECT COUNT(*) as count FROM users   WHERE date(createdAt) = ?").get(dateStr) as any;
       days.push({ date: dateStr, signups: signups.count, users: users.count });
     }
     return res.json(days);
