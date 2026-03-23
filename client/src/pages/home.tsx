@@ -154,7 +154,7 @@ export default function Home() {
     return `🔁 ${day} ${hr}${min}${ampm}`;
   };
 
-  // Returns capacity/availability string shown on cards.
+  // Returns capacity/availability string shown on cards (left side).
   const getAvailabilityDisplay = (opp: Opportunity) => {
     if (opp.spotsType === 'limited' && opp.spots > 0) {
       if (opp.signups.length >= opp.spots) return 'Full';
@@ -162,6 +162,17 @@ export default function Home() {
     }
     if (opp.spotsType === 'unlimited') return 'Unlimited';
     return '';
+  };
+
+  // Returns the bottom-right label on a card:
+  // "X spots left" when there's a real cap and space remaining,
+  // or "X interested" as the fallback.
+  const getInterestedDisplay = (opp: Opportunity) => {
+    if (opp.spotsType === 'limited' && opp.spots > 0 && opp.signups.length < opp.spots) {
+      const left = opp.spots - opp.signups.length;
+      return `${left} spot${left === 1 ? '' : 's'} left`;
+    }
+    return `${opp.signups.length} interested`;
   };
 
   // ── Open create modal with guard ───────────────────────────────────
@@ -514,7 +525,7 @@ export default function Home() {
                                 <span className="font-bold text-sm">{availabilityDisplay}</span>
                               </div>
                             ) : <span />}
-                            <span className="text-xs opacity-70">{opp.signups.length} interested</span>
+                            <span className="text-xs opacity-70">{getInterestedDisplay(opp)}</span>
                           </div>
                           <div className="flex items-center gap-2 text-xs opacity-80">
                             <MapPin className="w-3 h-3" /><span>{opp.location.split(',')[0]}</span>
@@ -855,13 +866,20 @@ export default function Home() {
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.29, duration: 0.3, ease: EASE_OUT }}>
-                  {/* Show "X / Y interested" when there's a cap, otherwise just the count */}
+                  {/* Show "X spots left" when capped, "Event Full" when at capacity, or plain count */}
                   {(() => {
                     const { spotsType, spots, signups: sups } = selectedCard;
                     const hasCap = spotsType === 'limited' && spots > 0;
-                    const countText = hasCap
-                      ? `${sups.length} / ${spots} interested`
-                      : `${sups.length} ${sups.length === 1 ? 'person' : 'people'} interested`;
+                    const isFull = hasCap && sups.length >= spots;
+                    let countText: string;
+                    if (isFull) {
+                      countText = 'Event Full';
+                    } else if (hasCap) {
+                      const left = spots - sups.length;
+                      countText = `${left} spot${left === 1 ? '' : 's'} left`;
+                    } else {
+                      countText = `${sups.length} ${sups.length === 1 ? 'person' : 'people'} interested`;
+                    }
                     return <p className="text-white/60 text-sm text-center mb-4">{countText}</p>;
                   })()}
                   {(() => {
