@@ -126,15 +126,6 @@ export default function Profile() {
     toast({ title: 'Removed from favorites' });
   };
 
-  const handleToggleNotifyOnInterest = async () => {
-    const newValue = !currentUser.notifyOnInterest;
-    const result = await updateProfile({ notifyOnInterest: newValue });
-    if (result.success) {
-      toast({ title: newValue ? 'Interest notifications enabled' : 'Interest notifications disabled' });
-    } else {
-      toast({ title: result.error || 'Failed to update setting', variant: 'destructive' });
-    }
-  };
 
   const handleToggleNotifyOnReopen = async () => {
     const newValue = !(currentUser.notifyOnReopen ?? true);
@@ -418,32 +409,6 @@ export default function Profile() {
             </button>
           </div>
 
-          {/* Interest notifications — org accounts and admins only */}
-          {(currentUser.accountType === 'organization' || currentUser.isAdmin) && (
-            <div className="flex items-center justify-between py-2 border-t border-border mt-2">
-              <div className="flex-1 pr-4">
-                <p className="text-sm font-semibold text-foreground">Interest notifications</p>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Get notified when someone shows interest in your posts
-                </p>
-              </div>
-              <button
-                onClick={handleToggleNotifyOnInterest}
-                title={currentUser.notifyOnInterest ? 'Disable interest notifications' : 'Enable interest notifications'}
-                className={cn(
-                  'relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none',
-                  currentUser.notifyOnInterest ? 'bg-primary' : 'bg-muted-foreground/30'
-                )}
-              >
-                <span
-                  className={cn(
-                    'inline-block h-4 w-4 rounded-full bg-white shadow transition-transform',
-                    currentUser.notifyOnInterest ? 'translate-x-6' : 'translate-x-1'
-                  )}
-                />
-              </button>
-            </div>
-          )}
         </div>
 
         {/* Favorite Organizations */}
