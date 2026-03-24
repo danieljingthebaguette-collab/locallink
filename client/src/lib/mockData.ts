@@ -162,7 +162,7 @@ export const CATEGORIES: { value: Category | 'all'; label: string }[] = [
   { value: 'all', label: 'All' },
   { value: 'volunteer', label: 'Volunteer' },
   { value: 'education', label: 'Education' },
-  { value: 'fitness', label: 'Sports' },
+  { value: 'fitness', label: 'Fitness' },
   { value: 'community', label: 'Community' },
   { value: 'environment', label: 'Environment' },
 ];
