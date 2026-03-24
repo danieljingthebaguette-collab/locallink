@@ -3,7 +3,7 @@ import { Category } from './mockData';
 const CATEGORY_COLOR_MAP: Record<Category, string> = {
   'volunteer': 'from-cat-vol/80 to-cat-vol',
   'education': 'from-cat-edu/80 to-cat-edu',
-  'sports': 'from-cat-sports/80 to-cat-sports',
+  'fitness': 'from-cat-sports/80 to-cat-sports',
   'community': 'from-cat-community/80 to-cat-community',
   'environment': 'from-cat-environment/80 to-cat-environment',
 };
@@ -11,7 +11,7 @@ const CATEGORY_COLOR_MAP: Record<Category, string> = {
 const CATEGORY_MODAL_MAP: Record<Category, string> = {
   'volunteer': 'from-cat-vol/90 to-cat-vol',
   'education': 'from-cat-edu/90 to-cat-edu',
-  'sports': 'from-cat-sports/90 to-cat-sports',
+  'fitness': 'from-cat-sports/90 to-cat-sports',
   'community': 'from-cat-community/90 to-cat-community',
   'environment': 'from-cat-environment/90 to-cat-environment',
 };
@@ -19,7 +19,7 @@ const CATEGORY_MODAL_MAP: Record<Category, string> = {
 const CATEGORY_BORDER_MAP: Record<Category, string> = {
   'volunteer': 'border-cat-vol',
   'education': 'border-cat-edu',
-  'sports': 'border-cat-sports',
+  'fitness': 'border-cat-sports',
   'community': 'border-cat-community',
   'environment': 'border-cat-environment',
 };
@@ -27,7 +27,7 @@ const CATEGORY_BORDER_MAP: Record<Category, string> = {
 const CATEGORY_EMOJI_MAP: Record<Category, string> = {
   'volunteer': '\u{1F91D}',
   'education': '\u{1F4DA}',
-  'sports': '\u26BD',
+  'fitness': '\u26BD',
   'community': '\u{1F3D8}\uFE0F',
   'environment': '\u{1F331}',
 };

@@ -40,7 +40,7 @@ async function uploadImage(file: File): Promise<string | null> {
 const CATEGORY_BG: Record<string, string> = {
   volunteer: 'bg-cat-vol',
   education: 'bg-cat-edu',
-  sports: 'bg-cat-sports',
+  fitness: 'bg-cat-sports',
   community: 'bg-cat-community',
   environment: 'bg-cat-environment',
 };

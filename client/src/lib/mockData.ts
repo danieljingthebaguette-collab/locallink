@@ -1,4 +1,4 @@
-export type Category = 'volunteer' | 'education' | 'sports' | 'community' | 'environment';
+export type Category = 'volunteer' | 'education' | 'fitness' | 'community' | 'environment';
 
 export interface Opportunity {
   id: string;
@@ -84,7 +84,7 @@ export const SAMPLE_OPPORTUNITIES: Opportunity[] = [
     id: '3',
     title: 'Youth Soccer Tournament',
     description: 'Coach and mentor young athletes at our annual youth soccer tournament!',
-    category: 'sports',
+    category: 'fitness',
     location: 'Sports Complex',
     date: '2026-02-20T10:00',
     duration: 6,
@@ -162,7 +162,7 @@ export const CATEGORIES: { value: Category | 'all'; label: string }[] = [
   { value: 'all', label: 'All' },
   { value: 'volunteer', label: 'Volunteer' },
   { value: 'education', label: 'Education' },
-  { value: 'sports', label: 'Sports' },
+  { value: 'fitness', label: 'Sports' },
   { value: 'community', label: 'Community' },
   { value: 'environment', label: 'Environment' },
 ];

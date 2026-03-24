@@ -13,7 +13,7 @@ import { type Category } from '@/lib/mockData';
 const POST_TYPES: { id: Category; label: string; icon: string; desc: string }[] = [
   { id: 'volunteer',    label: 'Volunteer Hours',     icon: '🤝', desc: 'Give your time to help others' },
   { id: 'education',   label: 'Education',            icon: '📚', desc: 'Teach, tutor, or share knowledge' },
-  { id: 'sports',      label: 'Sports & Recreation',  icon: '⚽', desc: 'Coaching, tournaments, activities' },
+  { id: 'fitness',     label: 'Fitness & Recreation',  icon: '🏃', desc: 'Coaching, tournaments, activities' },
   { id: 'community',   label: 'Community',            icon: '🏘️', desc: 'Local events and neighbourhood help' },
   { id: 'environment', label: 'Environment',          icon: '🌱', desc: 'Conservation and green initiatives' },
 ];

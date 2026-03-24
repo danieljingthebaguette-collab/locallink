@@ -642,7 +642,7 @@ function OpportunitiesTab({
                       'px-2 py-0.5 rounded-full text-[10px] font-medium uppercase tracking-wide',
                       opp.category === 'volunteer' ? 'bg-cat-vol/10 text-cat-vol' :
                       opp.category === 'education' ? 'bg-cat-edu/10 text-cat-edu' :
-                      opp.category === 'sports' ? 'bg-cat-sports/10 text-cat-sports' :
+                      opp.category === 'fitness' ? 'bg-cat-sports/10 text-cat-sports' :
                       opp.category === 'community' ? 'bg-cat-community/10 text-cat-community' :
                       'bg-cat-environment/10 text-cat-environment'
                     )}>
