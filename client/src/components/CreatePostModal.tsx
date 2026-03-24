@@ -142,6 +142,13 @@ export default function CreatePostModal({ open, onClose }: Props) {
   }, [imagePreview]);
 
   const filteredTags = FIELD_TAGS.filter(t => t.toLowerCase().includes(tagSearch.toLowerCase()));
+  // Split into up to 5 rows; adapts when search reduces the list so no empty ghost cells appear
+  const TAG_ROWS = 5;
+  const effectiveRows = Math.min(TAG_ROWS, filteredTags.length || 1);
+  const chunkSize = Math.ceil(filteredTags.length / effectiveRows);
+  const tagRows = Array.from({ length: effectiveRows }, (_, i) =>
+    filteredTags.slice(i * chunkSize, (i + 1) * chunkSize)
+  );
 
   const handleClose = () => {
     // Reset state on close
@@ -317,17 +324,23 @@ export default function CreatePostModal({ open, onClose }: Props) {
                     onChange={e => setTagSearch(e.target.value)}
                     className="rounded-xl border-border" />
 
-                  <div className="grid grid-rows-5 grid-flow-col gap-2 overflow-x-auto pb-2" style={{ scrollbarWidth: 'thin' }}>
-                    {filteredTags.map(tag => (
-                      <motion.button key={tag} whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
-                        onClick={() => toggleTag(tag)}
-                        className={cn("flex-shrink-0 px-3 py-2 rounded-xl border-2 text-sm font-medium transition-all whitespace-nowrap",
-                          selectedTags.includes(tag)
-                            ? "bg-primary border-primary text-primary-foreground shadow-sm"
-                            : "bg-secondary/60 border-border text-foreground hover:border-primary/40")}>
-                        {tag}
-                      </motion.button>
-                    ))}
+                  <div className="overflow-x-auto pb-2" style={{ scrollbarWidth: 'thin' }}>
+                    <div className="flex flex-col gap-2" style={{ minWidth: 'max-content' }}>
+                      {tagRows.map((row, rowIdx) => (
+                        <div key={rowIdx} className="flex gap-2">
+                          {row.map(tag => (
+                            <motion.button key={tag} whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
+                              onClick={() => toggleTag(tag)}
+                              className={cn("px-3 py-2 rounded-xl border-2 text-sm font-medium transition-all whitespace-nowrap",
+                                selectedTags.includes(tag)
+                                  ? "bg-primary border-primary text-primary-foreground shadow-sm"
+                                  : "bg-secondary/60 border-border text-foreground hover:border-primary/40")}>
+                              {tag}
+                            </motion.button>
+                          ))}
+                        </div>
+                      ))}
+                    </div>
                   </div>
 
                   {selectedTags.length > 0 && (
