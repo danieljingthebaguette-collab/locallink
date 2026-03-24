@@ -317,11 +317,11 @@ export default function CreatePostModal({ open, onClose }: Props) {
                     onChange={e => setTagSearch(e.target.value)}
                     className="rounded-xl border-border" />
 
-                  <div className="flex gap-2 overflow-x-auto pb-2 snap-x" style={{ scrollbarWidth: 'thin' }}>
+                  <div className="grid grid-rows-5 grid-flow-col gap-2 overflow-x-auto pb-2" style={{ scrollbarWidth: 'thin' }}>
                     {filteredTags.map(tag => (
                       <motion.button key={tag} whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
                         onClick={() => toggleTag(tag)}
-                        className={cn("flex-shrink-0 snap-start px-3 py-2 rounded-xl border-2 text-sm font-medium transition-all whitespace-nowrap",
+                        className={cn("flex-shrink-0 px-3 py-2 rounded-xl border-2 text-sm font-medium transition-all whitespace-nowrap",
                           selectedTags.includes(tag)
                             ? "bg-primary border-primary text-primary-foreground shadow-sm"
                             : "bg-secondary/60 border-border text-foreground hover:border-primary/40")}>
