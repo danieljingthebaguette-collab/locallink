@@ -19,9 +19,56 @@ const POST_TYPES: { id: Category; label: string; icon: string; desc: string }[] 
 ];
 
 const FIELD_TAGS = [
-  'Any Field', 'Finances', 'Art', 'Liberal Arts', 'Medicine',
-  'Engineering', 'Food', 'Nature', 'Technology', 'Coding',
-  'Sports', 'Education', 'Health', 'Environment', 'Social',
+  '🌿 Environment & Conservation',
+  '🐾 Animals & Wildlife',
+  '🍽️ Food & Hunger Relief',
+  '🏠 Housing & Homelessness',
+  '🏥 Health & Medical',
+  '🚒 Emergency Services',
+  '👴 Senior Services',
+  '📚 Education & Libraries',
+  '🎨 Arts & Culture',
+  '🏋️ Sports & Recreation',
+  '🛐 Faith & Spiritual',
+  '👧 Youth & Children',
+  '🤝 Community & Social Services',
+  '📱 Technology & Innovation',
+  '🎓 Tutoring & Academic Support',
+  '💼 Workforce Development & Job Training',
+  '🏘️ Civic & Government Engagement',
+  '♿ Disability Services',
+  '🌍 Cultural & Diversity',
+  '🧠 Mental Health & Substance Abuse',
+  '💰 Financial Assistance & Social Safety Net',
+  '⚖️ Legal Aid & Advocacy',
+  '🌾 Agriculture & Farming',
+  '🚌 Transportation & Mobility',
+  '🏫 After-School Programs',
+  '👨‍👩‍👧 Family Support Services',
+  '🎭 Performing Arts',
+  '📰 Media & Journalism',
+  '🔬 Science & Research',
+  '🕊️ Conflict Resolution & Violence Prevention',
+  '🌐 International & Global Outreach',
+  '🎪 Events & Festivals',
+  '🏺 History & Heritage',
+  '♻️ Sustainability & Recycling',
+  '🏗️ Community Development & Beautification',
+  '📣 Advocacy & Policy',
+  '🎒 School Supply & Basic Needs',
+  '🩺 Mental & Behavioral Health',
+  '👮 Public Safety & Crime Prevention',
+  '🧒 Early Childhood & Preschool',
+  '🏕️ Outdoor & Nature Education',
+  '🤱 Maternal & Child Health',
+  '🧑‍🤝‍🧑 Peer Support & Mentorship',
+  '🖥️ Digital Literacy & Access',
+  '🎵 Music & Performing Arts',
+  '🛠️ Skilled Trades & Vocational Training',
+  '🌱 Urban Gardening & Food Justice',
+  '🐕 Therapy & Service Animals',
+  '🎗️ Cancer & Chronic Illness Support',
+  '🏦 Economic Empowerment & Financial Literacy',
 ];
 
 type CreateStep = 'type' | 'tags' | 'details';
@@ -270,11 +317,11 @@ export default function CreatePostModal({ open, onClose }: Props) {
                     onChange={e => setTagSearch(e.target.value)}
                     className="rounded-xl border-border" />
 
-                  <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 max-h-64 overflow-y-auto pr-1">
+                  <div className="flex gap-2 overflow-x-auto pb-2 snap-x" style={{ scrollbarWidth: 'thin' }}>
                     {filteredTags.map(tag => (
                       <motion.button key={tag} whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
                         onClick={() => toggleTag(tag)}
-                        className={cn("px-3 py-2 rounded-xl border-2 text-sm font-medium transition-all",
+                        className={cn("flex-shrink-0 snap-start px-3 py-2 rounded-xl border-2 text-sm font-medium transition-all whitespace-nowrap",
                           selectedTags.includes(tag)
                             ? "bg-primary border-primary text-primary-foreground shadow-sm"
                             : "bg-secondary/60 border-border text-foreground hover:border-primary/40")}>
