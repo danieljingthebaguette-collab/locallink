@@ -192,8 +192,8 @@ export default function Account() {
           <div className="space-y-6">
             {/* Logo */}
             <div className="text-center mb-2">
-              <div className="inline-flex items-center justify-center w-20 h-16 rounded-2xl bg-primary/10 mb-4">
-                <Logo size={36} className="text-primary" />
+              <div className="inline-flex items-center justify-center w-32 h-32 rounded-2xl bg-primary/10 mb-4">
+                <Logo size={80} className="text-primary" />
               </div>
             </div>
 
