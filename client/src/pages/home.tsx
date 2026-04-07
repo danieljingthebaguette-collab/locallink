@@ -495,6 +495,9 @@ export default function Home() {
                           {!!opp.isRecurring && <span className="text-[10px] font-bold bg-blue-500/80 text-white px-2 py-0.5 rounded-full">{formatRecurringShort(opp)}</span>}
                           {isPast && !opp.isRecurring && <span className="text-[10px] font-bold bg-white/20 text-white px-2 py-0.5 rounded-full">ENDED</span>}
                           {isClosed && !!opp.isRecurring && <span className="text-[10px] font-bold bg-orange-500/80 text-white px-2 py-0.5 rounded-full">CLOSED</span>}
+                          {opp.status === 'pending' && currentUser?.id === opp.hostId && (
+                            <span className="text-[10px] font-bold bg-orange-500/90 text-white px-2 py-0.5 rounded-full">PENDING APPROVAL</span>
+                          )}
                           {alreadyInterested && (
                             <motion.span
                               initial={{ scale: 0.7, opacity: 0 }}

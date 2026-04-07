@@ -6,7 +6,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { useAuthStore, useAdminStore, useOpportunitiesStore } from '@/lib/store';
-import { Ban, CheckCircle2, TrendingUp, Scale } from 'lucide-react';
+import { Ban, CheckCircle2, TrendingUp, Scale, ClipboardCheck, XCircle } from 'lucide-react';
 import type { AppUser, Opportunity } from '@/lib/mockData';
 import { CATEGORIES, type Category } from '@/lib/mockData';
 import {
@@ -30,13 +30,13 @@ import {
   MessageSquare,
 } from 'lucide-react';
 
-type Tab = 'overview' | 'users' | 'opportunities' | 'reports' | 'feedback' | 'appeals';
+type Tab = 'overview' | 'users' | 'opportunities' | 'verify' | 'reports' | 'feedback' | 'appeals';
 
 export default function Admin() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const { isLoggedIn, currentUser } = useAuthStore();
-  const { users, stats, loading, fetchUsers, fetchStats, deleteUser, deleteOpportunity, updateOpportunity, banUser, unbanUser } = useAdminStore();
+  const { users, stats, loading, fetchUsers, fetchStats, deleteUser, deleteOpportunity, updateOpportunity, banUser, unbanUser, pendingOpportunities, fetchPendingOpportunities, approveOpportunity, denyOpportunity } = useAdminStore();
   const { opportunities, fetchOpportunities } = useOpportunitiesStore();
   const [activeTab, setActiveTab] = useState<Tab>('overview');
 
@@ -55,15 +55,17 @@ export default function Admin() {
       fetchUsers(currentUser.id);
       fetchStats(currentUser.id);
       fetchOpportunities();
+      fetchPendingOpportunities();
     }
   }, [currentUser]);
 
   if (!currentUser?.isAdmin) return null;
 
-  const tabs: { value: Tab; label: string; icon: React.ReactNode }[] = [
+  const tabs: { value: Tab; label: string; icon: React.ReactNode; badge?: number }[] = [
     { value: 'overview', label: 'Overview', icon: <BarChart3 className="w-4 h-4" /> },
     { value: 'users', label: 'Users', icon: <Users className="w-4 h-4" /> },
     { value: 'opportunities', label: 'Opportunities', icon: <MapPin className="w-4 h-4" /> },
+    { value: 'verify', label: 'Verify', icon: <ClipboardCheck className="w-4 h-4" />, badge: pendingOpportunities.length },
     { value: 'reports', label: 'Reports', icon: <Flag className="w-4 h-4" /> },
     { value: 'feedback', label: 'Feedback', icon: <MessageSquare className="w-4 h-4" /> },
     { value: 'appeals', label: 'Appeals', icon: <Scale className="w-4 h-4" /> },
@@ -98,6 +100,11 @@ export default function Admin() {
             >
               {tab.icon}
               {tab.label}
+              {tab.badge !== undefined && tab.badge > 0 && (
+                <span className="ml-1 min-w-[18px] h-[18px] px-1 rounded-full bg-orange-500 text-white text-[10px] font-bold flex items-center justify-center">
+                  {tab.badge}
+                </span>
+              )}
             </button>
           ))}
         </div>
@@ -160,6 +167,30 @@ export default function Admin() {
                 toast({ title: 'Failed to update opportunity', variant: 'destructive' });
               }
               return ok;
+            }}
+          />
+        )}
+        {activeTab === 'verify' && (
+          <VerifyTab
+            pendingOpportunities={pendingOpportunities}
+            onApprove={async (oppId) => {
+              const ok = await approveOpportunity(oppId);
+              if (ok) {
+                toast({ title: 'Post approved!', description: 'The organization has been notified.' });
+                useOpportunitiesStore.setState({ loaded: false });
+                fetchOpportunities();
+                fetchStats(currentUser.id);
+              } else {
+                toast({ title: 'Failed to approve post', variant: 'destructive' });
+              }
+            }}
+            onDeny={async (oppId, reason) => {
+              const ok = await denyOpportunity(oppId, reason);
+              if (ok) {
+                toast({ title: 'Post denied', description: 'The organization has been notified.' });
+              } else {
+                toast({ title: 'Failed to deny post', variant: 'destructive' });
+              }
             }}
           />
         )}
@@ -764,6 +795,152 @@ function OpportunitiesTab({
         ))}
       </div>
       )}
+    </div>
+  );
+}
+
+// ===== Verify Tab =====
+function VerifyTab({
+  pendingOpportunities,
+  onApprove,
+  onDeny,
+}: {
+  pendingOpportunities: Opportunity[];
+  onApprove: (oppId: string) => Promise<void>;
+  onDeny: (oppId: string, reason: string) => Promise<void>;
+}) {
+  const [denyingId, setDenyingId] = useState<string | null>(null);
+  const [denyReason, setDenyReason] = useState('');
+  const [processingId, setProcessingId] = useState<string | null>(null);
+
+  const handleApprove = async (oppId: string) => {
+    setProcessingId(oppId);
+    await onApprove(oppId);
+    setProcessingId(null);
+  };
+
+  const handleDeny = async (oppId: string) => {
+    setProcessingId(oppId);
+    await onDeny(oppId, denyReason);
+    setDenyingId(null);
+    setDenyReason('');
+    setProcessingId(null);
+  };
+
+  if (pendingOpportunities.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-center gap-3">
+        <div className="w-14 h-14 rounded-2xl bg-green-500/10 flex items-center justify-center">
+          <CheckCircle2 className="w-7 h-7 text-green-500" />
+        </div>
+        <p className="font-semibold text-foreground">All caught up!</p>
+        <p className="text-sm text-muted-foreground">No posts are waiting for approval.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-muted-foreground">
+        {pendingOpportunities.length} post{pendingOpportunities.length !== 1 ? 's' : ''} waiting for review.
+      </p>
+      {pendingOpportunities.map((opp) => (
+        <div key={opp.id} className="rounded-2xl bg-card border border-border p-5 space-y-3">
+          {/* Header row */}
+          <div className="flex items-start gap-4">
+            {opp.image && (
+              <img
+                src={opp.image}
+                alt={opp.title}
+                className="w-16 h-16 rounded-xl object-cover flex-shrink-0 border border-border"
+              />
+            )}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap mb-1">
+                <span className="bg-orange-500/10 text-orange-600 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide">
+                  Pending
+                </span>
+                <span className="bg-muted text-muted-foreground px-2 py-0.5 rounded-full text-[10px] font-medium capitalize">
+                  {opp.category}
+                </span>
+              </div>
+              <h3 className="font-semibold text-foreground truncate">{opp.title}</h3>
+              <p className="text-xs text-muted-foreground">by {opp.hostName} · {opp.location}</p>
+            </div>
+          </div>
+
+          {/* Description */}
+          <p className="text-sm text-muted-foreground line-clamp-3">{opp.description}</p>
+
+          {/* Meta */}
+          <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
+            <span>📅 {new Date(opp.date).toLocaleDateString(undefined, { dateStyle: 'medium' })}</span>
+            <span>⏱ {opp.duration}h</span>
+            {opp.spotsType === 'limited' && <span>👥 {opp.spots} spots</span>}
+          </div>
+
+          {/* Deny reason input */}
+          {denyingId === opp.id && (
+            <div className="space-y-2">
+              <Textarea
+                placeholder="Reason for denial (will be sent to the organization)…"
+                value={denyReason}
+                onChange={e => setDenyReason(e.target.value)}
+                className="rounded-xl text-sm min-h-[64px] resize-none"
+                maxLength={300}
+              />
+            </div>
+          )}
+
+          {/* Actions */}
+          <div className="flex gap-2 pt-1">
+            {denyingId === opp.id ? (
+              <>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="flex-1 rounded-full"
+                  onClick={() => { setDenyingId(null); setDenyReason(''); }}
+                  disabled={processingId === opp.id}
+                >
+                  <X className="w-3 h-3 mr-1" /> Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  className="flex-1 rounded-full"
+                  onClick={() => handleDeny(opp.id)}
+                  disabled={processingId === opp.id}
+                >
+                  {processingId === opp.id ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <XCircle className="w-3 h-3 mr-1" />}
+                  Confirm Deny
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="flex-1 rounded-full text-red-600 border-red-300 hover:bg-red-50 dark:hover:bg-red-950"
+                  onClick={() => setDenyingId(opp.id)}
+                  disabled={processingId === opp.id}
+                >
+                  <XCircle className="w-3 h-3 mr-1" /> Deny
+                </Button>
+                <Button
+                  size="sm"
+                  className="flex-1 rounded-full bg-green-600 hover:bg-green-700 text-white"
+                  onClick={() => handleApprove(opp.id)}
+                  disabled={processingId === opp.id}
+                >
+                  {processingId === opp.id ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <CheckCircle2 className="w-3 h-3 mr-1" />}
+                  Approve
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

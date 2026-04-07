@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { useAuthStore, useNotificationStore } from '@/lib/store';
-import { Home, Calendar, Info, User, LogOut, Shield, Bell, Users, X, Trash2, Edit3, UserMinus, RefreshCw } from 'lucide-react';
+import { Home, Calendar, Info, User, LogOut, Shield, Bell, Users, X, Trash2, Edit3, UserMinus, RefreshCw, CheckCircle2, XCircle } from 'lucide-react';
 import Logo from './Logo';
 
 const NAV_ITEMS = [
@@ -165,6 +165,8 @@ export default function Navigation() {
                                     n.type === 'admin_delete' ? 'bg-red-500/15 text-red-500' :
                                     n.type === 'admin_edit' ? 'bg-amber-500/15 text-amber-600' :
                                     n.type === 'reopen' ? 'bg-blue-500/15 text-blue-500' :
+                                    n.type === 'post_approved' ? 'bg-green-500/15 text-green-600' :
+                                    n.type === 'post_denied' ? 'bg-red-500/15 text-red-500' :
                                     'bg-primary/10 text-primary'
                                   )}>
                                     {n.type === 'interest' && <Users className="w-4 h-4" />}
@@ -172,7 +174,9 @@ export default function Navigation() {
                                     {n.type === 'admin_delete' && <Trash2 className="w-4 h-4" />}
                                     {n.type === 'admin_edit' && <Edit3 className="w-4 h-4" />}
                                     {n.type === 'reopen' && <RefreshCw className="w-4 h-4" />}
-                                    {!['interest','cancel','admin_delete','admin_edit','reopen'].includes(n.type) && <Bell className="w-4 h-4" />}
+                                    {n.type === 'post_approved' && <CheckCircle2 className="w-4 h-4" />}
+                                    {n.type === 'post_denied' && <XCircle className="w-4 h-4" />}
+                                    {!['interest','cancel','admin_delete','admin_edit','reopen','post_approved','post_denied'].includes(n.type) && <Bell className="w-4 h-4" />}
                                   </div>
                                   <div className="flex-1 min-w-0">
                                     <p className="text-sm text-foreground leading-snug">{n.message}</p>

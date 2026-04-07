@@ -330,6 +330,7 @@ export const useOpportunitiesStore = create<OpportunitiesState>((set, get) => ({
       });
       if (res.ok) {
         const newOpp = await res.json();
+        // Always add to local list — pending posts are visible to the org that posted them
         set((s) => ({ opportunities: [newOpp, ...s.opportunities] }));
         return newOpp;
       }
@@ -443,8 +444,12 @@ interface AdminState {
   users: AppUser[];
   stats: AdminStats | null;
   loading: boolean;
+  pendingOpportunities: import('./mockData').Opportunity[];
   fetchUsers: (adminUserId: string) => Promise<void>;
   fetchStats: (adminUserId: string) => Promise<void>;
+  fetchPendingOpportunities: () => Promise<void>;
+  approveOpportunity: (oppId: string) => Promise<boolean>;
+  denyOpportunity: (oppId: string, reason?: string) => Promise<boolean>;
   deleteUser: (adminUserId: string, userId: string) => Promise<boolean>;
   deleteOpportunity: (adminUserId: string, oppId: string, reason?: string) => Promise<boolean>;
   updateOpportunity: (adminUserId: string, oppId: string, data: Record<string, any>, reason?: string) => Promise<boolean>;
@@ -456,6 +461,46 @@ export const useAdminStore = create<AdminState>((set) => ({
   users: [],
   stats: null,
   loading: false,
+  pendingOpportunities: [],
+
+  fetchPendingOpportunities: async () => {
+    try {
+      const res = await fetch(`${API}/admin/pending-opportunities`, { headers: getAuthHeaders() });
+      if (res.ok) {
+        const data = await res.json();
+        set({ pendingOpportunities: data });
+      }
+    } catch { /* ignore */ }
+  },
+
+  approveOpportunity: async (oppId) => {
+    try {
+      const res = await fetch(`${API}/admin/opportunities/${oppId}/approve`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+      });
+      if (res.ok) {
+        set(s => ({ pendingOpportunities: s.pendingOpportunities.filter(o => o.id !== oppId) }));
+        return true;
+      }
+      return false;
+    } catch { return false; }
+  },
+
+  denyOpportunity: async (oppId, reason) => {
+    try {
+      const res = await fetch(`${API}/admin/opportunities/${oppId}/deny`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ reason: reason ?? '' }),
+      });
+      if (res.ok) {
+        set(s => ({ pendingOpportunities: s.pendingOpportunities.filter(o => o.id !== oppId) }));
+        return true;
+      }
+      return false;
+    } catch { return false; }
+  },
 
   fetchUsers: async (_adminUserId) => {
     set({ loading: true });
@@ -622,7 +667,7 @@ export const useFavoritesStore = create<FavoritesState>((set, get) => ({
 export interface AppNotification {
   id: string;
   userId: string;
-  type: 'interest' | 'cancel' | 'admin_delete' | 'admin_edit' | 'reopen';
+  type: 'interest' | 'cancel' | 'admin_delete' | 'admin_edit' | 'reopen' | 'post_approved' | 'post_denied';
   message: string;
   postId: string | null;
   read: boolean;

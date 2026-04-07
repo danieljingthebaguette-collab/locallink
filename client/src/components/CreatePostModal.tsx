@@ -239,7 +239,13 @@ export default function CreatePostModal({ open, onClose }: Props) {
     setCreating(false);
 
     if (result) {
-      toast({ title: 'Post published! 🎉', description: 'Your opportunity is now live on the board.' });
+      const isPending = result.status === 'pending';
+      toast({
+        title: isPending ? 'Post submitted for review!' : 'Post published! 🎉',
+        description: isPending
+          ? 'An admin will review your post. You\'ll be notified once it\'s approved.'
+          : 'Your opportunity is now live on the board.',
+      });
       handleClose();
     } else {
       toast({ title: 'Failed to create post', description: 'Only organization accounts can create posts.', variant: 'destructive' });

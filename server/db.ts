@@ -233,6 +233,14 @@ try {
   db.exec("ALTER TABLE opportunities ADD COLUMN modalObjectPosition TEXT DEFAULT NULL");
 }
 
+// Migrate: add status column to opportunities (pending = awaiting admin approval, approved = visible, denied = rejected)
+// Existing posts default to 'approved' so nothing breaks.
+try {
+  db.prepare('SELECT status FROM opportunities LIMIT 1').get();
+} catch {
+  db.exec("ALTER TABLE opportunities ADD COLUMN status TEXT DEFAULT 'approved'");
+}
+
 // Auto-grant admin and auto-verify the designated admin email
 if (!process.env.ADMIN_EMAIL) {
   console.warn(

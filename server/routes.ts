@@ -98,6 +98,20 @@ function requireAdmin(req: AuthRequest, res: Response, next: NextFunction) {
   });
 }
 
+/** Like requireAuth but doesn't block unauthenticated requests — just attaches userId/isAdmin if a valid token is present */
+function optionalAuth(req: AuthRequest, _res: Response, next: NextFunction) {
+  const authHeader = req.headers.authorization;
+  if (authHeader?.startsWith('Bearer ')) {
+    const token = authHeader.split(' ')[1];
+    try {
+      const payload = jwt.verify(token, JWT_SECRET) as { userId: string; isAdmin: boolean };
+      req.userId = payload.userId;
+      req.isAdmin = payload.isAdmin;
+    } catch { /* expired / invalid — proceed as anonymous */ }
+  }
+  next();
+}
+
 // ===== AUTH =====
 
 router.post('/api/auth/register', async (req: Request, res: Response) => {
@@ -395,11 +409,22 @@ router.get('/api/users/:id/profile', (req: Request, res: Response) => {
 
 // ===== OPPORTUNITIES =====
 
-router.get('/api/opportunities', (_req: Request, res: Response) => {
+router.get('/api/opportunities', optionalAuth, (req: AuthRequest, res: Response) => {
   try {
-    const opportunities = db.prepare('SELECT * FROM opportunities ORDER BY createdAt DESC').all();
+    // Public feed: only return approved posts.
+    // If the requester is authenticated, also include their own pending posts so they can see them in My Events.
+    let opportunities: any[];
+    if (req.userId) {
+      opportunities = db.prepare(
+        "SELECT * FROM opportunities WHERE status = 'approved' OR (status = 'pending' AND hostId = ?) ORDER BY createdAt DESC"
+      ).all(req.userId) as any[];
+    } else {
+      opportunities = db.prepare(
+        "SELECT * FROM opportunities WHERE status = 'approved' ORDER BY createdAt DESC"
+      ).all() as any[];
+    }
     const getSignups = db.prepare('SELECT userId FROM signups WHERE opportunityId = ?');
-    const result = (opportunities as any[]).map(opp =>
+    const result = opportunities.map(opp =>
       withTags(opp, (getSignups.all(opp.id) as any[]).map(s => s.userId))
     );
     return res.json(result);
@@ -441,10 +466,13 @@ router.post('/api/opportunities', requireAuth, (req: AuthRequest, res: Response)
     const resolvedSpotsType = ['limited', 'unlimited', 'none'].includes(spotsType) ? spotsType : 'limited';
     const resolvedSpots = resolvedSpotsType === 'limited' ? (spots || 0) : 0;
 
+    // Admins bypass the approval queue; org posts start as 'pending'
+    const status = req.isAdmin ? 'approved' : 'pending';
+
     db.prepare(
-      `INSERT INTO opportunities (id, title, description, category, location, date, duration, spots, spotsRemaining, spotsType, image, hostId, hostName, popularity, tags, createdAt, isRecurring, recurringDay, recurringTime)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)`
-    ).run(id, title, description, category, location, date, duration, resolvedSpots, resolvedSpots, resolvedSpotsType, image || null, hostId, hostUser?.username || 'Unknown', tagsJson, createdAt, isRecurring ? 1 : 0, recurringDay ?? null, recurringTime ?? null);
+      `INSERT INTO opportunities (id, title, description, category, location, date, duration, spots, spotsRemaining, spotsType, image, hostId, hostName, popularity, tags, createdAt, isRecurring, recurringDay, recurringTime, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?)`
+    ).run(id, title, description, category, location, date, duration, resolvedSpots, resolvedSpots, resolvedSpotsType, image || null, hostId, hostUser?.username || 'Unknown', tagsJson, createdAt, isRecurring ? 1 : 0, recurringDay ?? null, recurringTime ?? null, status);
 
     const opp = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(id) as any;
     return res.status(201).json(withTags(opp, []));
@@ -832,6 +860,78 @@ router.post('/api/admin/users/:id/unban', requireAdmin, (req: AuthRequest, res: 
   try {
     const userId = req.params.id;
     db.prepare('UPDATE users SET banned = 0 WHERE id = ?').run(userId);
+    return res.json({ success: true });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ===== POST APPROVAL =====
+
+// List all pending opportunities
+router.get('/api/admin/pending-opportunities', requireAdmin, (_req: Request, res: Response) => {
+  try {
+    const pending = db.prepare(
+      "SELECT * FROM opportunities WHERE status = 'pending' ORDER BY createdAt ASC"
+    ).all();
+    const getSignups = db.prepare('SELECT userId FROM signups WHERE opportunityId = ?');
+    const result = (pending as any[]).map(opp =>
+      withTags(opp, (getSignups.all(opp.id) as any[]).map((s: any) => s.userId))
+    );
+    return res.json(result);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Approve a pending opportunity
+router.post('/api/admin/opportunities/:id/approve', requireAdmin, (req: Request, res: Response) => {
+  try {
+    const oppId = req.params.id;
+    const opp = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(oppId) as any;
+    if (!opp) return res.status(404).json({ error: 'Opportunity not found' });
+
+    db.prepare("UPDATE opportunities SET status = 'approved' WHERE id = ?").run(oppId);
+
+    // Notify the host
+    if (opp.hostId) {
+      const hostExists = db.prepare('SELECT id FROM users WHERE id = ?').get(opp.hostId);
+      if (hostExists) {
+        db.prepare('INSERT INTO notifications (id, userId, type, message, postId, read, createdAt) VALUES (?, ?, ?, ?, ?, 0, ?)')
+          .run(randomUUID(), opp.hostId, 'post_approved', `Your post "${opp.title}" has been approved and is now live!`, oppId, new Date().toISOString());
+      }
+    }
+
+    const updated = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(oppId) as any;
+    const signups = (db.prepare('SELECT userId FROM signups WHERE opportunityId = ?').all(oppId) as any[]).map((s: any) => s.userId);
+    return res.json(withTags(updated, signups));
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Deny a pending opportunity (sets status to 'denied' and notifies the host with optional reason)
+router.post('/api/admin/opportunities/:id/deny', requireAdmin, (req: Request, res: Response) => {
+  try {
+    const oppId = req.params.id;
+    const { reason } = req.body || {};
+    const opp = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(oppId) as any;
+    if (!opp) return res.status(404).json({ error: 'Opportunity not found' });
+
+    db.prepare("UPDATE opportunities SET status = 'denied' WHERE id = ?").run(oppId);
+
+    // Notify the host
+    if (opp.hostId) {
+      const hostExists = db.prepare('SELECT id FROM users WHERE id = ?').get(opp.hostId);
+      if (hostExists) {
+        const msg = reason?.trim()
+          ? `Your post "${opp.title}" was not approved. Reason: ${reason.trim()}`
+          : `Your post "${opp.title}" was not approved by an admin.`;
+        db.prepare('INSERT INTO notifications (id, userId, type, message, postId, read, createdAt) VALUES (?, ?, ?, ?, ?, 0, ?)')
+          .run(randomUUID(), opp.hostId, 'post_denied', msg, oppId, new Date().toISOString());
+      }
+    }
+
     return res.json({ success: true });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
