@@ -216,6 +216,7 @@ export const useAuthStore = create<AuthState>((set) => {
 // ===== Opportunities Store =====
 interface OpportunitiesState {
   opportunities: Opportunity[];
+  myPosts: Opportunity[];
   searchQuery: string;
   currentCategory: Category | 'all';
   sortBy: 'newest' | 'oldest' | 'soonest' | 'popular';
@@ -226,6 +227,7 @@ interface OpportunitiesState {
   setSortBy: (sort: 'newest' | 'oldest' | 'soonest' | 'popular') => void;
   getFiltered: () => Opportunity[];
   fetchOpportunities: () => Promise<void>;
+  fetchMyPosts: () => Promise<void>;
   addOpportunity: (opp: Omit<Opportunity, 'id' | 'createdAt' | 'signups' | 'popularity'>) => Promise<Opportunity | null>;
   updateOpportunity: (oppId: string, data: Partial<Omit<Opportunity, 'id' | 'createdAt' | 'signups' | 'popularity' | 'hostId' | 'hostName'>>) => Promise<boolean>;
   deleteOwnOpportunity: (oppId: string) => Promise<boolean>;
@@ -237,6 +239,7 @@ interface OpportunitiesState {
 
 export const useOpportunitiesStore = create<OpportunitiesState>((set, get) => ({
   opportunities: [],
+  myPosts: [],
   searchQuery: '',
   currentCategory: 'all',
   sortBy: 'newest',
@@ -321,6 +324,16 @@ export const useOpportunitiesStore = create<OpportunitiesState>((set, get) => ({
     }
   },
 
+  fetchMyPosts: async () => {
+    try {
+      const res = await fetch(`${API}/my-posts`, { headers: getAuthHeaders() });
+      if (res.ok) {
+        const data = await res.json();
+        set({ myPosts: data });
+      }
+    } catch { /* ignore */ }
+  },
+
   addOpportunity: async (opp) => {
     try {
       const res = await fetch(`${API}/opportunities`, {
@@ -330,8 +343,13 @@ export const useOpportunitiesStore = create<OpportunitiesState>((set, get) => ({
       });
       if (res.ok) {
         const newOpp = await res.json();
-        // Always add to local list — pending posts are visible to the org that posted them
-        set((s) => ({ opportunities: [newOpp, ...s.opportunities] }));
+        if (newOpp.status === 'pending') {
+          // Pending posts go into myPosts only — they don't appear on the public feed
+          set((s) => ({ myPosts: [newOpp, ...s.myPosts] }));
+        } else {
+          // Admin-created posts are auto-approved and go straight to the public feed
+          set((s) => ({ opportunities: [newOpp, ...s.opportunities], myPosts: [newOpp, ...s.myPosts] }));
+        }
         return newOpp;
       }
       return null;
@@ -351,6 +369,7 @@ export const useOpportunitiesStore = create<OpportunitiesState>((set, get) => ({
         const updated = await res.json();
         set((s) => ({
           opportunities: s.opportunities.map(o => o.id === oppId ? updated : o),
+          myPosts: s.myPosts.map(o => o.id === oppId ? updated : o),
         }));
         return true;
       }
@@ -371,6 +390,7 @@ export const useOpportunitiesStore = create<OpportunitiesState>((set, get) => ({
       if (res.ok) {
         set((s) => ({
           opportunities: s.opportunities.filter(o => o.id !== oppId),
+          myPosts: s.myPosts.filter(o => o.id !== oppId),
         }));
         return true;
       }

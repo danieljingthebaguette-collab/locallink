@@ -64,7 +64,7 @@ export default function MyEvents() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const { isLoggedIn, currentUser } = useAuthStore();
-  const { getSignedUpEvents, getHostedEvents, cancelSignup, updateOpportunity, deleteOwnOpportunity, fetchOpportunities, loading } = useOpportunitiesStore();
+  const { getSignedUpEvents, cancelSignup, updateOpportunity, deleteOwnOpportunity, fetchOpportunities, fetchMyPosts, myPosts, loading } = useOpportunitiesStore();
 
   const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -88,7 +88,8 @@ export default function MyEvents() {
 
   useEffect(() => {
     fetchOpportunities();
-  }, [fetchOpportunities]);
+    if (isLoggedIn) fetchMyPosts();
+  }, [fetchOpportunities, fetchMyPosts, isLoggedIn]);
 
   // Revoke blob URL when the preview changes or the component unmounts to prevent memory leaks
   useEffect(() => {
@@ -120,7 +121,8 @@ export default function MyEvents() {
   }
 
   const signedUp = getSignedUpEvents(currentUser.id);
-  const hostedRaw = getHostedEvents(currentUser.id);
+  // Use myPosts (all statuses including pending) for the org's own hosted section
+  const hostedRaw = myPosts.filter(o => o.hostId === currentUser.id);
   // Sort: active events first, closed & past events pushed to the end
   const hosted = [...hostedRaw].sort((a, b) => {
     // Recurring events are never "past" — only check date for non-recurring
@@ -339,9 +341,21 @@ export default function MyEvents() {
                   <div className="p-5 space-y-2">
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex-1 space-y-2">
-                        <span className={cn('px-3 py-1 rounded-full text-xs font-bold text-white inline-block', CATEGORY_BG[opp.category] || 'bg-primary')}>
-                          {getCategoryLabel(opp.category)}
-                        </span>
+                        <div className="flex flex-wrap gap-2 items-center">
+                          <span className={cn('px-3 py-1 rounded-full text-xs font-bold text-white inline-block', CATEGORY_BG[opp.category] || 'bg-primary')}>
+                            {getCategoryLabel(opp.category)}
+                          </span>
+                          {opp.status === 'pending' && (
+                            <span className="px-3 py-1 rounded-full text-xs font-bold bg-orange-500/15 text-orange-600 border border-orange-400/30">
+                              ⏳ Pending Approval
+                            </span>
+                          )}
+                          {opp.status === 'denied' && (
+                            <span className="px-3 py-1 rounded-full text-xs font-bold bg-red-500/15 text-red-500 border border-red-400/30">
+                              ✕ Not Approved
+                            </span>
+                          )}
+                        </div>
                         <h3 className="font-heading font-bold text-lg text-foreground">{opp.title}</h3>
                         <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
                           <span className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5" />{opp.location}</span>

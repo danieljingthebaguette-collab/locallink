@@ -409,20 +409,12 @@ router.get('/api/users/:id/profile', (req: Request, res: Response) => {
 
 // ===== OPPORTUNITIES =====
 
-router.get('/api/opportunities', optionalAuth, (req: AuthRequest, res: Response) => {
+router.get('/api/opportunities', (_req: Request, res: Response) => {
   try {
-    // Public feed: only return approved posts.
-    // If the requester is authenticated, also include their own pending posts so they can see them in My Events.
-    let opportunities: any[];
-    if (req.userId) {
-      opportunities = db.prepare(
-        "SELECT * FROM opportunities WHERE status = 'approved' OR (status = 'pending' AND hostId = ?) ORDER BY createdAt DESC"
-      ).all(req.userId) as any[];
-    } else {
-      opportunities = db.prepare(
-        "SELECT * FROM opportunities WHERE status = 'approved' ORDER BY createdAt DESC"
-      ).all() as any[];
-    }
+    // Public feed: only show approved posts to everyone
+    const opportunities = db.prepare(
+      "SELECT * FROM opportunities WHERE status = 'approved' ORDER BY createdAt DESC"
+    ).all() as any[];
     const getSignups = db.prepare('SELECT userId FROM signups WHERE opportunityId = ?');
     const result = opportunities.map(opp =>
       withTags(opp, (getSignups.all(opp.id) as any[]).map(s => s.userId))
@@ -439,6 +431,22 @@ router.get('/api/opportunities/:id', (req: Request, res: Response) => {
     if (!opp) return res.status(404).json({ error: 'Opportunity not found' });
     const signups = (db.prepare('SELECT userId FROM signups WHERE opportunityId = ?').all(opp.id) as any[]).map(s => s.userId);
     return res.json(withTags(opp, signups));
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Returns all posts belonging to the logged-in user (any status — including pending/denied)
+router.get('/api/my-posts', requireAuth, (req: AuthRequest, res: Response) => {
+  try {
+    const posts = db.prepare(
+      'SELECT * FROM opportunities WHERE hostId = ? ORDER BY createdAt DESC'
+    ).all(req.userId!) as any[];
+    const getSignups = db.prepare('SELECT userId FROM signups WHERE opportunityId = ?');
+    const result = posts.map(opp =>
+      withTags(opp, (getSignups.all(opp.id) as any[]).map((s: any) => s.userId))
+    );
+    return res.json(result);
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
