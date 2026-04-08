@@ -65,7 +65,7 @@ interface AuthState {
   resendVerification: (email: string) => Promise<{ success: boolean; error?: string }>;
   forgotPassword: (email: string) => Promise<{ success: boolean; error?: string }>;
   resetPassword: (token: string, password: string) => Promise<{ success: boolean; error?: string }>;
-  updateProfile: (data: { username?: string; currentPassword?: string; newPassword?: string; notifyOnInterest?: boolean; notifyOnReopen?: boolean; profileImage?: string | null }) => Promise<{ success: boolean; error?: string }>;
+  updateProfile: (data: { username?: string; currentPassword?: string; newPassword?: string; notifyOnInterest?: boolean; notifyOnReopen?: boolean; profileImage?: string | null; orgDescription?: string | null; orgWebsite?: string | null; orgEmail?: string | null; orgPhone?: string | null }) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   loadUser: () => void;
 }

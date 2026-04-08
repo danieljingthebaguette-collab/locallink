@@ -58,7 +58,7 @@ function safeJsonParse<T>(raw: string | null | undefined, fallback: T): T {
 
 /** Attach validated tags JSON to an opportunity row */
 function withTags(opp: any, signups: string[] = []) {
-  return { ...opp, tags: safeJsonParse<string[]>(opp.tags, []), signups };
+  return { ...opp, tags: safeJsonParse<string[]>(opp.tags, []), steps: safeJsonParse<string[]>(opp.steps, []), signups };
 }
 
 // Allowed enum values — validated server-side to prevent garbage data
@@ -333,7 +333,7 @@ router.post('/api/auth/reset-password', async (req: Request, res: Response) => {
 // Edit profile (username and/or password and/or notification settings and/or profile image)
 router.put('/api/auth/profile', requireAuth, async (req: AuthRequest, res: Response) => {
   try {
-    const { username, currentPassword, newPassword, notifyOnInterest, notifyOnReopen, profileImage } = req.body;
+    const { username, currentPassword, newPassword, notifyOnInterest, notifyOnReopen, profileImage, orgDescription, orgWebsite, orgEmail, orgPhone } = req.body;
     const userId = req.userId!;
 
     const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId) as any;
@@ -366,8 +366,21 @@ router.put('/api/auth/profile', requireAuth, async (req: AuthRequest, res: Respo
       db.prepare('UPDATE users SET profileImage = ? WHERE id = ?').run(profileImage || null, userId);
     }
 
+    if (orgDescription !== undefined) {
+      db.prepare('UPDATE users SET orgDescription = ? WHERE id = ?').run(orgDescription || null, userId);
+    }
+    if (orgWebsite !== undefined) {
+      db.prepare('UPDATE users SET orgWebsite = ? WHERE id = ?').run(orgWebsite || null, userId);
+    }
+    if (orgEmail !== undefined) {
+      db.prepare('UPDATE users SET orgEmail = ? WHERE id = ?').run(orgEmail || null, userId);
+    }
+    if (orgPhone !== undefined) {
+      db.prepare('UPDATE users SET orgPhone = ? WHERE id = ?').run(orgPhone || null, userId);
+    }
+
     const updated = db.prepare(
-      'SELECT id, username, email, isAdmin, emailVerified, accountType, notifyOnInterest, notifyOnReopen, profileImage, createdAt FROM users WHERE id = ?'
+      'SELECT id, username, email, isAdmin, emailVerified, accountType, notifyOnInterest, notifyOnReopen, profileImage, orgDescription, orgWebsite, orgEmail, orgPhone, createdAt FROM users WHERE id = ?'
     ).get(userId) as any;
     return res.json({
       ...updated,
@@ -402,6 +415,32 @@ router.get('/api/users/:id/profile', (req: Request, res: Response) => {
     ).get(req.params.id) as any;
     if (!user) return res.status(404).json({ error: 'User not found' });
     return res.json({ username: user.username, profileImage: user.profileImage || null });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Public org profile page — returns org info + all approved posts
+router.get('/api/org/:id', (req: Request, res: Response) => {
+  try {
+    const user = db.prepare(
+      'SELECT id, username, profileImage, accountType, orgDescription, orgWebsite, orgEmail, orgPhone, createdAt FROM users WHERE id = ? AND accountType = ?'
+    ).get(req.params.id, 'organization') as any;
+    if (!user) return res.status(404).json({ error: 'Organization not found' });
+
+    const posts = db.prepare(
+      "SELECT * FROM opportunities WHERE hostId = ? AND status = 'approved' ORDER BY createdAt DESC"
+    ).all(req.params.id) as any[];
+    const getSignups = db.prepare('SELECT userId FROM signups WHERE opportunityId = ?');
+    const postsWithData = posts.map(opp =>
+      withTags(opp, (getSignups.all(opp.id) as any[]).map((s: any) => s.userId))
+    );
+
+    return res.json({
+      ...user,
+      profileImage: user.profileImage || null,
+      posts: postsWithData,
+    });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
@@ -455,7 +494,7 @@ router.get('/api/my-posts', requireAuth, (req: AuthRequest, res: Response) => {
 // Creating an opportunity requires being logged in as an org account (or admin)
 router.post('/api/opportunities', requireAuth, (req: AuthRequest, res: Response) => {
   try {
-    const { title, description, category, location, date, duration, spots, spotsType, image, tags, isRecurring, recurringDay, recurringTime } = req.body;
+    const { title, description, category, location, date, duration, spots, spotsType, image, tags, isRecurring, recurringDay, recurringTime, steps } = req.body;
     if (!title || !description || !category || !location || !date || !duration) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
@@ -471,6 +510,7 @@ router.post('/api/opportunities', requireAuth, (req: AuthRequest, res: Response)
     const id = randomUUID();
     const createdAt = new Date().toISOString();
     const tagsJson = JSON.stringify(Array.isArray(tags) ? tags : []);
+    const stepsJson = JSON.stringify(Array.isArray(steps) ? steps : []);
     const resolvedSpotsType = ['limited', 'unlimited', 'none'].includes(spotsType) ? spotsType : 'limited';
     const resolvedSpots = resolvedSpotsType === 'limited' ? (spots || 0) : 0;
 
@@ -478,9 +518,9 @@ router.post('/api/opportunities', requireAuth, (req: AuthRequest, res: Response)
     const status = req.isAdmin ? 'approved' : 'pending';
 
     db.prepare(
-      `INSERT INTO opportunities (id, title, description, category, location, date, duration, spots, spotsRemaining, spotsType, image, hostId, hostName, popularity, tags, createdAt, isRecurring, recurringDay, recurringTime, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?)`
-    ).run(id, title, description, category, location, date, duration, resolvedSpots, resolvedSpots, resolvedSpotsType, image || null, hostId, hostUser?.username || 'Unknown', tagsJson, createdAt, isRecurring ? 1 : 0, recurringDay ?? null, recurringTime ?? null, status);
+      `INSERT INTO opportunities (id, title, description, category, location, date, duration, spots, spotsRemaining, spotsType, image, hostId, hostName, popularity, tags, steps, createdAt, isRecurring, recurringDay, recurringTime, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(id, title, description, category, location, date, duration, resolvedSpots, resolvedSpots, resolvedSpotsType, image || null, hostId, hostUser?.username || 'Unknown', tagsJson, stepsJson, createdAt, isRecurring ? 1 : 0, recurringDay ?? null, recurringTime ?? null, status);
 
     const opp = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(id) as any;
     return res.status(201).json(withTags(opp, []));

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useLocation } from 'wouter';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { useAuthStore, useOpportunitiesStore, useFavoritesStore } from '@/lib/store';
 import { User, Mail, Award, Calendar, LogOut, Loader2, Edit3, Lock, Save, X, Clock, Heart, Building2, Bell, Camera } from 'lucide-react';
@@ -36,6 +37,14 @@ export default function Profile() {
   const [avatarUploading, setAvatarUploading] = useState(false);
   const sessionStartRef = useRef<number>(Date.now());
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [orgEditOpen, setOrgEditOpen] = useState(false);
+  const [orgForm, setOrgForm] = useState({
+    orgDescription: currentUser?.orgDescription || '',
+    orgWebsite: currentUser?.orgWebsite || '',
+    orgEmail: currentUser?.orgEmail || '',
+    orgPhone: currentUser?.orgPhone || '',
+  });
+  const [orgSaving, setOrgSaving] = useState(false);
 
   useEffect(() => {
     fetchOpportunities();
@@ -334,6 +343,152 @@ export default function Profile() {
                 {saving ? 'Saving...' : 'Save Changes'}
               </Button>
             </div>
+          </div>
+        )}
+
+        {/* Organization Profile — only for org accounts */}
+        {currentUser.accountType === 'organization' && (
+          <div className="rounded-3xl border-2 border-border bg-card p-6 mb-8">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-heading font-bold text-lg text-foreground flex items-center gap-2">
+                <Building2 className="w-5 h-5 text-primary" />
+                Organization Profile
+              </h3>
+              <button
+                onClick={() => {
+                  setOrgForm({
+                    orgDescription: currentUser.orgDescription || '',
+                    orgWebsite: currentUser.orgWebsite || '',
+                    orgEmail: currentUser.orgEmail || '',
+                    orgPhone: currentUser.orgPhone || '',
+                  });
+                  setOrgEditOpen(o => !o);
+                }}
+                className="p-2 rounded-full hover:bg-secondary transition-colors text-muted-foreground"
+                title="Edit organization profile"
+              >
+                <Edit3 className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Incomplete profile warning */}
+            {(!currentUser.orgDescription || !currentUser.orgEmail) && !orgEditOpen && (
+              <div className="mb-4 rounded-2xl border-2 border-orange-400/40 bg-orange-500/10 p-4 flex gap-3 items-start">
+                <span className="text-orange-500 text-lg">⚠️</span>
+                <div>
+                  <p className="text-sm font-semibold text-orange-600">Profile Incomplete</p>
+                  <p className="text-xs text-orange-500/80 mt-0.5">You must complete your organization profile before you can post opportunities.</p>
+                </div>
+              </div>
+            )}
+
+            {!orgEditOpen && (
+              <div className="space-y-3">
+                {currentUser.orgDescription ? (
+                  <div>
+                    <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide mb-1">About</p>
+                    <p className="text-sm text-foreground leading-relaxed">{currentUser.orgDescription}</p>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground italic">No description yet. Click edit to add one.</p>
+                )}
+                {currentUser.orgWebsite && (
+                  <div>
+                    <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide mb-1">Website</p>
+                    <a href={currentUser.orgWebsite.startsWith('http') ? currentUser.orgWebsite : `https://${currentUser.orgWebsite}`} target="_blank" rel="noopener noreferrer"
+                      className="text-sm text-primary hover:underline break-all">{currentUser.orgWebsite}</a>
+                  </div>
+                )}
+                {(currentUser.orgEmail || currentUser.orgPhone) && (
+                  <div>
+                    <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide mb-1">Contact</p>
+                    {currentUser.orgEmail && <p className="text-sm text-foreground">{currentUser.orgEmail}</p>}
+                    {currentUser.orgPhone && <p className="text-sm text-foreground">{currentUser.orgPhone}</p>}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {orgEditOpen && (
+              <div className="space-y-4">
+                <div className="space-y-1">
+                  <label className="text-sm font-semibold text-foreground">About Your Organization *</label>
+                  <Textarea
+                    placeholder="Briefly describe what your organization does and your goals..."
+                    value={orgForm.orgDescription}
+                    onChange={e => setOrgForm(f => ({ ...f, orgDescription: e.target.value }))}
+                    className="rounded-xl border-2 border-border resize-none min-h-[100px]"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-sm font-semibold text-foreground">Website URL</label>
+                  <Input
+                    placeholder="https://yourorg.org"
+                    value={orgForm.orgWebsite}
+                    onChange={e => setOrgForm(f => ({ ...f, orgWebsite: e.target.value }))}
+                    className="rounded-xl border-2 border-border h-11"
+                  />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-sm font-semibold text-foreground">Contact Email *</label>
+                    <Input
+                      type="email"
+                      placeholder="contact@yourorg.org"
+                      value={orgForm.orgEmail}
+                      onChange={e => setOrgForm(f => ({ ...f, orgEmail: e.target.value }))}
+                      className="rounded-xl border-2 border-border h-11"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-sm font-semibold text-foreground">Contact Phone</label>
+                    <Input
+                      type="tel"
+                      placeholder="(555) 555-5555"
+                      value={orgForm.orgPhone}
+                      onChange={e => setOrgForm(f => ({ ...f, orgPhone: e.target.value }))}
+                      className="rounded-xl border-2 border-border h-11"
+                    />
+                  </div>
+                </div>
+                <div className="flex gap-3 pt-1">
+                  <Button variant="outline" onClick={() => setOrgEditOpen(false)} className="flex-1 h-11 rounded-full font-semibold">
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={async () => {
+                      if (!orgForm.orgDescription.trim()) {
+                        toast({ title: 'Description is required', variant: 'destructive' });
+                        return;
+                      }
+                      if (!orgForm.orgEmail.trim()) {
+                        toast({ title: 'Contact email is required', variant: 'destructive' });
+                        return;
+                      }
+                      setOrgSaving(true);
+                      const result = await updateProfile({
+                        orgDescription: orgForm.orgDescription.trim(),
+                        orgWebsite: orgForm.orgWebsite.trim() || null,
+                        orgEmail: orgForm.orgEmail.trim(),
+                        orgPhone: orgForm.orgPhone.trim() || null,
+                      });
+                      setOrgSaving(false);
+                      if (result.success) {
+                        toast({ title: 'Organization profile updated!' });
+                        setOrgEditOpen(false);
+                      } else {
+                        toast({ title: result.error || 'Update failed', variant: 'destructive' });
+                      }
+                    }}
+                    disabled={orgSaving}
+                    className="flex-1 h-11 rounded-full font-semibold"
+                  >
+                    {orgSaving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
+                    {orgSaving ? 'Saving...' : 'Save Profile'}
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 

@@ -517,7 +517,12 @@ export default function Home() {
                       {large ? (
                         <div className="space-y-3 pt-3">
                           <p className="text-sm line-clamp-2 opacity-95 font-medium">{opp.description}</p>
-                          <p className="text-xs opacity-70 font-medium">by {opp.hostName}</p>
+                          <button
+                            onClick={e => { e.stopPropagation(); navigate(`/org/${opp.hostId}`); }}
+                            className="text-xs opacity-70 font-medium hover:opacity-100 hover:underline transition-opacity text-left"
+                          >
+                            by {opp.hostName}
+                          </button>
                           <div className="flex items-center justify-between pt-3 border-t border-white/20">
                             {availabilityDisplay ? (
                               <div className="flex items-center gap-2">
@@ -816,7 +821,12 @@ export default function Home() {
                           </span>
                         )}
                       </div>
-                      <p className="text-base font-semibold truncate">{selectedCard.hostName}</p>
+                      <button
+                        onClick={() => { setSelectedCard(null); navigate(`/org/${selectedCard.hostId}`); }}
+                        className="text-base font-semibold truncate hover:underline text-left"
+                      >
+                        {selectedCard.hostName}
+                      </button>
                     </div>
                     {isLoggedIn && currentUser?.id !== selectedCard.hostId && (
                       <motion.button

@@ -26,6 +26,7 @@ export interface Opportunity {
   cardObjectPosition?: string | null;   // CSS object-position for the board card image
   modalObjectPosition?: string | null;  // CSS object-position for the post detail banner
   status?: 'pending' | 'approved' | 'denied'; // approval status (default 'approved' for existing posts)
+  steps?: string[];  // Volunteer steps/instructions
 }
 
 export interface AppUser {
@@ -40,6 +41,10 @@ export interface AppUser {
   notifyOnReopen?: boolean;
   profileImage?: string | null;
   createdAt: string;
+  orgDescription?: string | null;
+  orgWebsite?: string | null;
+  orgEmail?: string | null;
+  orgPhone?: string | null;
 }
 
 export const SAMPLE_OPPORTUNITIES: Opportunity[] = [

@@ -17,6 +17,7 @@ import Terms from "@/pages/terms";
 import Privacy from "@/pages/privacy";
 import NotFound from "@/pages/not-found";
 import Leaderboard from "@/pages/leaderboard";
+import OrgProfilePage from "@/pages/org-profile";
 
 function Router() {
   return (
@@ -33,6 +34,7 @@ function Router() {
       <Route path="/reset-password" component={ResetPassword} />
       <Route path="/terms" component={Terms} />
       <Route path="/privacy" component={Privacy} />
+      <Route path="/org/:id" component={OrgProfilePage} />
       <Route component={NotFound} />
     </Switch>
   );

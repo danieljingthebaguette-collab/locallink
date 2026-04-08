@@ -8,6 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { useAuthStore, useOpportunitiesStore } from '@/lib/store';
 import { type Category } from '@/lib/mockData';
+import { useLocation } from 'wouter';
 
 // ── Questionnaire config ─────────────────────────────────────────────
 const POST_TYPES: { id: Category; label: string; icon: string; desc: string }[] = [
@@ -116,6 +117,10 @@ export default function CreatePostModal({ open, onClose }: Props) {
   const { toast } = useToast();
   const { currentUser } = useAuthStore();
   const { addOpportunity } = useOpportunitiesStore();
+  const [, navigate] = useLocation();
+  const isOrgProfileComplete = currentUser?.accountType === 'organization'
+    ? !!(currentUser.orgDescription && currentUser.orgEmail)
+    : true;
 
   const [createStep, setCreateStep] = useState<CreateStep>('type');
   const [selectedType, setSelectedType] = useState<Category | null>(null);
@@ -130,6 +135,7 @@ export default function CreatePostModal({ open, onClose }: Props) {
   const [isRecurring, setIsRecurring] = useState(false);
   const [recurringDay, setRecurringDay] = useState(1);   // default: Monday
   const [recurringTime, setRecurringTime] = useState('12:00');
+  const [steps, setSteps] = useState<string[]>(['']);
   const [formData, setFormData] = useState({
     title: '', description: '', location: '', date: '', duration: 2, spots: 20,
   });
@@ -164,6 +170,7 @@ export default function CreatePostModal({ open, onClose }: Props) {
     setIsRecurring(false);
     setRecurringDay(1);
     setRecurringTime('12:00');
+    setSteps(['']);
     onClose();
   };
 
@@ -199,6 +206,9 @@ export default function CreatePostModal({ open, onClose }: Props) {
     }
     if (spotsType === 'limited' && formData.spots < 1) errors.spots = 'At least 1 spot required';
     if (formData.duration < 0.5) errors.duration = 'Minimum 0.5 hrs';
+    const nonEmptySteps = steps.filter(s => s.trim());
+    if (nonEmptySteps.length === 0) errors.steps = 'At least one step is required';
+    if (steps.some(s => s.trim() === '')) errors.steps = 'All steps must be filled in';
     return errors;
   };
 
@@ -232,6 +242,7 @@ export default function CreatePostModal({ open, onClose }: Props) {
       spotsType,
       image: imageUrl,
       tags: selectedTags,
+      steps: steps.filter(s => s.trim()),
       hostId: currentUser?.id || '',
       hostName: currentUser?.username || '',
       ...(isRecurring && { isRecurring: true, recurringDay, recurringTime }),
@@ -263,17 +274,47 @@ export default function CreatePostModal({ open, onClose }: Props) {
           <motion.div initial={{ scale: 0.92, opacity: 0, y: 24 }} animate={{ scale: 1, opacity: 1, y: 0 }}
             exit={{ scale: 0.92, opacity: 0, y: 24 }} transition={{ type: 'spring', stiffness: 320, damping: 32 }}
             onClick={e => e.stopPropagation()}
-            className="w-full max-w-2xl max-h-[92vh] overflow-y-auto">
+            className="w-full max-w-2xl max-h-[92vh] overflow-y-auto relative">
+
+            {/* Profile incomplete gate */}
+            {!isOrgProfileComplete && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                className="rounded-3xl bg-card border-2 border-orange-400/40 shadow-2xl p-8 space-y-4 text-center relative"
+              >
+                <button onClick={handleClose} className="absolute top-4 right-4 p-2 rounded-full hover:bg-secondary transition-all">
+                  <X className="w-5 h-5 text-muted-foreground" />
+                </button>
+                <div className="w-16 h-16 rounded-full bg-orange-500/15 flex items-center justify-center mx-auto">
+                  <span className="text-3xl">⚠️</span>
+                </div>
+                <h2 className="text-2xl font-heading font-bold text-foreground">Complete Your Profile First</h2>
+                <p className="text-muted-foreground text-sm leading-relaxed">
+                  Before posting an opportunity, you need to complete your organization profile. Add a description and contact email so volunteers know who you are.
+                </p>
+                <div className="flex gap-3 pt-2">
+                  <Button variant="outline" onClick={handleClose} className="flex-1 h-11 rounded-full font-semibold">
+                    Cancel
+                  </Button>
+                  <Button onClick={() => { handleClose(); navigate('/profile'); }} className="flex-1 h-11 rounded-full font-semibold">
+                    Go to Profile →
+                  </Button>
+                </div>
+              </motion.div>
+            )}
 
             {/* Step indicator */}
-            <div className="flex items-center justify-center gap-2 mb-4">
-              {(['type', 'tags', 'details'] as CreateStep[]).map((s) => (
-                <div key={s} className={cn("h-1.5 rounded-full transition-all duration-300",
-                  createStep === s ? "w-8 bg-white" : "w-4 bg-white/30")} />
-              ))}
-            </div>
+            {isOrgProfileComplete && (
+              <div className="flex items-center justify-center gap-2 mb-4">
+                {(['type', 'tags', 'details'] as CreateStep[]).map((s) => (
+                  <div key={s} className={cn("h-1.5 rounded-full transition-all duration-300",
+                    createStep === s ? "w-8 bg-white" : "w-4 bg-white/30")} />
+                ))}
+              </div>
+            )}
 
-            <AnimatePresence mode="wait">
+            {isOrgProfileComplete && <AnimatePresence mode="wait">
               {/* ── STEP 1: Type ── */}
               {createStep === 'type' && (
                 <motion.div key="type"
@@ -547,6 +588,48 @@ export default function CreatePostModal({ open, onClose }: Props) {
                       </div>
                     )}
 
+                    {/* Volunteer Steps */}
+                    <div className="bg-white/15 backdrop-blur-md rounded-2xl p-4 border border-white/20 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-bold tracking-widest uppercase opacity-75">How to Participate *</label>
+                        <button
+                          type="button"
+                          onClick={() => setSteps(s => [...s, ''])}
+                          className="text-xs font-semibold bg-white/20 hover:bg-white/30 text-white px-2 py-1 rounded-lg transition-colors"
+                        >
+                          + Add Step
+                        </button>
+                      </div>
+                      <div className="space-y-2">
+                        {steps.map((step, idx) => (
+                          <div key={idx} className="flex items-center gap-2">
+                            <span className="w-6 h-6 rounded-full bg-white/30 text-white text-xs font-bold flex items-center justify-center flex-shrink-0">{idx + 1}</span>
+                            <Input
+                              placeholder={`Step ${idx + 1}...`}
+                              value={step}
+                              onChange={e => {
+                                const updated = [...steps];
+                                updated[idx] = e.target.value;
+                                setSteps(updated);
+                                setFormErrors({ ...formErrors, steps: '' });
+                              }}
+                              className="rounded-xl bg-white/80 text-foreground border-0 text-sm h-9 flex-1"
+                            />
+                            {steps.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => setSteps(s => s.filter((_, i) => i !== idx))}
+                                className="text-white/60 hover:text-white transition-colors flex-shrink-0"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                      {formErrors.steps && <p className="text-red-200 text-xs">{formErrors.steps}</p>}
+                    </div>
+
                     <div className="bg-white/15 backdrop-blur-md rounded-2xl p-4 border border-white/20 text-center">
                       <p className="text-xs font-bold tracking-widest uppercase opacity-75 mb-1">Posted by</p>
                       <p className="font-semibold">{currentUser?.username || 'You'}</p>
@@ -566,7 +649,7 @@ export default function CreatePostModal({ open, onClose }: Props) {
                   </div>
                 </motion.div>
               )}
-            </AnimatePresence>
+            </AnimatePresence>}
           </motion.div>
         </motion.div>
       )}

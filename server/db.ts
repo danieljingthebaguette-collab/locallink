@@ -241,6 +241,41 @@ try {
   db.exec("ALTER TABLE opportunities ADD COLUMN status TEXT DEFAULT 'approved'");
 }
 
+// Migrate: add orgDescription column to users
+try {
+  db.prepare('SELECT orgDescription FROM users LIMIT 1').get();
+} catch {
+  db.exec("ALTER TABLE users ADD COLUMN orgDescription TEXT DEFAULT NULL");
+}
+
+// Migrate: add orgWebsite column to users
+try {
+  db.prepare('SELECT orgWebsite FROM users LIMIT 1').get();
+} catch {
+  db.exec("ALTER TABLE users ADD COLUMN orgWebsite TEXT DEFAULT NULL");
+}
+
+// Migrate: add orgEmail column to users
+try {
+  db.prepare('SELECT orgEmail FROM users LIMIT 1').get();
+} catch {
+  db.exec("ALTER TABLE users ADD COLUMN orgEmail TEXT DEFAULT NULL");
+}
+
+// Migrate: add orgPhone column to users
+try {
+  db.prepare('SELECT orgPhone FROM users LIMIT 1').get();
+} catch {
+  db.exec("ALTER TABLE users ADD COLUMN orgPhone TEXT DEFAULT NULL");
+}
+
+// Migrate: add steps column to opportunities (JSON array of volunteer step strings)
+try {
+  db.prepare('SELECT steps FROM opportunities LIMIT 1').get();
+} catch {
+  db.exec("ALTER TABLE opportunities ADD COLUMN steps TEXT DEFAULT '[]'");
+}
+
 // Auto-grant admin and auto-verify the designated admin email
 if (!process.env.ADMIN_EMAIL) {
   console.warn(
