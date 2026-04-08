@@ -7,7 +7,7 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { randomUUID } from 'crypto';
-import { sendVerificationEmail, sendPasswordResetEmail } from './email.js';
+import { sendVerificationEmail, sendPasswordResetEmail, sendSignupNotificationEmail, sendPostApprovedEmail, sendPostDeniedEmail, sendEventCancelledEmail, sendEventReminderEmail } from './email.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -137,10 +137,11 @@ router.post('/api/auth/register', async (req: Request, res: Response) => {
     // Admin email is auto-verified; all other users must verify
     const emailVerified = isAdmin ? 1 : 0;
     const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
+    const unsubToken = randomUUID();
 
     db.prepare(
-      'INSERT INTO users (id, username, email, password, isAdmin, emailVerified, accountType, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-    ).run(id, username, email, hashedPassword, isAdmin, emailVerified, resolvedAccountType, createdAt);
+      'INSERT INTO users (id, username, email, password, isAdmin, emailVerified, accountType, hasSeenWelcome, unsubToken, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).run(id, username, email, hashedPassword, isAdmin, emailVerified, resolvedAccountType, 0, unsubToken, createdAt);
 
     // Generate a verification token (expires in 24 hours)
     const verificationToken = randomUUID() + '-' + randomUUID();
@@ -204,7 +205,7 @@ router.post('/api/auth/login', async (req: Request, res: Response) => {
     const token = jwt.sign({ userId: user.id, isAdmin: !!user.isAdmin }, JWT_SECRET, { expiresIn: '30d' });
     // Never send the hashed password to the client
     const { password: _pwd, ...safeUser } = user;
-    return res.json({ ...safeUser, isAdmin: !!user.isAdmin, emailVerified: true, notifyOnInterest: !!user.notifyOnInterest, notifyOnReopen: user.notifyOnReopen !== 0, profileImage: user.profileImage || null, token });
+    return res.json({ ...safeUser, isAdmin: !!user.isAdmin, emailVerified: true, notifyOnInterest: !!user.notifyOnInterest, notifyOnReopen: user.notifyOnReopen !== 0, profileImage: user.profileImage || null, emailReminders: !!user.emailReminders, hasSeenWelcome: !!user.hasSeenWelcome, token });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
@@ -243,6 +244,8 @@ router.get('/api/auth/verify-email', (req: Request, res: Response) => {
       notifyOnInterest: !!user.notifyOnInterest,
       notifyOnReopen: user.notifyOnReopen !== 0,
       profileImage: user.profileImage || null,
+      emailReminders: !!user.emailReminders,
+      hasSeenWelcome: !!user.hasSeenWelcome,
     });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
@@ -333,7 +336,7 @@ router.post('/api/auth/reset-password', async (req: Request, res: Response) => {
 // Edit profile (username and/or password and/or notification settings and/or profile image)
 router.put('/api/auth/profile', requireAuth, async (req: AuthRequest, res: Response) => {
   try {
-    const { username, currentPassword, newPassword, notifyOnInterest, notifyOnReopen, profileImage, orgDescription, orgWebsite, orgEmail, orgPhone } = req.body;
+    const { username, currentPassword, newPassword, notifyOnInterest, notifyOnReopen, profileImage, orgDescription, orgWebsite, orgEmail, orgPhone, emailReminders } = req.body;
     const userId = req.userId!;
 
     const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId) as any;
@@ -379,8 +382,12 @@ router.put('/api/auth/profile', requireAuth, async (req: AuthRequest, res: Respo
       db.prepare('UPDATE users SET orgPhone = ? WHERE id = ?').run(orgPhone || null, userId);
     }
 
+    if (typeof emailReminders === 'boolean') {
+      db.prepare('UPDATE users SET emailReminders = ? WHERE id = ?').run(emailReminders ? 1 : 0, userId);
+    }
+
     const updated = db.prepare(
-      'SELECT id, username, email, isAdmin, emailVerified, accountType, notifyOnInterest, notifyOnReopen, profileImage, orgDescription, orgWebsite, orgEmail, orgPhone, createdAt FROM users WHERE id = ?'
+      'SELECT id, username, email, isAdmin, emailVerified, accountType, notifyOnInterest, notifyOnReopen, profileImage, orgDescription, orgWebsite, orgEmail, orgPhone, emailReminders, hasSeenWelcome, createdAt FROM users WHERE id = ?'
     ).get(userId) as any;
     return res.json({
       ...updated,
@@ -389,6 +396,8 @@ router.put('/api/auth/profile', requireAuth, async (req: AuthRequest, res: Respo
       notifyOnInterest: !!updated.notifyOnInterest,
       notifyOnReopen: updated.notifyOnReopen !== 0,
       profileImage: updated.profileImage || null,
+      emailReminders: !!updated.emailReminders,
+      hasSeenWelcome: !!updated.hasSeenWelcome,
     });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
@@ -532,7 +541,7 @@ router.post('/api/opportunities', requireAuth, (req: AuthRequest, res: Response)
 // ===== SIGNUPS =====
 
 // "Interested" — uses userId from JWT. Spots are informational only (not decremented).
-router.post('/api/opportunities/:id/signup', requireAuth, (req: AuthRequest, res: Response) => {
+router.post('/api/opportunities/:id/signup', requireAuth, async (req: AuthRequest, res: Response) => {
   try {
     const oppId = req.params.id;
     const userId = req.userId!;
@@ -565,6 +574,15 @@ router.post('/api/opportunities/:id/signup', requireAuth, (req: AuthRequest, res
         );
       }
     }
+
+    // Send signup notification email to org host
+    try {
+      const hostForEmail = db.prepare('SELECT email, username FROM users WHERE id = ?').get(opp.hostId) as any;
+      if (hostForEmail && opp.hostId !== userId) {
+        const volUser = db.prepare('SELECT username FROM users WHERE id = ?').get(userId) as any;
+        await sendSignupNotificationEmail(hostForEmail.email, hostForEmail.username, volUser?.username || 'Someone', opp.title);
+      }
+    } catch { /* email errors are non-fatal */ }
 
     const updated = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(oppId) as any;
     const signups = (db.prepare('SELECT userId FROM signups WHERE opportunityId = ?').all(oppId) as any[]).map(s => s.userId);
@@ -671,7 +689,7 @@ router.put('/api/opportunities/:id', requireAuth, (req: AuthRequest, res: Respon
 });
 
 // Delete own opportunity (host or admin)
-router.delete('/api/opportunities/:id', requireAuth, (req: AuthRequest, res: Response) => {
+router.delete('/api/opportunities/:id', requireAuth, async (req: AuthRequest, res: Response) => {
   try {
     const oppId = req.params.id;
     const userId = req.userId!;
@@ -679,6 +697,17 @@ router.delete('/api/opportunities/:id', requireAuth, (req: AuthRequest, res: Res
     const opp = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(oppId) as any;
     if (!opp) return res.status(404).json({ error: 'Opportunity not found' });
     if (opp.hostId !== userId && !req.isAdmin) return res.status(403).json({ error: 'Not authorized to delete this opportunity' });
+
+    // Email all signed-up volunteers that the event is cancelled
+    try {
+      const signedUpUsers = db.prepare(
+        'SELECT u.email, u.username FROM signups s JOIN users u ON u.id = s.userId WHERE s.opportunityId = ?'
+      ).all(oppId) as any[];
+      const hostUser = db.prepare('SELECT username FROM users WHERE id = ?').get(opp.hostId) as any;
+      for (const vol of signedUpUsers) {
+        await sendEventCancelledEmail(vol.email, vol.username, opp.title, hostUser?.username || 'the organizer');
+      }
+    } catch { /* non-fatal */ }
 
     db.transaction(() => {
       db.prepare('DELETE FROM signups WHERE opportunityId = ?').run(oppId);
@@ -933,7 +962,7 @@ router.get('/api/admin/pending-opportunities', requireAdmin, (_req: Request, res
 });
 
 // Approve a pending opportunity
-router.post('/api/admin/opportunities/:id/approve', requireAdmin, (req: Request, res: Response) => {
+router.post('/api/admin/opportunities/:id/approve', requireAdmin, async (req: Request, res: Response) => {
   try {
     const oppId = req.params.id;
     const opp = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(oppId) as any;
@@ -950,6 +979,11 @@ router.post('/api/admin/opportunities/:id/approve', requireAdmin, (req: Request,
       }
     }
 
+    try {
+      const host = db.prepare('SELECT email, username FROM users WHERE id = ?').get(opp.hostId) as any;
+      if (host) await sendPostApprovedEmail(host.email, host.username, opp.title);
+    } catch { /* non-fatal */ }
+
     const updated = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(oppId) as any;
     const signups = (db.prepare('SELECT userId FROM signups WHERE opportunityId = ?').all(oppId) as any[]).map((s: any) => s.userId);
     return res.json(withTags(updated, signups));
@@ -959,7 +993,7 @@ router.post('/api/admin/opportunities/:id/approve', requireAdmin, (req: Request,
 });
 
 // Deny a pending opportunity (sets status to 'denied' and notifies the host with optional reason)
-router.post('/api/admin/opportunities/:id/deny', requireAdmin, (req: Request, res: Response) => {
+router.post('/api/admin/opportunities/:id/deny', requireAdmin, async (req: Request, res: Response) => {
   try {
     const oppId = req.params.id;
     const { reason } = req.body || {};
@@ -979,6 +1013,11 @@ router.post('/api/admin/opportunities/:id/deny', requireAdmin, (req: Request, re
           .run(randomUUID(), opp.hostId, 'post_denied', msg, oppId, new Date().toISOString());
       }
     }
+
+    try {
+      const host = db.prepare('SELECT email, username FROM users WHERE id = ?').get(opp.hostId) as any;
+      if (host) await sendPostDeniedEmail(host.email, host.username, opp.title, reason);
+    } catch { /* non-fatal */ }
 
     return res.json({ success: true });
   } catch (err: any) {
@@ -1203,5 +1242,138 @@ router.post('/api/upload', requireAuth, upload.single('image'), (req: Request, r
 router.get('/api/health', (_req: Request, res: Response) => {
   return res.json({ status: 'ok', message: 'LocalLink API is running' });
 });
+
+// Unsubscribe from reminder emails via token link
+router.get('/api/unsubscribe', (req: Request, res: Response) => {
+  try {
+    const { token } = req.query as { token?: string };
+    if (!token) return res.status(400).send('<p>Invalid unsubscribe link.</p>');
+    const user = db.prepare('SELECT id FROM users WHERE unsubToken = ?').get(token) as any;
+    if (!user) return res.status(404).send('<p>Unsubscribe link not found.</p>');
+    db.prepare('UPDATE users SET emailReminders = 0 WHERE id = ?').run(user.id);
+    const appUrl = process.env.APP_URL || 'http://localhost:5173';
+    return res.send(`<!DOCTYPE html><html><head><title>Unsubscribed - LocalLink</title></head><body style="font-family:sans-serif;text-align:center;padding:60px;max-width:480px;margin:0 auto"><h1 style="color:#6366f1">LocalLink</h1><h2>Unsubscribed successfully</h2><p>You won't receive event reminder emails anymore.</p><p style="color:#888;font-size:13px;margin-top:16px">Note: Important account notifications (like post approvals) will still be sent.</p><a href="${appUrl}" style="display:inline-block;margin-top:24px;background:#6366f1;color:white;padding:12px 28px;border-radius:999px;text-decoration:none;font-weight:600">Back to LocalLink</a></body></html>`);
+  } catch (err: any) {
+    return res.status(500).send('<p>Something went wrong.</p>');
+  }
+});
+
+router.post('/api/auth/mark-welcome-seen', requireAuth, (req: AuthRequest, res: Response) => {
+  try {
+    db.prepare('UPDATE users SET hasSeenWelcome = 1 WHERE id = ?').run(req.userId!);
+    return res.json({ success: true });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/api/featured-posts', (_req: Request, res: Response) => {
+  try {
+    let posts = db.prepare(
+      "SELECT * FROM opportunities WHERE status = 'approved' AND isFeatured = 1 ORDER BY createdAt DESC"
+    ).all() as any[];
+    if (posts.length === 0) {
+      posts = db.prepare(
+        "SELECT * FROM opportunities WHERE status = 'approved' ORDER BY popularity DESC LIMIT 6"
+      ).all() as any[];
+    }
+    const getSignups = db.prepare('SELECT userId FROM signups WHERE opportunityId = ?');
+    const result = posts.map(opp =>
+      withTags(opp, (getSignups.all(opp.id) as any[]).map((s: any) => s.userId))
+    );
+    return res.json(result);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/api/admin/opportunities/:id/feature', requireAdmin, (req: Request, res: Response) => {
+  try {
+    const opp = db.prepare('SELECT isFeatured FROM opportunities WHERE id = ?').get(req.params.id) as any;
+    if (!opp) return res.status(404).json({ error: 'Not found' });
+    const newVal = opp.isFeatured ? 0 : 1;
+    db.prepare('UPDATE opportunities SET isFeatured = ? WHERE id = ?').run(newVal, req.params.id);
+    return res.json({ isFeatured: !!newVal });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ===== 24-hour event reminder cron =====
+async function runReminderCron() {
+  try {
+    const now = new Date();
+    const in23h = new Date(now.getTime() + 23 * 60 * 60 * 1000).toISOString();
+    const in25h = new Date(now.getTime() + 25 * 60 * 60 * 1000).toISOString();
+    const twelveHoursAgo = new Date(now.getTime() - 12 * 60 * 60 * 1000).toISOString();
+
+    // One-time events starting in 23-25 hours
+    const rows = db.prepare(`
+      SELECT o.id as oppId, o.title, o.date, o.hostName,
+             u.id as userId, u.email, u.username, u.emailReminders, u.unsubToken,
+             s.lastReminderAt
+      FROM opportunities o
+      JOIN signups s ON s.opportunityId = o.id
+      JOIN users u ON u.id = s.userId
+      WHERE o.status = 'approved'
+        AND o.isRecurring = 0
+        AND o.date >= ? AND o.date <= ?
+        AND u.emailReminders = 1
+        AND (s.lastReminderAt IS NULL OR s.lastReminderAt < ?)
+    `).all(in23h, in25h, twelveHoursAgo) as any[];
+
+    for (const row of rows) {
+      try {
+        await sendEventReminderEmail(row.email, row.username, row.title, row.date, row.hostName, row.unsubToken || '');
+        db.prepare('UPDATE signups SET lastReminderAt = ? WHERE opportunityId = ? AND userId = ?')
+          .run(now.toISOString(), row.oppId, row.userId);
+        console.log(`📧 24h reminder sent to ${row.email} for "${row.title}"`);
+      } catch { /* ignore per-user failures */ }
+    }
+
+    // Recurring events — check if close time is in 23-25 hours
+    const sixDaysAgo = new Date(now.getTime() - 6 * 24 * 60 * 60 * 1000).toISOString();
+    const recurringRows = db.prepare(`
+      SELECT o.id as oppId, o.title, o.hostName, o.recurringDay, o.recurringTime,
+             u.id as userId, u.email, u.username, u.emailReminders, u.unsubToken,
+             s.lastReminderAt
+      FROM opportunities o
+      JOIN signups s ON s.opportunityId = o.id
+      JOIN users u ON u.id = s.userId
+      WHERE o.status = 'approved'
+        AND o.isRecurring = 1
+        AND u.emailReminders = 1
+        AND (s.lastReminderAt IS NULL OR s.lastReminderAt < ?)
+    `).all(sixDaysAgo) as any[];
+
+    for (const row of recurringRows) {
+      try {
+        if (row.recurringDay === null || row.recurringDay === undefined || !row.recurringTime) continue;
+        const [h, m] = (row.recurringTime as string).split(':').map(Number);
+        const dayOfWeek = row.recurringDay as number;
+        const daysSinceMonday = (now.getDay() + 6) % 7;
+        const mondayThisWeek = new Date(now);
+        mondayThisWeek.setDate(now.getDate() - daysSinceMonday);
+        mondayThisWeek.setHours(0, 0, 0, 0);
+        const daysFromMonday = (dayOfWeek + 6) % 7;
+        const closeTime = new Date(mondayThisWeek);
+        closeTime.setDate(mondayThisWeek.getDate() + daysFromMonday);
+        closeTime.setHours(h, m, 0, 0);
+        const diffMs = closeTime.getTime() - now.getTime();
+        if (diffMs >= 23 * 60 * 60 * 1000 && diffMs <= 25 * 60 * 60 * 1000) {
+          await sendEventReminderEmail(row.email, row.username, row.title, closeTime.toISOString(), row.hostName, row.unsubToken || '');
+          db.prepare('UPDATE signups SET lastReminderAt = ? WHERE opportunityId = ? AND userId = ?')
+            .run(now.toISOString(), row.oppId, row.userId);
+        }
+      } catch { /* ignore per-item failures */ }
+    }
+  } catch (err) {
+    console.error('[Reminder cron] error:', err);
+  }
+}
+
+// Run immediately, then every hour
+runReminderCron();
+setInterval(runReminderCron, 60 * 60 * 1000);
 
 export default router;

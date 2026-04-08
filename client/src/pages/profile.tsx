@@ -564,6 +564,43 @@ export default function Profile() {
             </button>
           </div>
 
+          {/* Email reminder toggle — volunteers only */}
+          {currentUser.accountType === 'volunteer' && (
+            <div className="flex items-center justify-between py-2 border-t border-border mt-2 pt-4">
+              <div className="flex-1 pr-4">
+                <p className="text-sm font-semibold text-foreground">Event reminder emails</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Get an email 24 hours before events you have signed up for
+                </p>
+                {!(currentUser.emailReminders ?? true) && (
+                  <p className="text-xs text-orange-500 mt-1 leading-relaxed">
+                    ⚠️ Important account notifications (approvals, etc.) will still be sent
+                  </p>
+                )}
+              </div>
+              <button
+                onClick={async () => {
+                  const newValue = !(currentUser.emailReminders ?? true);
+                  const result = await updateProfile({ emailReminders: newValue });
+                  if (result.success) {
+                    toast({ title: newValue ? 'Event reminders enabled' : 'Event reminders disabled' });
+                  } else {
+                    toast({ title: result.error || 'Failed to update', variant: 'destructive' });
+                  }
+                }}
+                className={cn(
+                  'relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none',
+                  (currentUser.emailReminders ?? true) ? 'bg-primary' : 'bg-muted-foreground/30'
+                )}
+              >
+                <span className={cn(
+                  'inline-block h-4 w-4 rounded-full bg-white shadow transition-transform',
+                  (currentUser.emailReminders ?? true) ? 'translate-x-6' : 'translate-x-1'
+                )} />
+              </button>
+            </div>
+          )}
+
         </div>
 
         {/* Favorite Organizations */}

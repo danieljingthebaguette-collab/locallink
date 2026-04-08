@@ -27,6 +27,7 @@ export interface Opportunity {
   modalObjectPosition?: string | null;  // CSS object-position for the post detail banner
   status?: 'pending' | 'approved' | 'denied'; // approval status (default 'approved' for existing posts)
   steps?: string[];  // Volunteer steps/instructions
+  isFeatured?: boolean;
 }
 
 export interface AppUser {
@@ -45,6 +46,9 @@ export interface AppUser {
   orgWebsite?: string | null;
   orgEmail?: string | null;
   orgPhone?: string | null;
+  emailReminders?: boolean;
+  hasSeenWelcome?: boolean;
+  unsubToken?: string | null;
 }
 
 export const SAMPLE_OPPORTUNITIES: Opportunity[] = [

@@ -11,6 +11,8 @@ import { getCardSize, isLargeCard, getTitleSize } from '@/lib/cardUtils';
 import { getCategoryColor, getModalGradient, getCategoryBorder, getCategoryLabel } from '@/lib/categoryUtils';
 import { useAuthStore, useOpportunitiesStore, useFavoritesStore, getRecurringStatus } from '@/lib/store';
 import { CATEGORIES, type Category, type Opportunity } from '@/lib/mockData';
+import LandingPage, { shouldShowLanding, skipLanding } from '@/components/LandingPage';
+import WelcomeOverlay from '@/components/WelcomeOverlay';
 import CreatePostModal from '@/components/CreatePostModal';
 import CropEditor, {
   type ImageTransform,
@@ -76,6 +78,7 @@ export default function Home() {
   });
   const [savingEdit, setSavingEdit] = useState(false);
   const [showSort, setShowSort] = useState(false);
+  const [showLanding, setShowLanding] = useState(() => !isLoggedIn && shouldShowLanding());
 
   // Bump this key whenever sort/category/search changes so cards re-animate entrance
   const [listKey, setListKey] = useState(0);
@@ -335,8 +338,15 @@ export default function Home() {
     setTogglingFav(false);
   };
 
+  if (showLanding) {
+    return <LandingPage />;
+  }
+
   return (
     <div className="min-h-screen bg-background pb-24 font-sans">
+      {isLoggedIn && currentUser && currentUser.hasSeenWelcome === false && (
+        <WelcomeOverlay />
+      )}
 
       {/* Search & Filters */}
       <div className="sticky top-16 z-40 bg-background/95 backdrop-blur-lg border-b border-border/40">

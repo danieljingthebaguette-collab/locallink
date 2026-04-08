@@ -65,9 +65,10 @@ interface AuthState {
   resendVerification: (email: string) => Promise<{ success: boolean; error?: string }>;
   forgotPassword: (email: string) => Promise<{ success: boolean; error?: string }>;
   resetPassword: (token: string, password: string) => Promise<{ success: boolean; error?: string }>;
-  updateProfile: (data: { username?: string; currentPassword?: string; newPassword?: string; notifyOnInterest?: boolean; notifyOnReopen?: boolean; profileImage?: string | null; orgDescription?: string | null; orgWebsite?: string | null; orgEmail?: string | null; orgPhone?: string | null }) => Promise<{ success: boolean; error?: string }>;
+  updateProfile: (data: { username?: string; currentPassword?: string; newPassword?: string; notifyOnInterest?: boolean; notifyOnReopen?: boolean; profileImage?: string | null; orgDescription?: string | null; orgWebsite?: string | null; orgEmail?: string | null; orgPhone?: string | null; emailReminders?: boolean }) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   loadUser: () => void;
+  markWelcomeSeen: () => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>((set) => {
@@ -209,6 +210,21 @@ export const useAuthStore = create<AuthState>((set) => {
       if (savedUser) {
         set({ isLoggedIn: true, currentUser: JSON.parse(savedUser) });
       }
+    },
+
+    markWelcomeSeen: async () => {
+      try {
+        await fetch(`${API}/auth/mark-welcome-seen`, {
+          method: 'POST',
+          headers: getAuthHeaders(),
+        });
+        const current = useAuthStore.getState().currentUser;
+        if (current) {
+          const updated = { ...current, hasSeenWelcome: true };
+          localStorage.setItem('locallink_user', JSON.stringify(updated));
+          set({ currentUser: updated });
+        }
+      } catch { /* ignore */ }
     },
   };
 });
@@ -475,6 +491,7 @@ interface AdminState {
   updateOpportunity: (adminUserId: string, oppId: string, data: Record<string, any>, reason?: string) => Promise<boolean>;
   banUser: (userId: string) => Promise<boolean>;
   unbanUser: (userId: string) => Promise<boolean>;
+  toggleFeatured: (oppId: string) => Promise<boolean>;
 }
 
 export const useAdminStore = create<AdminState>((set) => ({
@@ -612,6 +629,16 @@ export const useAdminStore = create<AdminState>((set) => ({
         return true;
       }
       return false;
+    } catch { return false; }
+  },
+
+  toggleFeatured: async (oppId) => {
+    try {
+      const res = await fetch(`${API}/admin/opportunities/${oppId}/feature`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+      });
+      return res.ok;
     } catch { return false; }
   },
 }));

@@ -36,7 +36,7 @@ export default function Admin() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const { isLoggedIn, currentUser } = useAuthStore();
-  const { users, stats, loading, fetchUsers, fetchStats, deleteUser, deleteOpportunity, updateOpportunity, banUser, unbanUser, pendingOpportunities, fetchPendingOpportunities, approveOpportunity, denyOpportunity } = useAdminStore();
+  const { users, stats, loading, fetchUsers, fetchStats, deleteUser, deleteOpportunity, updateOpportunity, banUser, unbanUser, pendingOpportunities, fetchPendingOpportunities, approveOpportunity, denyOpportunity, toggleFeatured } = useAdminStore();
   const { opportunities, fetchOpportunities } = useOpportunitiesStore();
   const [activeTab, setActiveTab] = useState<Tab>('overview');
 
@@ -167,6 +167,16 @@ export default function Admin() {
                 toast({ title: 'Failed to update opportunity', variant: 'destructive' });
               }
               return ok;
+            }}
+            onToggleFeatured={async (oppId) => {
+              const ok = await toggleFeatured(oppId);
+              if (ok) {
+                toast({ title: 'Featured status updated!' });
+                useOpportunitiesStore.setState({ loaded: false });
+                fetchOpportunities();
+              } else {
+                toast({ title: 'Failed to update featured status', variant: 'destructive' });
+              }
             }}
           />
         )}
@@ -549,11 +559,13 @@ function OpportunitiesTab({
   adminUserId,
   onDeleteOpportunity,
   onUpdateOpportunity,
+  onToggleFeatured,
 }: {
   opportunities: Opportunity[];
   adminUserId: string;
   onDeleteOpportunity: (oppId: string, reason?: string) => Promise<void>;
   onUpdateOpportunity: (oppId: string, data: Record<string, any>, reason?: string) => Promise<boolean>;
+  onToggleFeatured: (oppId: string) => Promise<void>;
 }) {
   const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -713,6 +725,18 @@ function OpportunitiesTab({
                 >
                   <Trash2 className="w-3 h-3 mr-1" /> Delete
                 </Button>
+                <button
+                  onClick={() => onToggleFeatured(opp.id)}
+                  title={opp.isFeatured ? 'Remove from featured' : 'Mark as featured'}
+                  className={cn(
+                    'p-1.5 rounded-full transition-colors',
+                    opp.isFeatured
+                      ? 'text-yellow-500 bg-yellow-500/10 hover:bg-yellow-500/20'
+                      : 'text-muted-foreground hover:bg-secondary'
+                  )}
+                >
+                  <Star className="w-4 h-4" fill={opp.isFeatured ? 'currentColor' : 'none'} />
+                </button>
               </div>
             </div>
 

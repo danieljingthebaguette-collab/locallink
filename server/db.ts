@@ -276,6 +276,41 @@ try {
   db.exec("ALTER TABLE opportunities ADD COLUMN steps TEXT DEFAULT '[]'");
 }
 
+// Migrate: add emailReminders to users (1 = opted in, 0 = unsubscribed from reminders)
+try {
+  db.prepare('SELECT emailReminders FROM users LIMIT 1').get();
+} catch {
+  db.exec('ALTER TABLE users ADD COLUMN emailReminders INTEGER DEFAULT 1');
+}
+
+// Migrate: add hasSeenWelcome to users (1 = has seen it, existing users default 1)
+try {
+  db.prepare('SELECT hasSeenWelcome FROM users LIMIT 1').get();
+} catch {
+  db.exec('ALTER TABLE users ADD COLUMN hasSeenWelcome INTEGER DEFAULT 1');
+}
+
+// Migrate: add unsubToken to users (UUID used in unsubscribe link)
+try {
+  db.prepare('SELECT unsubToken FROM users LIMIT 1').get();
+} catch {
+  db.exec('ALTER TABLE users ADD COLUMN unsubToken TEXT DEFAULT NULL');
+}
+
+// Migrate: add isFeatured to opportunities
+try {
+  db.prepare('SELECT isFeatured FROM opportunities LIMIT 1').get();
+} catch {
+  db.exec('ALTER TABLE opportunities ADD COLUMN isFeatured INTEGER DEFAULT 0');
+}
+
+// Migrate: add lastReminderAt to signups (tracks when last 24h reminder was sent)
+try {
+  db.prepare('SELECT lastReminderAt FROM signups LIMIT 1').get();
+} catch {
+  db.exec('ALTER TABLE signups ADD COLUMN lastReminderAt TEXT DEFAULT NULL');
+}
+
 // Auto-grant admin and auto-verify the designated admin email
 if (!process.env.ADMIN_EMAIL) {
   console.warn(
