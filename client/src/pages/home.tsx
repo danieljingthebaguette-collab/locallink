@@ -11,7 +11,6 @@ import { getCardSize, isLargeCard, getTitleSize } from '@/lib/cardUtils';
 import { getCategoryColor, getModalGradient, getCategoryBorder, getCategoryLabel } from '@/lib/categoryUtils';
 import { useAuthStore, useOpportunitiesStore, useFavoritesStore, getRecurringStatus } from '@/lib/store';
 import { CATEGORIES, type Category, type Opportunity } from '@/lib/mockData';
-import WelcomeOverlay from '@/components/WelcomeOverlay';
 import CreatePostModal from '@/components/CreatePostModal';
 import CropEditor, {
   type ImageTransform,
@@ -338,9 +337,6 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-background pb-24 font-sans">
-      {isLoggedIn && currentUser && currentUser.hasSeenWelcome === false && (
-        <WelcomeOverlay />
-      )}
 
       {/* Search & Filters */}
       <div className="sticky top-16 z-40 bg-background/95 backdrop-blur-lg border-b border-border/40">
