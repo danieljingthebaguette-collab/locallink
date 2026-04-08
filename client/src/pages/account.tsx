@@ -14,11 +14,7 @@ export default function Account() {
   const { toast } = useToast();
   const { isLoggedIn, currentUser, login, register, resendVerification, loading } = useAuthStore();
   const [isLoginMode, setIsLoginMode] = useState(true);
-  const [accountType, setAccountType] = useState<'volunteer' | 'organization'>(() => {
-    const params = new URLSearchParams(window.location.search);
-    const t = params.get('type');
-    return t === 'organization' ? 'organization' : 'volunteer';
-  });
+  const [accountType, setAccountType] = useState<'volunteer' | 'organization'>('volunteer');
   const [formError, setFormError] = useState('');
   const [fieldErrors, setFieldErrors] = useState<{ username?: string; email?: string; password?: string }>({});
   const [formData, setFormData] = useState({ username: '', email: '', password: '' });
