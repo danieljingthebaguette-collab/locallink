@@ -1010,7 +1010,7 @@ router.get('/api/admin/analytics', requireAdmin, (req: Request, res: Response) =
 router.get('/api/admin/stats', requireAdmin, (_req: Request, res: Response) => {
   try {
     const totalUsers = (db.prepare('SELECT COUNT(*) as count FROM users').get() as any).count;
-    const totalOpps = (db.prepare('SELECT COUNT(*) as count FROM opportunities').get() as any).count;
+    const totalOpps = (db.prepare("SELECT COUNT(*) as count FROM opportunities WHERE status = 'approved'").get() as any).count;
     const totalSignups = (db.prepare('SELECT COUNT(*) as count FROM signups').get() as any).count;
     return res.json({ totalUsers, totalOpps, totalSignups });
   } catch (err: any) {
