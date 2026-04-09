@@ -307,37 +307,114 @@ function OverviewTab({ stats, users, opportunities }: { stats: any; users: AppUs
         </div>
 
         {analyticsLoading ? (
-          <div className="flex items-end gap-1 h-28">
-            {Array.from({ length: rangeDays === 365 ? 12 : rangeDays }).map((_, i) => (
-              <div key={i} className="flex-1 flex flex-col items-center gap-0.5">
-                <div className="w-full rounded-t-sm bg-muted animate-pulse" style={{ height: `${20 + Math.random() * 60}%`, minHeight: 8 }} />
-              </div>
-            ))}
+          <div className="h-28">
+            <svg viewBox="0 0 100 88" preserveAspectRatio="none" className="w-full block" style={{ height: '88px' }}>
+              <polyline
+                vectorEffect="non-scaling-stroke"
+                points="0,60 10,50 20,55 30,35 40,40 50,25 60,30 70,20 80,28 90,18 100,22"
+                fill="none"
+                stroke="currentColor"
+                strokeOpacity="0.15"
+                strokeWidth="1.5"
+                strokeLinejoin="round"
+                strokeLinecap="round"
+                className="animate-pulse text-violet-500"
+              />
+              <polyline
+                vectorEffect="non-scaling-stroke"
+                points="0,70 10,65 20,68 30,55 40,58 50,48 60,52 70,42 80,46 90,38 100,40"
+                fill="none"
+                stroke="currentColor"
+                strokeOpacity="0.15"
+                strokeWidth="1.5"
+                strokeLinejoin="round"
+                strokeLinecap="round"
+                className="animate-pulse text-sky-400"
+              />
+            </svg>
           </div>
         ) : chartData.length > 0 ? (
-          <div className="flex items-end gap-1 h-28">
-            {chartData.map((d) => (
-              <div
-                key={d.date}
-                className="flex-1 flex flex-col items-center gap-0.5 min-w-0 cursor-default"
-                onMouseEnter={() => setHoveredDay(d)}
-                onMouseLeave={() => setHoveredDay(null)}
-              >
-                <div className="w-full flex gap-[2px] items-end" style={{ height: '88px' }}>
-                  <div
-                    className={cn('flex-1 rounded-t-sm transition-colors', hoveredDay?.date === d.date ? 'bg-violet-500' : 'bg-violet-500/60')}
-                    style={{ height: `${maxSignups > 0 ? Math.max((d.signups / maxSignups) * 100, d.signups > 0 ? 5 : 0) : 0}%` }}
-                  />
-                  <div
-                    className={cn('flex-1 rounded-t-sm transition-colors', hoveredDay?.date === d.date ? 'bg-sky-400' : 'bg-sky-400/60')}
-                    style={{ height: `${maxUsers > 0 ? Math.max((d.users / maxUsers) * 100, d.users > 0 ? 5 : 0) : 0}%` }}
-                  />
-                </div>
-                <p className="text-[7px] text-muted-foreground leading-none mt-0.5 w-full text-center truncate">
+          <div className="h-28">
+            <svg
+              viewBox="0 0 100 88"
+              preserveAspectRatio="none"
+              className="w-full block"
+              style={{ height: '88px' }}
+            >
+              {/* Signups line */}
+              {chartData.length > 1 && (
+                <polyline
+                  vectorEffect="non-scaling-stroke"
+                  points={chartData.map((d, i) => {
+                    const x = (i / (chartData.length - 1)) * 100;
+                    const y = 88 - (maxSignups > 0 ? Math.max((d.signups / maxSignups) * 80, d.signups > 0 ? 4 : 0) : 2);
+                    return `${x},${y}`;
+                  }).join(' ')}
+                  fill="none"
+                  stroke="rgb(139,92,246)"
+                  strokeOpacity="0.75"
+                  strokeWidth="1.5"
+                  strokeLinejoin="round"
+                  strokeLinecap="round"
+                />
+              )}
+              {/* Users line */}
+              {chartData.length > 1 && (
+                <polyline
+                  vectorEffect="non-scaling-stroke"
+                  points={chartData.map((d, i) => {
+                    const x = (i / (chartData.length - 1)) * 100;
+                    const y = 88 - (maxUsers > 0 ? Math.max((d.users / maxUsers) * 80, d.users > 0 ? 4 : 0) : 2);
+                    return `${x},${y}`;
+                  }).join(' ')}
+                  fill="none"
+                  stroke="rgb(56,189,248)"
+                  strokeOpacity="0.75"
+                  strokeWidth="1.5"
+                  strokeLinejoin="round"
+                  strokeLinecap="round"
+                />
+              )}
+              {/* Per-day dots + invisible hit areas */}
+              {chartData.map((d, i) => {
+                const x = chartData.length > 1 ? (i / (chartData.length - 1)) * 100 : 50;
+                const sy = 88 - (maxSignups > 0 ? Math.max((d.signups / maxSignups) * 80, d.signups > 0 ? 4 : 0) : 2);
+                const uy = 88 - (maxUsers > 0 ? Math.max((d.users / maxUsers) * 80, d.users > 0 ? 4 : 0) : 2);
+                const isHovered = hoveredDay?.date === d.date;
+                const colW = 100 / chartData.length;
+                return (
+                  <g key={d.date}>
+                    <rect
+                      x={x - colW / 2} y={0} width={colW} height={88}
+                      fill="transparent"
+                      onMouseEnter={() => setHoveredDay(d)}
+                      onMouseLeave={() => setHoveredDay(null)}
+                      style={{ cursor: 'default' }}
+                    />
+                    <circle
+                      vectorEffect="non-scaling-stroke"
+                      cx={x} cy={sy} r={isHovered ? 3 : 2.5}
+                      fill={isHovered ? 'rgb(139,92,246)' : 'rgba(139,92,246,0.55)'}
+                      style={{ pointerEvents: 'none' }}
+                    />
+                    <circle
+                      vectorEffect="non-scaling-stroke"
+                      cx={x} cy={uy} r={isHovered ? 3 : 2.5}
+                      fill={isHovered ? 'rgb(56,189,248)' : 'rgba(56,189,248,0.55)'}
+                      style={{ pointerEvents: 'none' }}
+                    />
+                  </g>
+                );
+              })}
+            </svg>
+            {/* X-axis labels */}
+            <div className="flex items-center mt-0.5">
+              {chartData.map((d) => (
+                <p key={d.date} className="flex-1 text-[7px] text-muted-foreground leading-none text-center truncate">
                   {rangeDays === 365 ? d.date.slice(0, 7).replace('-', '/') : d.date.slice(5).replace('-', '/')}
                 </p>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         ) : (
           <div className="flex items-center justify-center h-28 text-sm text-muted-foreground">No data for this period</div>
@@ -347,7 +424,7 @@ function OverviewTab({ stats, users, opportunities }: { stats: any; users: AppUs
         <div className="flex items-center justify-between mt-4 pt-3 border-t border-border/30 gap-3 flex-wrap">
           <div className="flex items-center gap-5">
             <div className="flex items-center gap-1.5">
-              <div className="w-2.5 h-2.5 rounded-sm bg-violet-500/80 flex-shrink-0" />
+              <div className="w-5 h-[2px] rounded-full bg-violet-500/80 flex-shrink-0" />
               <span className="text-xs text-muted-foreground">
                 <span className="font-bold text-foreground text-sm mr-0.5">
                   {hoveredDay ? hoveredDay.signups : totalSignups}
@@ -356,7 +433,7 @@ function OverviewTab({ stats, users, opportunities }: { stats: any; users: AppUs
               </span>
             </div>
             <div className="flex items-center gap-1.5">
-              <div className="w-2.5 h-2.5 rounded-sm bg-sky-400/80 flex-shrink-0" />
+              <div className="w-5 h-[2px] rounded-full bg-sky-400/80 flex-shrink-0" />
               <span className="text-xs text-muted-foreground">
                 <span className="font-bold text-foreground text-sm mr-0.5">
                   {hoveredDay ? hoveredDay.users : totalUsers}
@@ -368,7 +445,7 @@ function OverviewTab({ stats, users, opportunities }: { stats: any; users: AppUs
           <p className="text-[10px] text-muted-foreground italic">
             {hoveredDay
               ? `${hoveredDay.date}${rangeDays === 365 ? ' (monthly total)' : ''}`
-              : `${activeRange.title.toLowerCase()} totals · hover a bar for details`}
+              : `${activeRange.title.toLowerCase()} totals · hover a point for details`}
           </p>
         </div>
       </div>
