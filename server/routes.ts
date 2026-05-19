@@ -134,8 +134,8 @@ router.post('/api/auth/register', async (req: Request, res: Response) => {
     const id = randomUUID();
     const createdAt = new Date().toISOString();
     const isAdmin = email === ADMIN_EMAIL ? 1 : 0;
-    // Admin email is auto-verified; all other users must verify
-    const emailVerified = isAdmin ? 1 : 0;
+    // Auto-verify when email is not configured (no SMTP host set), otherwise require verification
+    const emailVerified = (isAdmin || !process.env.EMAIL_HOST) ? 1 : 0;
     const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
     const unsubToken = randomUUID();
 
@@ -155,11 +155,14 @@ router.post('/api/auth/register', async (req: Request, res: Response) => {
       console.error('Failed to send verification email:', err.message);
     });
 
-    // Don't issue a JWT yet — user must verify email before logging in
+    // If email is not configured, user is already verified and can log in immediately
+    const needsVerification = !!process.env.EMAIL_HOST && !isAdmin;
     return res.status(201).json({
-      needsVerification: true,
+      needsVerification,
       email,
-      message: 'Account created. Please check your email to verify your account.',
+      message: needsVerification
+        ? 'Account created. Please check your email to verify your account.'
+        : 'Account created. You can now log in.',
     });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
