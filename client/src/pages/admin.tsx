@@ -221,9 +221,9 @@ export default function Admin() {
           <JoinLinksTab
             links={joinLinks}
             onCreate={async (orgName, category) => {
-              const link = await createJoinLink(orgName, category);
-              if (link) toast({ title: `Link created: /join/${link.slug}` });
-              else toast({ title: 'Failed to create link (slug may already exist)', variant: 'destructive' });
+              const result = await createJoinLink(orgName, category);
+              if (result.link) toast({ title: `Link created: /join/${result.link.slug}` });
+              else toast({ title: result.error || 'Failed to create link', variant: 'destructive' });
             }}
             onDelete={async (slug) => {
               const ok = await deleteJoinLink(slug);

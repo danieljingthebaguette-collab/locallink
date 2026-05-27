@@ -126,8 +126,7 @@ export const useAuthStore = create<AuthState>((set) => {
           return { success: false, error: data.error || 'Registration failed' };
         }
         set({ loading: false });
-        // Registration succeeded — user must verify their email before logging in
-        return { success: true, needsVerification: true, email: data.email };
+        return { success: true, needsVerification: !!data.needsVerification, email: data.email };
       } catch {
         set({ loading: false });
         return { success: false, error: 'Network error' };
@@ -495,7 +494,7 @@ interface AdminState {
   verifyUser: (userId: string) => Promise<boolean>;
   joinLinks: JoinLink[];
   fetchJoinLinks: () => Promise<void>;
-  createJoinLink: (orgName: string, category?: string) => Promise<JoinLink | null>;
+  createJoinLink: (orgName: string, category?: string) => Promise<{ link: JoinLink | null; error?: string }>;
   deleteJoinLink: (slug: string) => Promise<boolean>;
 }
 
@@ -686,10 +685,13 @@ export const useAdminStore = create<AdminState>((set) => ({
       if (res.ok) {
         const link = await res.json();
         set(s => ({ joinLinks: [link, ...s.joinLinks] }));
-        return link;
+        return { link };
       }
-      return null;
-    } catch { return null; }
+      const errData = await res.json().catch(() => ({}));
+      return { link: null, error: errData.error || `Server error (${res.status})` };
+    } catch (e: any) {
+      return { link: null, error: e?.message || 'Network error' };
+    }
   },
 
   deleteJoinLink: async (slug) => {

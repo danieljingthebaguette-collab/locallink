@@ -450,7 +450,7 @@ router.get('/api/users/:id/profile', (req: Request, res: Response) => {
 router.get('/api/org/:id', (req: Request, res: Response) => {
   try {
     const user = db.prepare(
-      'SELECT id, username, profileImage, accountType, orgDescription, orgWebsite, orgEmail, orgPhone, createdAt FROM users WHERE id = ? AND accountType = ?'
+      'SELECT id, username, profileImage, accountType, orgDescription, orgWebsite, orgEmail, orgPhone, verified, createdAt FROM users WHERE id = ? AND accountType = ?'
     ).get(req.params.id, 'organization') as any;
     if (!user) return res.status(404).json({ error: 'Organization not found' });
 
@@ -465,6 +465,7 @@ router.get('/api/org/:id', (req: Request, res: Response) => {
     return res.json({
       ...user,
       profileImage: user.profileImage || null,
+      verified: !!user.verified,
       posts: postsWithData,
     });
   } catch (err: any) {
@@ -798,9 +799,9 @@ router.delete('/api/favorites/:orgId', requireAuth, (req: AuthRequest, res: Resp
 router.get('/api/admin/users', requireAdmin, (_req: Request, res: Response) => {
   try {
     const users = db.prepare(
-      'SELECT id, username, email, isAdmin, accountType, banned, createdAt FROM users ORDER BY createdAt DESC'
+      'SELECT id, username, email, isAdmin, accountType, banned, verified, createdAt FROM users ORDER BY createdAt DESC'
     ).all();
-    return res.json((users as any[]).map(u => ({ ...u, isAdmin: !!u.isAdmin, banned: !!u.banned })));
+    return res.json((users as any[]).map(u => ({ ...u, isAdmin: !!u.isAdmin, banned: !!u.banned, verified: !!u.verified })));
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }

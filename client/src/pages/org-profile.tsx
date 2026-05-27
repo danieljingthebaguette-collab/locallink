@@ -3,6 +3,7 @@ import { useParams, useLocation } from 'wouter';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { Building2, Globe, Mail, Phone, Calendar, MapPin, Clock, Users, ArrowLeft, Loader2 } from 'lucide-react';
+import { VerifiedBadge } from '@/components/VerifiedBadge';
 import { Button } from '@/components/ui/button';
 import { useAuthStore, useFavoritesStore } from '@/lib/store';
 import { Heart } from 'lucide-react';
@@ -18,6 +19,7 @@ interface OrgProfile {
   orgWebsite: string | null;
   orgEmail: string | null;
   orgPhone: string | null;
+  verified: boolean;
   createdAt: string;
   posts: Opportunity[];
 }
@@ -123,7 +125,10 @@ export default function OrgProfilePage() {
             <div className="flex-1 min-w-0">
               <div className="flex items-start justify-between gap-2">
                 <div>
-                  <h1 className="text-2xl font-heading font-bold text-foreground">{org.username}</h1>
+                  <h1 className="text-2xl font-heading font-bold text-foreground flex items-center gap-2">
+                    {org.username}
+                    {org.verified && <VerifiedBadge className="w-6 h-6 flex-shrink-0" />}
+                  </h1>
                   <p className="text-xs text-muted-foreground mt-0.5">
                     🏢 Organization · Member since {new Date(org.createdAt).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
                   </p>
