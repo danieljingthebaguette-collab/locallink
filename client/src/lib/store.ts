@@ -61,7 +61,7 @@ interface AuthState {
   currentUser: AppUser | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string; needsVerification?: boolean; suspended?: boolean; email?: string }>;
-  register: (username: string, email: string, password: string, accountType?: string) => Promise<{ success: boolean; error?: string; needsVerification?: boolean; email?: string }>;
+  register: (username: string, email: string, password: string, accountType?: string, joinSlug?: string) => Promise<{ success: boolean; error?: string; needsVerification?: boolean; email?: string }>;
   resendVerification: (email: string) => Promise<{ success: boolean; error?: string }>;
   forgotPassword: (email: string) => Promise<{ success: boolean; error?: string }>;
   resetPassword: (token: string, password: string) => Promise<{ success: boolean; error?: string }>;
@@ -112,13 +112,13 @@ export const useAuthStore = create<AuthState>((set) => {
       }
     },
 
-    register: async (username, email, password, accountType = 'volunteer') => {
+    register: async (username, email, password, accountType = 'volunteer', joinSlug?: string) => {
       set({ loading: true });
       try {
         const res = await fetch(`${API}/auth/register`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username, email, password, accountType }),
+          body: JSON.stringify({ username, email, password, accountType, ...(joinSlug ? { joinSlug } : {}) }),
         });
         const data = await res.json();
         if (!res.ok) {
@@ -492,6 +492,20 @@ interface AdminState {
   banUser: (userId: string) => Promise<boolean>;
   unbanUser: (userId: string) => Promise<boolean>;
   toggleFeatured: (oppId: string) => Promise<boolean>;
+  verifyUser: (userId: string) => Promise<boolean>;
+  joinLinks: JoinLink[];
+  fetchJoinLinks: () => Promise<void>;
+  createJoinLink: (orgName: string, category?: string) => Promise<JoinLink | null>;
+  deleteJoinLink: (slug: string) => Promise<boolean>;
+}
+
+export interface JoinLink {
+  slug: string;
+  orgName: string;
+  category: string | null;
+  createdAt: string;
+  claimedAt: string | null;
+  claimedBy: string | null;
 }
 
 export const useAdminStore = create<AdminState>((set) => ({
@@ -499,6 +513,7 @@ export const useAdminStore = create<AdminState>((set) => ({
   stats: null,
   loading: false,
   pendingOpportunities: [],
+  joinLinks: [],
 
   fetchPendingOpportunities: async () => {
     try {
@@ -639,6 +654,54 @@ export const useAdminStore = create<AdminState>((set) => ({
         headers: getAuthHeaders(),
       });
       return res.ok;
+    } catch { return false; }
+  },
+
+  verifyUser: async (userId) => {
+    try {
+      const res = await fetch(`${API}/admin/users/${userId}/verify`, { method: 'PUT', headers: getAuthHeaders() });
+      if (res.ok) {
+        const data = await res.json();
+        set(s => ({ users: s.users.map(u => u.id === userId ? { ...u, verified: data.verified } : u) }));
+        return true;
+      }
+      return false;
+    } catch { return false; }
+  },
+
+  joinLinks: [],
+
+  fetchJoinLinks: async () => {
+    try {
+      const res = await fetch(`${API}/admin/join-links`, { headers: getAuthHeaders() });
+      if (res.ok) set({ joinLinks: await res.json() });
+    } catch { /* ignore */ }
+  },
+
+  createJoinLink: async (orgName, category) => {
+    try {
+      const res = await fetch(`${API}/admin/join-links`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ orgName, category }),
+      });
+      if (res.ok) {
+        const link = await res.json();
+        set(s => ({ joinLinks: [link, ...s.joinLinks] }));
+        return link;
+      }
+      return null;
+    } catch { return null; }
+  },
+
+  deleteJoinLink: async (slug) => {
+    try {
+      const res = await fetch(`${API}/admin/join-links/${slug}`, { method: 'DELETE', headers: getAuthHeaders() });
+      if (res.ok) {
+        set(s => ({ joinLinks: s.joinLinks.filter(l => l.slug !== slug) }));
+        return true;
+      }
+      return false;
     } catch { return false; }
   },
 }));

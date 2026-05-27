@@ -12,6 +12,7 @@ import { getCategoryColor, getModalGradient, getCategoryBorder, getCategoryLabel
 import { useAuthStore, useOpportunitiesStore, useFavoritesStore, getRecurringStatus } from '@/lib/store';
 import { CATEGORIES, type Category, type Opportunity } from '@/lib/mockData';
 import CreatePostModal from '@/components/CreatePostModal';
+import { VerifiedBadge } from '@/pages/admin';
 import CropEditor, {
   type ImageTransform,
   DEFAULT_TRANSFORM,
@@ -821,12 +822,17 @@ export default function Home() {
                           </span>
                         )}
                       </div>
-                      <button
-                        onClick={() => { setSelectedCard(null); navigate(`/org/${selectedCard.hostId}`); }}
-                        className="text-base font-semibold truncate hover:underline text-left"
-                      >
-                        {selectedCard.hostName}
-                      </button>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => { setSelectedCard(null); navigate(`/org/${selectedCard.hostId}`); }}
+                          className="text-base font-semibold truncate hover:underline text-left"
+                        >
+                          {selectedCard.hostName}
+                        </button>
+                        {selectedCard.hostVerified && (
+                          <VerifiedBadge className="w-5 h-5 flex-shrink-0" />
+                        )}
+                      </div>
                     </div>
                     {isLoggedIn && currentUser?.id !== selectedCard.hostId && (
                       <motion.button

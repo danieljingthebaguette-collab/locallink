@@ -13,11 +13,17 @@ export default function Account() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const { isLoggedIn, currentUser, login, register, resendVerification, loading } = useAuthStore();
-  const [isLoginMode, setIsLoginMode] = useState(true);
-  const [accountType, setAccountType] = useState<'volunteer' | 'organization'>('volunteer');
+
+  // Check for a join-link prefill stored by /join/:slug
+  const joinPrefill = (() => {
+    try { return JSON.parse(sessionStorage.getItem('locallink_join') || 'null'); } catch { return null; }
+  })();
+
+  const [isLoginMode, setIsLoginMode] = useState(!joinPrefill); // open register tab if coming from join link
+  const [accountType, setAccountType] = useState<'volunteer' | 'organization'>(joinPrefill ? 'organization' : 'volunteer');
   const [formError, setFormError] = useState('');
   const [fieldErrors, setFieldErrors] = useState<{ username?: string; email?: string; password?: string }>({});
-  const [formData, setFormData] = useState({ username: '', email: '', password: '' });
+  const [formData, setFormData] = useState({ username: joinPrefill?.orgName || '', email: '', password: '' });
 
   // After registration, show the "check your email" screen
   const [pendingVerificationEmail, setPendingVerificationEmail] = useState<string | null>(null);
@@ -86,11 +92,14 @@ export default function Account() {
         setFormError(result.error || 'Login failed');
       }
     } else {
-      const result = await register(formData.username, formData.email, formData.password, accountType);
-      if (result.success && result.needsVerification) {
-        // Switch to the "check your email" screen
-        setPendingVerificationEmail(result.email || formData.email);
-      } else if (!result.success) {
+      const result = await register(formData.username, formData.email, formData.password, accountType, joinPrefill?.slug);
+      if (result.success) {
+        sessionStorage.removeItem('locallink_join'); // clear prefill after successful registration
+        if (result.needsVerification) {
+          setPendingVerificationEmail(result.email || formData.email);
+        }
+        // If no verification needed (join link or no email config), let them log in
+      } else {
         setFormError(result.error || 'Registration failed');
       }
     }

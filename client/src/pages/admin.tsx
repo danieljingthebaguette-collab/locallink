@@ -28,15 +28,18 @@ import {
   Loader2,
   Flag,
   MessageSquare,
+  Link2,
+  Copy,
+  BadgeCheck,
 } from 'lucide-react';
 
-type Tab = 'overview' | 'users' | 'opportunities' | 'verify' | 'reports' | 'feedback' | 'appeals';
+type Tab = 'overview' | 'users' | 'opportunities' | 'verify' | 'reports' | 'feedback' | 'appeals' | 'join-links';
 
 export default function Admin() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const { isLoggedIn, currentUser } = useAuthStore();
-  const { users, stats, loading, fetchUsers, fetchStats, deleteUser, deleteOpportunity, updateOpportunity, banUser, unbanUser, pendingOpportunities, fetchPendingOpportunities, approveOpportunity, denyOpportunity, toggleFeatured } = useAdminStore();
+  const { users, stats, loading, fetchUsers, fetchStats, deleteUser, deleteOpportunity, updateOpportunity, banUser, unbanUser, pendingOpportunities, fetchPendingOpportunities, approveOpportunity, denyOpportunity, toggleFeatured, verifyUser, joinLinks, fetchJoinLinks, createJoinLink, deleteJoinLink } = useAdminStore();
   const { opportunities, fetchOpportunities } = useOpportunitiesStore();
   const [activeTab, setActiveTab] = useState<Tab>('overview');
 
@@ -56,6 +59,7 @@ export default function Admin() {
       fetchStats(currentUser.id);
       fetchOpportunities();
       fetchPendingOpportunities();
+      fetchJoinLinks();
     }
   }, [currentUser]);
 
@@ -69,6 +73,7 @@ export default function Admin() {
     { value: 'reports', label: 'Reports', icon: <Flag className="w-4 h-4" /> },
     { value: 'feedback', label: 'Feedback', icon: <MessageSquare className="w-4 h-4" /> },
     { value: 'appeals', label: 'Appeals', icon: <Scale className="w-4 h-4" /> },
+    { value: 'join-links', label: 'Join Links', icon: <Link2 className="w-4 h-4" /> },
   ];
 
   return (
@@ -123,7 +128,6 @@ export default function Admin() {
               if (ok) {
                 toast({ title: 'User deleted' });
                 fetchStats(currentUser.id);
-                // Reset and refetch opportunities so deleted user's posts disappear from the feed
                 useOpportunitiesStore.setState({ loaded: false });
                 fetchOpportunities();
               } else {
@@ -139,6 +143,11 @@ export default function Admin() {
               const ok = await unbanUser(userId);
               if (ok) toast({ title: 'User reinstated' });
               else toast({ title: 'Failed to reinstate user', variant: 'destructive' });
+            }}
+            onVerifyUser={async (userId) => {
+              const ok = await verifyUser(userId);
+              if (ok) toast({ title: 'Verification badge updated' });
+              else toast({ title: 'Failed to update badge', variant: 'destructive' });
             }}
           />
         )}
@@ -207,6 +216,22 @@ export default function Admin() {
         {activeTab === 'reports' && <ReportsTab toast={toast} />}
         {activeTab === 'feedback' && <FeedbackTab toast={toast} />}
         {activeTab === 'appeals' && <AppealsTab toast={toast} onUnbanUser={unbanUser} />}
+        {activeTab === 'join-links' && (
+          <JoinLinksTab
+            links={joinLinks}
+            onCreate={async (orgName, category) => {
+              const link = await createJoinLink(orgName, category);
+              if (link) toast({ title: `Link created: /join/${link.slug}` });
+              else toast({ title: 'Failed to create link (slug may already exist)', variant: 'destructive' });
+            }}
+            onDelete={async (slug) => {
+              const ok = await deleteJoinLink(slug);
+              if (ok) toast({ title: 'Link deleted' });
+              else toast({ title: 'Failed to delete link', variant: 'destructive' });
+            }}
+            toast={toast}
+          />
+        )}
       </main>
     </div>
   );
@@ -503,6 +528,7 @@ function UsersTab({
   onDeleteUser,
   onBanUser,
   onUnbanUser,
+  onVerifyUser,
 }: {
   users: AppUser[];
   adminUserId: string;
@@ -510,6 +536,7 @@ function UsersTab({
   onDeleteUser: (userId: string) => Promise<void>;
   onBanUser: (userId: string) => Promise<void>;
   onUnbanUser: (userId: string) => Promise<void>;
+  onVerifyUser: (userId: string) => Promise<void>;
 }) {
   const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -580,8 +607,14 @@ function UsersTab({
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="text-sm font-semibold text-foreground">{user.username}</p>
+                      {user.verified && (
+                        <VerifiedBadge className="w-4 h-4" />
+                      )}
                       {user.isAdmin && (
                         <span className="bg-red-500/10 text-red-500 px-2 py-0.5 rounded-full text-[10px] font-medium">Admin</span>
+                      )}
+                      {user.accountType === 'organization' && (
+                        <span className="bg-primary/10 text-primary px-2 py-0.5 rounded-full text-[10px] font-medium">Org</span>
                       )}
                       {user.banned && (
                         <span className="bg-amber-500/10 text-amber-600 px-2 py-0.5 rounded-full text-[10px] font-medium">Suspended</span>
@@ -591,7 +624,21 @@ function UsersTab({
                   </div>
                 </div>
                 {user.id !== adminUserId && (
-                  <div className="flex items-center gap-2 flex-shrink-0">
+                  <div className="flex items-center gap-2 flex-shrink-0 flex-wrap justify-end">
+                    {user.accountType === 'organization' && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className={cn('rounded-full text-xs', user.verified
+                          ? 'text-sky-600 border-sky-300 hover:bg-sky-50 dark:hover:bg-sky-950'
+                          : 'text-muted-foreground border-border hover:bg-accent')}
+                        onClick={() => onVerifyUser(user.id)}
+                        title={user.verified ? 'Remove verification badge' : 'Grant verification badge'}
+                      >
+                        <BadgeCheck className="w-3 h-3 mr-1" />
+                        {user.verified ? 'Unverify' : 'Verify'}
+                      </Button>
+                    )}
                     {user.banned ? (
                       <Button
                         size="sm"
@@ -1314,6 +1361,160 @@ function FeedbackTab({ toast }: { toast: any }) {
                 <button onClick={() => deleteFeedback(f.id)} className="p-1.5 rounded-full hover:bg-secondary transition-colors flex-shrink-0">
                   <X className="w-3.5 h-3.5 text-muted-foreground" />
                 </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ===== Verified Badge SVG =====
+export function VerifiedBadge({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 22 22" className={className} aria-label="Verified organization" fill="none">
+      <path
+        fill="#1d9bf0"
+        d="M20.396 11c-.018-.646-.215-1.275-.57-1.816-.354-.54-.852-.972-1.438-1.246.223-.607.27-1.264.14-1.897-.131-.634-.437-1.218-.882-1.687-.47-.445-1.053-.75-1.687-.882-.633-.13-1.29-.083-1.897.14-.273-.587-.704-1.086-1.245-1.44S11.647 1.62 11 1.604c-.646.017-1.273.213-1.813.568s-.969.854-1.24 1.44c-.608-.223-1.267-.272-1.902-.14-.635.13-1.22.436-1.69.882-.445.47-.749 1.055-.878 1.688-.13.633-.08 1.29.144 1.896-.587.274-1.087.705-1.443 1.245-.356.54-.555 1.17-.574 1.817.02.648.218 1.276.574 1.817.356.54.856.972 1.443 1.245-.224.606-.274 1.263-.144 1.896.13.634.433 1.218.877 1.688.47.443 1.054.747 1.687.878.633.132 1.29.084 1.897-.136.274.586.705 1.084 1.246 1.439.54.354 1.17.551 1.816.569.647-.016 1.276-.213 1.817-.567s.972-.854 1.245-1.44c.604.239 1.266.296 1.903.164.636-.132 1.22-.447 1.68-.907.46-.46.747-1.05.872-1.686.125-.634.065-1.292-.18-1.902.589-.274 1.09-.715 1.44-1.268.35-.553.537-1.189.54-1.837l-.002.034z"
+      />
+      <path
+        fill="white"
+        d="M9.662 14.028l-2.474-2.47.956-.96 1.518 1.516 3.837-3.837.96.956-4.797 4.795z"
+      />
+    </svg>
+  );
+}
+
+// ===== Join Links Tab =====
+import type { JoinLink } from '@/lib/store';
+
+function JoinLinksTab({
+  links,
+  onCreate,
+  onDelete,
+  toast,
+}: {
+  links: JoinLink[];
+  onCreate: (orgName: string, category?: string) => Promise<void>;
+  onDelete: (slug: string) => Promise<void>;
+  toast: ReturnType<typeof useToast>['toast'];
+}) {
+  const [orgName, setOrgName] = useState('');
+  const [category, setCategory] = useState('');
+  const [creating, setCreating] = useState(false);
+  const BASE = typeof window !== 'undefined' ? window.location.origin : 'https://localnetlink.com';
+
+  const handleCreate = async () => {
+    if (!orgName.trim()) return;
+    setCreating(true);
+    await onCreate(orgName.trim(), category || undefined);
+    setOrgName('');
+    setCategory('');
+    setCreating(false);
+  };
+
+  const copyLink = (slug: string) => {
+    navigator.clipboard.writeText(`${BASE}/join/${slug}`);
+    toast({ title: 'Link copied to clipboard!' });
+  };
+
+  const claimed = links.filter(l => l.claimedAt);
+  const unclaimed = links.filter(l => !l.claimedAt);
+
+  return (
+    <div className="space-y-6">
+      {/* Create new link */}
+      <div className="rounded-2xl bg-card border border-border p-6 space-y-4">
+        <h3 className="font-heading font-semibold text-foreground flex items-center gap-2">
+          <Link2 className="w-5 h-5 text-primary" /> Generate a Join Link
+        </h3>
+        <p className="text-sm text-muted-foreground">
+          Create a custom link like <span className="font-mono text-foreground">localnetlink.com/join/org-name</span> to send to an organization.
+          They'll land on a pre-filled registration page and receive a verified badge automatically.
+        </p>
+        <div className="flex gap-3 flex-wrap">
+          <Input
+            placeholder="Organization name (e.g. Montgomery EMS)"
+            value={orgName}
+            onChange={e => setOrgName(e.target.value)}
+            className="flex-1 min-w-48 h-11 rounded-xl border-2 border-border"
+            onKeyDown={e => e.key === 'Enter' && handleCreate()}
+          />
+          <select
+            value={category}
+            onChange={e => setCategory(e.target.value)}
+            className="h-11 rounded-xl border-2 border-border bg-background px-3 text-sm text-foreground"
+          >
+            <option value="">Any category</option>
+            <option value="volunteer">Volunteer</option>
+            <option value="education">Education</option>
+            <option value="fitness">Fitness</option>
+            <option value="community">Community</option>
+            <option value="environment">Environment</option>
+          </select>
+          <Button onClick={handleCreate} disabled={creating || !orgName.trim()} className="h-11 rounded-xl px-6">
+            {creating ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Link2 className="w-4 h-4 mr-2" />}
+            Generate Link
+          </Button>
+        </div>
+      </div>
+
+      {/* Stats row */}
+      <div className="grid grid-cols-2 gap-4">
+        <div className="rounded-2xl bg-card border border-border p-4 text-center">
+          <p className="text-2xl font-bold text-foreground">{unclaimed.length}</p>
+          <p className="text-xs text-muted-foreground mt-1">Links Sent (unclaimed)</p>
+        </div>
+        <div className="rounded-2xl bg-card border border-border p-4 text-center">
+          <p className="text-2xl font-bold text-green-500">{claimed.length}</p>
+          <p className="text-xs text-muted-foreground mt-1">Orgs Registered</p>
+        </div>
+      </div>
+
+      {/* Link list */}
+      {links.length === 0 ? (
+        <div className="text-center py-16 text-muted-foreground">
+          <Link2 className="w-10 h-10 mx-auto mb-3 opacity-30" />
+          <p>No join links yet. Generate one above and send it to an organization.</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {links.map(link => (
+            <div key={link.slug} className={cn('rounded-2xl bg-card border border-border p-4 flex items-center justify-between gap-3 flex-wrap', link.claimedAt && 'border-green-500/30 bg-green-500/5')}>
+              <div className="space-y-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="text-sm font-semibold text-foreground">{link.orgName}</p>
+                  {link.claimedAt ? (
+                    <span className="text-[10px] font-bold bg-green-500/15 text-green-600 px-2 py-0.5 rounded-full flex items-center gap-1">
+                      <VerifiedBadge className="w-3 h-3" /> Registered
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-bold bg-muted text-muted-foreground px-2 py-0.5 rounded-full">Pending</span>
+                  )}
+                  {link.category && (
+                    <span className="text-[10px] font-semibold bg-primary/10 text-primary px-2 py-0.5 rounded-full capitalize">{link.category}</span>
+                  )}
+                </div>
+                <p className="text-xs font-mono text-muted-foreground truncate">{BASE}/join/{link.slug}</p>
+                {link.claimedAt && (
+                  <p className="text-xs text-green-600">Registered {new Date(link.claimedAt).toLocaleDateString()}</p>
+                )}
+              </div>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                {!link.claimedAt && (
+                  <Button size="sm" variant="outline" className="rounded-full text-xs" onClick={() => copyLink(link.slug)}>
+                    <Copy className="w-3 h-3 mr-1" /> Copy Link
+                  </Button>
+                )}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="rounded-full text-xs text-red-500 border-red-200 hover:bg-red-50 dark:hover:bg-red-950"
+                  onClick={() => onDelete(link.slug)}
+                >
+                  <Trash2 className="w-3 h-3" />
+                </Button>
               </div>
             </div>
           ))}

@@ -118,6 +118,15 @@ db.exec(`
     createdAt TEXT NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS onboarding_links (
+    slug TEXT PRIMARY KEY,
+    orgName TEXT NOT NULL,
+    category TEXT,
+    createdAt TEXT NOT NULL,
+    claimedAt TEXT DEFAULT NULL,
+    claimedBy TEXT DEFAULT NULL
+  );
+
 `);
 
 // Migrate: add isAdmin column if it doesn't exist yet
@@ -302,6 +311,13 @@ try {
   db.prepare('SELECT isFeatured FROM opportunities LIMIT 1').get();
 } catch {
   db.exec('ALTER TABLE opportunities ADD COLUMN isFeatured INTEGER DEFAULT 0');
+}
+
+// Migrate: add verified column to users (org verification badge)
+try {
+  db.prepare('SELECT verified FROM users LIMIT 1').get();
+} catch {
+  db.exec('ALTER TABLE users ADD COLUMN verified INTEGER DEFAULT 0');
 }
 
 // Migrate: add lastReminderAt to signups (tracks when last 24h reminder was sent)

@@ -28,6 +28,7 @@ export interface Opportunity {
   status?: 'pending' | 'approved' | 'denied'; // approval status (default 'approved' for existing posts)
   steps?: string[];  // Volunteer steps/instructions
   isFeatured?: boolean;
+  hostVerified?: boolean;
 }
 
 export interface AppUser {
@@ -37,6 +38,7 @@ export interface AppUser {
   isAdmin: boolean;
   emailVerified: boolean;
   accountType: 'volunteer' | 'organization';
+  verified?: boolean;
   banned?: boolean;
   notifyOnInterest?: boolean;
   notifyOnReopen?: boolean;

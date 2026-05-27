@@ -58,7 +58,7 @@ function safeJsonParse<T>(raw: string | null | undefined, fallback: T): T {
 
 /** Attach validated tags JSON to an opportunity row */
 function withTags(opp: any, signups: string[] = []) {
-  return { ...opp, tags: safeJsonParse<string[]>(opp.tags, []), steps: safeJsonParse<string[]>(opp.steps, []), signups };
+  return { ...opp, tags: safeJsonParse<string[]>(opp.tags, []), steps: safeJsonParse<string[]>(opp.steps, []), signups, hostVerified: !!opp.hostVerified };
 }
 
 // Allowed enum values — validated server-side to prevent garbage data
@@ -116,7 +116,7 @@ function optionalAuth(req: AuthRequest, _res: Response, next: NextFunction) {
 
 router.post('/api/auth/register', async (req: Request, res: Response) => {
   try {
-    const { username, email, password, accountType } = req.body;
+    const { username, email, password, accountType, joinSlug } = req.body;
     if (!username || !email || !password) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
@@ -126,6 +126,13 @@ router.post('/api/auth/register', async (req: Request, res: Response) => {
     const validAccountTypes = ['volunteer', 'organization'];
     const resolvedAccountType = validAccountTypes.includes(accountType) ? accountType : 'volunteer';
 
+    // Validate join link if provided
+    let joinLink: any = null;
+    if (joinSlug) {
+      joinLink = db.prepare('SELECT * FROM onboarding_links WHERE slug = ? AND claimedAt IS NULL').get(joinSlug);
+      // Invalid or already-claimed slug — just proceed normally (don't block registration)
+    }
+
     const existing = db.prepare('SELECT id FROM users WHERE email = ? OR username = ?').get(email, username);
     if (existing) {
       return res.status(409).json({ error: 'User already exists' });
@@ -134,29 +141,36 @@ router.post('/api/auth/register', async (req: Request, res: Response) => {
     const id = randomUUID();
     const createdAt = new Date().toISOString();
     const isAdmin = email === ADMIN_EMAIL ? 1 : 0;
-    // Auto-verify when email is not configured (no SMTP host set), otherwise require verification
-    const emailVerified = (isAdmin || !process.env.EMAIL_HOST) ? 1 : 0;
+    // Auto-verify when: admin email, no SMTP configured, or registered via a valid join link
+    const emailVerified = (isAdmin || !process.env.EMAIL_HOST || !!joinLink) ? 1 : 0;
+    // Grant verified badge automatically for join-link registrations
+    const verified = joinLink ? 1 : 0;
     const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
     const unsubToken = randomUUID();
 
     db.prepare(
-      'INSERT INTO users (id, username, email, password, isAdmin, emailVerified, accountType, hasSeenWelcome, unsubToken, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-    ).run(id, username, email, hashedPassword, isAdmin, emailVerified, resolvedAccountType, 0, unsubToken, createdAt);
+      'INSERT INTO users (id, username, email, password, isAdmin, emailVerified, accountType, hasSeenWelcome, unsubToken, verified, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).run(id, username, email, hashedPassword, isAdmin, emailVerified, resolvedAccountType, 0, unsubToken, verified, createdAt);
 
-    // Generate a verification token (expires in 24 hours)
-    const verificationToken = randomUUID() + '-' + randomUUID();
-    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-    db.prepare(
-      'INSERT INTO email_verifications (token, userId, expiresAt, createdAt) VALUES (?, ?, ?, ?)'
-    ).run(verificationToken, id, expiresAt, createdAt);
+    // If registered via join link, claim it
+    if (joinLink) {
+      db.prepare('UPDATE onboarding_links SET claimedAt = ?, claimedBy = ? WHERE slug = ?').run(createdAt, id, joinSlug);
+    }
 
-    // Send verification email (non-blocking — don't fail registration if email fails)
-    sendVerificationEmail(email, username, verificationToken).catch((err) => {
-      console.error('Failed to send verification email:', err.message);
-    });
+    // Generate a verification token (expires in 24 hours) — only needed if email verification is required
+    if (!emailVerified) {
+      const verificationToken = randomUUID() + '-' + randomUUID();
+      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+      db.prepare(
+        'INSERT INTO email_verifications (token, userId, expiresAt, createdAt) VALUES (?, ?, ?, ?)'
+      ).run(verificationToken, id, expiresAt, createdAt);
 
-    // If email is not configured, user is already verified and can log in immediately
-    const needsVerification = !!process.env.EMAIL_HOST && !isAdmin;
+      sendVerificationEmail(email, username, verificationToken).catch((err) => {
+        console.error('Failed to send verification email:', err.message);
+      });
+    }
+
+    const needsVerification = !emailVerified;
     return res.status(201).json({
       needsVerification,
       email,
@@ -208,7 +222,7 @@ router.post('/api/auth/login', async (req: Request, res: Response) => {
     const token = jwt.sign({ userId: user.id, isAdmin: !!user.isAdmin }, JWT_SECRET, { expiresIn: '30d' });
     // Never send the hashed password to the client
     const { password: _pwd, ...safeUser } = user;
-    return res.json({ ...safeUser, isAdmin: !!user.isAdmin, emailVerified: true, notifyOnInterest: !!user.notifyOnInterest, notifyOnReopen: user.notifyOnReopen !== 0, profileImage: user.profileImage || null, emailReminders: !!user.emailReminders, hasSeenWelcome: !!user.hasSeenWelcome, token });
+    return res.json({ ...safeUser, isAdmin: !!user.isAdmin, emailVerified: true, notifyOnInterest: !!user.notifyOnInterest, notifyOnReopen: user.notifyOnReopen !== 0, profileImage: user.profileImage || null, emailReminders: !!user.emailReminders, hasSeenWelcome: !!user.hasSeenWelcome, verified: !!user.verified, token });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
@@ -462,9 +476,9 @@ router.get('/api/org/:id', (req: Request, res: Response) => {
 
 router.get('/api/opportunities', (_req: Request, res: Response) => {
   try {
-    // Public feed: only show approved posts to everyone
+    // Public feed: only show approved posts, join with users to get hostVerified
     const opportunities = db.prepare(
-      "SELECT * FROM opportunities WHERE status = 'approved' ORDER BY createdAt DESC"
+      "SELECT o.*, u.verified as hostVerified FROM opportunities o LEFT JOIN users u ON o.hostId = u.id WHERE o.status = 'approved' ORDER BY o.createdAt DESC"
     ).all() as any[];
     const getSignups = db.prepare('SELECT userId FROM signups WHERE opportunityId = ?');
     const result = opportunities.map(opp =>
@@ -1378,5 +1392,71 @@ async function runReminderCron() {
 // Run immediately, then every hour
 runReminderCron();
 setInterval(runReminderCron, 60 * 60 * 1000);
+
+// ===== JOIN LINKS (public) =====
+
+// Public: look up a join link by slug
+router.get('/api/join/:slug', (req: Request, res: Response) => {
+  try {
+    const link = db.prepare('SELECT slug, orgName, category, claimedAt FROM onboarding_links WHERE slug = ?').get(req.params.slug) as any;
+    if (!link) return res.status(404).json({ error: 'Join link not found' });
+    return res.json(link);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ===== JOIN LINKS (admin) =====
+
+// List all join links
+router.get('/api/admin/join-links', requireAdmin, (_req: Request, res: Response) => {
+  try {
+    const links = db.prepare('SELECT * FROM onboarding_links ORDER BY createdAt DESC').all();
+    return res.json(links);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Create a join link
+router.post('/api/admin/join-links', requireAdmin, (req: Request, res: Response) => {
+  try {
+    const { orgName, category } = req.body;
+    if (!orgName?.trim()) return res.status(400).json({ error: 'Org name is required' });
+    const slug = orgName.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    const existing = db.prepare('SELECT slug FROM onboarding_links WHERE slug = ?').get(slug);
+    if (existing) return res.status(409).json({ error: `A link with slug "${slug}" already exists` });
+    const createdAt = new Date().toISOString();
+    db.prepare('INSERT INTO onboarding_links (slug, orgName, category, createdAt) VALUES (?, ?, ?, ?)').run(slug, orgName.trim(), category || null, createdAt);
+    return res.status(201).json({ slug, orgName: orgName.trim(), category: category || null, createdAt, claimedAt: null, claimedBy: null });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Delete a join link
+router.delete('/api/admin/join-links/:slug', requireAdmin, (req: Request, res: Response) => {
+  try {
+    db.prepare('DELETE FROM onboarding_links WHERE slug = ?').run(req.params.slug);
+    return res.json({ ok: true });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ===== VERIFIED BADGE (admin) =====
+
+// Toggle verified badge for any user
+router.put('/api/admin/users/:id/verify', requireAdmin, (req: Request, res: Response) => {
+  try {
+    const user = db.prepare('SELECT id, verified FROM users WHERE id = ?').get(req.params.id) as any;
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    const newVerified = user.verified ? 0 : 1;
+    db.prepare('UPDATE users SET verified = ? WHERE id = ?').run(newVerified, req.params.id);
+    return res.json({ verified: newVerified === 1 });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
 
 export default router;
