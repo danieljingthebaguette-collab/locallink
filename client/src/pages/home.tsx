@@ -156,25 +156,16 @@ export default function Home() {
   };
 
   // Returns capacity/availability string shown on cards (left side).
+  // Interest never consumes a spot — spots are informational capacity hints only.
   const getAvailabilityDisplay = (opp: Opportunity) => {
-    if (opp.spotsType === 'limited' && opp.spots > 0) {
-      if (opp.signups.length >= opp.spots) return 'Full';
-      return `~${opp.spots} spots`;
-    }
+    if (opp.spotsType === 'limited' && opp.spots > 0) return `~${opp.spots} spots`;
     if (opp.spotsType === 'unlimited') return 'Unlimited';
     return '';
   };
 
-  // Returns the bottom-right label on a card:
-  // "X spots left" when there's a real cap and space remaining,
-  // or "X interested" as the fallback.
-  const getInterestedDisplay = (opp: Opportunity) => {
-    if (opp.spotsType === 'limited' && opp.spots > 0 && opp.signups.length < opp.spots) {
-      const left = opp.spots - opp.signups.length;
-      return `${left} spot${left === 1 ? '' : 's'} left`;
-    }
-    return `${opp.signups.length} interested`;
-  };
+  // Always shows how many people have expressed interest — independent of spot count.
+  const getInterestedDisplay = (opp: Opportunity) =>
+    `${opp.signups.length} interested`;
 
   // ── Open create modal with guard ───────────────────────────────────
   const openCreateModal = () => {
@@ -882,63 +873,43 @@ export default function Home() {
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.29, duration: 0.3, ease: EASE_OUT }}>
-                  {/* Show "X spots left" when capped, "Event Full" when at capacity, or plain count */}
+                  {/* Interest count — spots are informational only, never block interest */}
                   {(() => {
-                    const { spotsType, spots, signups: sups } = selectedCard;
-                    const hasCap = spotsType === 'limited' && spots > 0;
-                    const isFull = hasCap && sups.length >= spots;
-                    let countText: string;
-                    if (isFull) {
-                      countText = 'Event Full';
-                    } else if (hasCap) {
-                      const left = spots - sups.length;
-                      countText = `${left} spot${left === 1 ? '' : 's'} left`;
-                    } else {
-                      countText = `${sups.length} ${sups.length === 1 ? 'person' : 'people'} interested`;
-                    }
-                    return <p className="text-white/60 text-sm text-center mb-4">{countText}</p>;
-                  })()}
-                  {(() => {
-                    const { spotsType, spots, signups: sups } = selectedCard;
-                    const isFull = spotsType === 'limited' && spots > 0 && sups.length >= spots;
-                    if (isInterested(selectedCard)) {
-                      return (
-                        <div className="space-y-2">
-                          <motion.div
-                            initial={{ scale: 0.95 }}
-                            animate={{ scale: 1 }}
-                            className="rounded-2xl py-3 font-semibold text-center bg-green-500/30 border border-green-300/40 text-white text-lg">
-                            Interested ✓
-                          </motion.div>
-                          <button onClick={() => handleCancelSignup(selectedCard.id)} disabled={signingUp}
-                            className="w-full rounded-2xl py-2 font-medium text-white/60 hover:text-white/80 text-sm transition-colors">
-                            {signingUp ? 'Removing...' : 'Remove interest'}
-                          </button>
-                        </div>
-                      );
-                    }
-                    if (isFull) {
-                      return (
-                        <div className="w-full rounded-2xl py-3 font-semibold text-center bg-white/10 border border-white/20 text-white/50 text-lg cursor-not-allowed">
-                          Event Full
-                        </div>
-                      );
-                    }
+                    const { signups: sups } = selectedCard;
+                    const count = sups.length;
                     return (
-                      <motion.button
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.97 }}
-                        onClick={() => handleSignup(selectedCard.id)}
-                        disabled={signingUp}
-                        className={cn(
-                          "w-full rounded-2xl py-3 font-semibold transition-colors border border-white/40 text-white text-lg flex items-center justify-center gap-2",
-                          signingUp ? "bg-white/20 cursor-not-allowed opacity-70" : "bg-white/30 hover:bg-white/40"
-                        )}>
-                        {signingUp && <Loader2 className="w-5 h-5 animate-spin" />}
-                        {signingUp ? 'Registering...' : "I'm Interested"}
-                      </motion.button>
+                      <p className="text-white/60 text-sm text-center mb-4">
+                        {count === 0 ? 'Be the first to show interest' : `${count} ${count === 1 ? 'person' : 'people'} interested`}
+                      </p>
                     );
                   })()}
+                  {isInterested(selectedCard) ? (
+                    <div className="space-y-2">
+                      <motion.div
+                        initial={{ scale: 0.95 }}
+                        animate={{ scale: 1 }}
+                        className="rounded-2xl py-3 font-semibold text-center bg-green-500/30 border border-green-300/40 text-white text-lg">
+                        Interested ✓
+                      </motion.div>
+                      <button onClick={() => handleCancelSignup(selectedCard.id)} disabled={signingUp}
+                        className="w-full rounded-2xl py-2 font-medium text-white/60 hover:text-white/80 text-sm transition-colors">
+                        {signingUp ? 'Removing...' : 'Remove interest'}
+                      </button>
+                    </div>
+                  ) : (
+                    <motion.button
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.97 }}
+                      onClick={() => handleSignup(selectedCard.id)}
+                      disabled={signingUp}
+                      className={cn(
+                        "w-full rounded-2xl py-3 font-semibold transition-colors border border-white/40 text-white text-lg flex items-center justify-center gap-2",
+                        signingUp ? "bg-white/20 cursor-not-allowed opacity-70" : "bg-white/30 hover:bg-white/40"
+                      )}>
+                      {signingUp && <Loader2 className="w-5 h-5 animate-spin" />}
+                      {signingUp ? 'Registering...' : "I'm Interested"}
+                    </motion.button>
+                  )}
                 </motion.div>
                 {/* Report button */}
                 {isLoggedIn && currentUser?.id !== selectedCard.hostId && (

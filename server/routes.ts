@@ -570,14 +570,7 @@ router.post('/api/opportunities/:id/signup', requireAuth, async (req: AuthReques
     const existing = db.prepare('SELECT id FROM signups WHERE opportunityId = ? AND userId = ?').get(oppId, userId);
     if (existing) return res.status(409).json({ error: 'Already interested' });
 
-    // Enforce spot limit: block if event is limited, has a cap set, and is already full
-    if (opp.spotsType === 'limited' && opp.spots > 0) {
-      const currentCount = (db.prepare('SELECT COUNT(*) as count FROM signups WHERE opportunityId = ?').get(oppId) as any).count;
-      if (currentCount >= opp.spots) {
-        return res.status(409).json({ error: 'This event is full' });
-      }
-    }
-
+    // Spots are informational (capacity hint) — interest never blocks or consumes a spot.
     db.prepare('INSERT INTO signups (opportunityId, userId, createdAt) VALUES (?, ?, ?)').run(oppId, userId, new Date().toISOString());
     // Increment popularity
     db.prepare('UPDATE opportunities SET popularity = popularity + 1 WHERE id = ?').run(oppId);
@@ -819,6 +812,9 @@ router.delete('/api/admin/users/:id', requireAdmin, (req: AuthRequest, res: Resp
 
     // Clean up everything owned by this user — all inside a transaction so it's atomic
     db.transaction(() => {
+      // 0. Email verification and password-reset tokens (FK → users; must go first)
+      db.prepare('DELETE FROM email_verifications WHERE userId = ?').run(userId);
+      db.prepare('DELETE FROM password_resets WHERE userId = ?').run(userId);
       // 1. Their signups on other events
       db.prepare('DELETE FROM signups WHERE userId = ?').run(userId);
       // 2. All signups and reports ON their hosted events (before deleting the events themselves)
