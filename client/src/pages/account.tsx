@@ -94,11 +94,15 @@ export default function Account() {
     } else {
       const result = await register(formData.username, formData.email, formData.password, accountType, joinPrefill?.slug);
       if (result.success) {
-        sessionStorage.removeItem('locallink_join'); // clear prefill after successful registration
+        sessionStorage.removeItem('locallink_join');
         if (result.needsVerification) {
           setPendingVerificationEmail(result.email || formData.email);
+        } else {
+          // Account is immediately active (join link or no email configured) — switch to login
+          toast({ title: 'Account created!', description: 'You can now log in.' });
+          setIsLoginMode(true);
+          setFormData(d => ({ ...d, password: '' }));
         }
-        // If no verification needed (join link or no email config), let them log in
       } else {
         setFormError(result.error || 'Registration failed');
       }
@@ -288,40 +292,51 @@ export default function Account() {
               {!isLoginMode && (
                 <div className="space-y-2">
                   <label className="block text-sm font-semibold text-foreground">I am a...</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setAccountType('volunteer')}
-                      className={cn(
-                        'flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-all text-left',
-                        accountType === 'volunteer'
-                          ? 'border-primary bg-primary/5 text-primary'
-                          : 'border-border bg-secondary/40 text-foreground hover:border-primary/40'
-                      )}
-                    >
-                      <Users className="w-6 h-6" />
+                  {joinPrefill ? (
+                    /* Locked to Organization when arriving from a join link */
+                    <div className="flex items-center gap-3 p-4 rounded-2xl border-2 border-primary bg-primary/5">
+                      <Building2 className="w-6 h-6 text-primary flex-shrink-0" />
                       <div>
-                        <p className="font-semibold text-sm">Volunteer</p>
-                        <p className="text-xs text-muted-foreground">Browse & show interest</p>
+                        <p className="font-semibold text-sm text-primary">Organization</p>
+                        <p className="text-xs text-muted-foreground">Set by your invite link</p>
                       </div>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setAccountType('organization')}
-                      className={cn(
-                        'flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-all text-left',
-                        accountType === 'organization'
-                          ? 'border-primary bg-primary/5 text-primary'
-                          : 'border-border bg-secondary/40 text-foreground hover:border-primary/40'
-                      )}
-                    >
-                      <Building2 className="w-6 h-6" />
-                      <div>
-                        <p className="font-semibold text-sm">Organization</p>
-                        <p className="text-xs text-muted-foreground">Post opportunities</p>
-                      </div>
-                    </button>
-                  </div>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setAccountType('volunteer')}
+                        className={cn(
+                          'flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-all text-left',
+                          accountType === 'volunteer'
+                            ? 'border-primary bg-primary/5 text-primary'
+                            : 'border-border bg-secondary/40 text-foreground hover:border-primary/40'
+                        )}
+                      >
+                        <Users className="w-6 h-6" />
+                        <div>
+                          <p className="font-semibold text-sm">Volunteer</p>
+                          <p className="text-xs text-muted-foreground">Browse & show interest</p>
+                        </div>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setAccountType('organization')}
+                        className={cn(
+                          'flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-all text-left',
+                          accountType === 'organization'
+                            ? 'border-primary bg-primary/5 text-primary'
+                            : 'border-border bg-secondary/40 text-foreground hover:border-primary/40'
+                        )}
+                      >
+                        <Building2 className="w-6 h-6" />
+                        <div>
+                          <p className="font-semibold text-sm">Organization</p>
+                          <p className="text-xs text-muted-foreground">Post opportunities</p>
+                        </div>
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 

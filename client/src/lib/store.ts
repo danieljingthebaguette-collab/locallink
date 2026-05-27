@@ -669,8 +669,6 @@ export const useAdminStore = create<AdminState>((set) => ({
     } catch { return false; }
   },
 
-  joinLinks: [],
-
   fetchJoinLinks: async () => {
     try {
       const res = await fetch(`${API}/admin/join-links`, { headers: getAuthHeaders() });

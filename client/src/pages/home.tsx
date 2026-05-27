@@ -12,7 +12,7 @@ import { getCategoryColor, getModalGradient, getCategoryBorder, getCategoryLabel
 import { useAuthStore, useOpportunitiesStore, useFavoritesStore, getRecurringStatus } from '@/lib/store';
 import { CATEGORIES, type Category, type Opportunity } from '@/lib/mockData';
 import CreatePostModal from '@/components/CreatePostModal';
-import { VerifiedBadge } from '@/pages/admin';
+import { VerifiedBadge } from '@/components/VerifiedBadge';
 import CropEditor, {
   type ImageTransform,
   DEFAULT_TRANSFORM,
