@@ -556,81 +556,58 @@ export const useAdminStore = create<AdminState>((set) => ({
   fetchUsers: async (_adminUserId) => {
     set({ loading: true });
     try {
-      const res = await fetch(`${API}/admin/users`, {
-        headers: getAuthHeaders(),
-      });
+      const res = await fetch(`${API}/admin/users`, { headers: getAuthHeaders() });
       if (res.ok) {
-        const data = await res.json();
-        set({ users: data, loading: false });
+        set({ users: await res.json(), loading: false });
       } else {
+        if (res.status === 401) useAuthStore.getState().logout();
         set({ loading: false });
       }
-    } catch {
-      set({ loading: false });
-    }
+    } catch { set({ loading: false }); }
   },
 
   fetchStats: async (_adminUserId) => {
     try {
-      const res = await fetch(`${API}/admin/stats`, {
-        headers: getAuthHeaders(),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        set({ stats: data });
-      }
+      const res = await fetch(`${API}/admin/stats`, { headers: getAuthHeaders() });
+      if (res.ok) set({ stats: await res.json() });
+      else if (res.status === 401) useAuthStore.getState().logout();
     } catch { /* ignore */ }
   },
 
   deleteUser: async (_adminUserId, userId) => {
     try {
-      const res = await fetch(`${API}/admin/users/${userId}`, {
-        method: 'DELETE',
-        headers: getAuthHeaders(),
-      });
-      if (res.ok) {
-        set(s => ({ users: s.users.filter(u => u.id !== userId) }));
-        return true;
-      }
+      const res = await fetch(`${API}/admin/users/${userId}`, { method: 'DELETE', headers: getAuthHeaders() });
+      if (res.ok) { set(s => ({ users: s.users.filter(u => u.id !== userId) })); return true; }
+      if (res.status === 401) useAuthStore.getState().logout();
       return false;
-    } catch {
-      return false;
-    }
+    } catch { return false; }
   },
 
   deleteOpportunity: async (_adminUserId, oppId, reason) => {
     try {
       const res = await fetch(`${API}/admin/opportunities/${oppId}`, {
-        method: 'DELETE',
-        headers: getAuthHeaders(),
-        body: JSON.stringify({ reason: reason ?? '' }),
+        method: 'DELETE', headers: getAuthHeaders(), body: JSON.stringify({ reason: reason ?? '' }),
       });
+      if (!res.ok && res.status === 401) useAuthStore.getState().logout();
       return res.ok;
-    } catch {
-      return false;
-    }
+    } catch { return false; }
   },
 
   updateOpportunity: async (_adminUserId, oppId, data, reason) => {
     try {
       const res = await fetch(`${API}/admin/opportunities/${oppId}`, {
-        method: 'PUT',
-        headers: getAuthHeaders(),
-        body: JSON.stringify({ ...data, adminReason: reason ?? '' }),
+        method: 'PUT', headers: getAuthHeaders(), body: JSON.stringify({ ...data, adminReason: reason ?? '' }),
       });
+      if (!res.ok && res.status === 401) useAuthStore.getState().logout();
       return res.ok;
-    } catch {
-      return false;
-    }
+    } catch { return false; }
   },
 
   banUser: async (userId) => {
     try {
       const res = await fetch(`${API}/admin/users/${userId}/ban`, { method: 'POST', headers: getAuthHeaders() });
-      if (res.ok) {
-        set(s => ({ users: s.users.map(u => u.id === userId ? { ...u, banned: true } : u) }));
-        return true;
-      }
+      if (res.ok) { set(s => ({ users: s.users.map(u => u.id === userId ? { ...u, banned: true } : u) })); return true; }
+      if (res.status === 401) useAuthStore.getState().logout();
       return false;
     } catch { return false; }
   },
@@ -638,20 +615,16 @@ export const useAdminStore = create<AdminState>((set) => ({
   unbanUser: async (userId) => {
     try {
       const res = await fetch(`${API}/admin/users/${userId}/unban`, { method: 'POST', headers: getAuthHeaders() });
-      if (res.ok) {
-        set(s => ({ users: s.users.map(u => u.id === userId ? { ...u, banned: false } : u) }));
-        return true;
-      }
+      if (res.ok) { set(s => ({ users: s.users.map(u => u.id === userId ? { ...u, banned: false } : u) })); return true; }
+      if (res.status === 401) useAuthStore.getState().logout();
       return false;
     } catch { return false; }
   },
 
   toggleFeatured: async (oppId) => {
     try {
-      const res = await fetch(`${API}/admin/opportunities/${oppId}/feature`, {
-        method: 'POST',
-        headers: getAuthHeaders(),
-      });
+      const res = await fetch(`${API}/admin/opportunities/${oppId}/feature`, { method: 'POST', headers: getAuthHeaders() });
+      if (!res.ok && res.status === 401) useAuthStore.getState().logout();
       return res.ok;
     } catch { return false; }
   },
@@ -664,6 +637,7 @@ export const useAdminStore = create<AdminState>((set) => ({
         set(s => ({ users: s.users.map(u => u.id === userId ? { ...u, verified: data.verified } : u) }));
         return true;
       }
+      if (res.status === 401) useAuthStore.getState().logout();
       return false;
     } catch { return false; }
   },
@@ -672,6 +646,7 @@ export const useAdminStore = create<AdminState>((set) => ({
     try {
       const res = await fetch(`${API}/admin/join-links`, { headers: getAuthHeaders() });
       if (res.ok) set({ joinLinks: await res.json() });
+      else if (res.status === 401) useAuthStore.getState().logout();
     } catch { /* ignore */ }
   },
 
@@ -687,6 +662,10 @@ export const useAdminStore = create<AdminState>((set) => ({
         set(s => ({ joinLinks: [link, ...s.joinLinks] }));
         return { link };
       }
+      if (res.status === 401) {
+        useAuthStore.getState().logout();
+        return { link: null, error: 'Session expired — please log in again' };
+      }
       const errData = await res.json().catch(() => ({}));
       return { link: null, error: errData.error || `Server error (${res.status})` };
     } catch (e: any) {
@@ -697,10 +676,8 @@ export const useAdminStore = create<AdminState>((set) => ({
   deleteJoinLink: async (slug) => {
     try {
       const res = await fetch(`${API}/admin/join-links/${slug}`, { method: 'DELETE', headers: getAuthHeaders() });
-      if (res.ok) {
-        set(s => ({ joinLinks: s.joinLinks.filter(l => l.slug !== slug) }));
-        return true;
-      }
+      if (res.ok) { set(s => ({ joinLinks: s.joinLinks.filter(l => l.slug !== slug) })); return true; }
+      if (res.status === 401) useAuthStore.getState().logout();
       return false;
     } catch { return false; }
   },
