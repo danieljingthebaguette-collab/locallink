@@ -430,11 +430,12 @@ export default function Home() {
               {filteredOpportunities.map((opp, index) => {
                 // pinnedSize: admin override → map to a synthetic popularity so the existing
                 // cardUtils functions work unchanged ('large'=2×2, 'medium'=2×1, 'small'=1×1)
+                // Pinned size → fixed popularity; otherwise live interest (signups) drives card size
                 const effectivePopularity =
                   opp.pinnedSize === 'large'  ? 30 :
                   opp.pinnedSize === 'medium' ? 15 :
                   opp.pinnedSize === 'small'  ?  0 :
-                  opp.popularity;
+                  Math.max(opp.popularity, opp.signups.length);
                 const large = isLargeCard(effectivePopularity);
                 const hasImage = opp.image && large;
                 const alreadyInterested = isInterested(opp);
@@ -522,7 +523,16 @@ export default function Home() {
                                 <span className="font-bold text-sm">{availabilityDisplay}</span>
                               </div>
                             ) : <span />}
-                            <span className="text-xs opacity-70">{getInterestedDisplay(opp)}</span>
+                            {/* Interest heat bar — width grows as more people show interest */}
+                            {opp.signups.length > 0 && (() => {
+                              const cap = opp.spots > 0 && opp.spotsType === 'limited' ? opp.spots : 30;
+                              const pct = Math.min((opp.signups.length / cap) * 100, 100);
+                              return (
+                                <div className="w-16 h-2 rounded-full bg-white/20 overflow-hidden">
+                                  <div className="h-full rounded-full bg-green-400/80 transition-all duration-700" style={{ width: `${pct}%` }} />
+                                </div>
+                              );
+                            })()}
                           </div>
                           <div className="flex items-center gap-2 text-xs opacity-80">
                             <MapPin className="w-3 h-3" /><span>{opp.location.split(',')[0]}</span>
@@ -538,7 +548,16 @@ export default function Home() {
                               <span className="text-xs font-bold">{availabilityDisplay}</span>
                             </div>
                           ) : <span />}
-                          <span className="text-xs opacity-70">{opp.signups.length} interested</span>
+                          {/* Interest heat bar — width grows as more people show interest */}
+                          {opp.signups.length > 0 && (() => {
+                            const cap = opp.spots > 0 && opp.spotsType === 'limited' ? opp.spots : 30;
+                            const pct = Math.min((opp.signups.length / cap) * 100, 100);
+                            return (
+                              <div className="w-12 h-1.5 rounded-full bg-white/20 overflow-hidden">
+                                <div className="h-full rounded-full bg-green-400/80 transition-all duration-700" style={{ width: `${pct}%` }} />
+                              </div>
+                            );
+                          })()}
                         </div>
                       )}
                     </div>
@@ -750,14 +769,14 @@ export default function Home() {
                   initial={{ opacity: 0, y: 14 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.12, duration: 0.32, ease: EASE_OUT }}
-                  className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                  {/* Location — full width on mobile, 1/3 on desktop */}
+                  className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {/* Location — full width on mobile, 1 col on desktop */}
                   <div className="col-span-2 md:col-span-1 bg-white/15 backdrop-blur-md rounded-2xl p-3 md:p-4 border border-white/20">
                     <p className="text-xs font-bold tracking-widest uppercase opacity-75 mb-1.5">Location</p>
                     <p className="text-sm md:text-base font-semibold">{selectedCard.location}</p>
                   </div>
-                  {/* Date & Time / Schedule */}
-                  <div className="bg-white/15 backdrop-blur-md rounded-2xl p-3 md:p-4 border border-white/20">
+                  {/* Date & Time / Schedule — full width on mobile, 1 col on desktop */}
+                  <div className="col-span-2 md:col-span-1 bg-white/15 backdrop-blur-md rounded-2xl p-3 md:p-4 border border-white/20">
                     {!!selectedCard.isRecurring ? (
                       <>
                         <p className="text-xs font-bold tracking-widest uppercase opacity-75 mb-1.5">🔁 Weekly Schedule</p>
@@ -782,10 +801,22 @@ export default function Home() {
                       </>
                     )}
                   </div>
-                  {/* Duration — half width on mobile */}
+                  {/* Duration */}
                   <div className="bg-white/15 backdrop-blur-md rounded-2xl p-3 md:p-4 border border-white/20">
                     <p className="text-xs font-bold tracking-widest uppercase opacity-75 mb-1.5">Duration</p>
                     <p className="text-sm md:text-base font-semibold">{selectedCard.duration} hours</p>
+                  </div>
+                  {/* Expected Spots — planned capacity, not a live countdown */}
+                  <div className="bg-white/15 backdrop-blur-md rounded-2xl p-3 md:p-4 border border-white/20">
+                    <p className="text-xs font-bold tracking-widest uppercase opacity-75 mb-1.5">Expected Spots</p>
+                    <p className="text-sm md:text-base font-semibold">
+                      {selectedCard.spotsType === 'limited' && (selectedCard.spots ?? 0) > 0
+                        ? `~${selectedCard.spots}`
+                        : selectedCard.spotsType === 'unlimited'
+                        ? 'Unlimited'
+                        : '—'}
+                    </p>
+                    <p className="text-xs opacity-50 mt-0.5">planned capacity</p>
                   </div>
                 </motion.div>
 
