@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { useAuthStore, useAdminStore, useOpportunitiesStore } from '@/lib/store';
+import { useAuthStore, useAdminStore, useOpportunitiesStore, type JoinLink } from '@/lib/store';
 import { Ban, CheckCircle2, TrendingUp, Scale, ClipboardCheck, XCircle } from 'lucide-react';
 import type { AppUser, Opportunity } from '@/lib/mockData';
 import { CATEGORIES, type Category } from '@/lib/mockData';
@@ -1387,8 +1387,6 @@ export function VerifiedBadge({ className }: { className?: string }) {
 }
 
 // ===== Join Links Tab =====
-import type { JoinLink } from '@/lib/store';
-
 function JoinLinksTab({
   links,
   onCreate,
