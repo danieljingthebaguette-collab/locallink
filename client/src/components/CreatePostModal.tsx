@@ -569,7 +569,7 @@ export default function CreatePostModal({ open, onClose }: Props) {
                         {spotsType === 'limited' && (
                           <Input type="number" min={1} max={1000}
                             value={formData.spots}
-                            onChange={e => setFormData({ ...formData, spots: parseInt(e.target.value) })}
+                            onChange={e => setFormData({ ...formData, spots: parseInt(e.target.value) || 0 })}
                             className={cn("rounded-xl bg-white/80 text-foreground border-0 text-sm h-9", formErrors.spots && "ring-2 ring-red-400")} />
                         )}
                         {spotsType === 'unlimited' && <p className="text-white/70 text-xs">Open to all</p>}

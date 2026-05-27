@@ -427,15 +427,12 @@ export const useOpportunitiesStore = create<OpportunitiesState>((set, get) => ({
       });
       if (res.ok) {
         const updated = await res.json();
-        set((s) => ({
-          opportunities: s.opportunities.map(o => o.id === oppId ? updated : o),
-        }));
+        set((s) => ({ opportunities: s.opportunities.map(o => o.id === oppId ? updated : o) }));
         return true;
       }
+      if (res.status === 401) useAuthStore.getState().logout();
       return false;
-    } catch {
-      return false;
-    }
+    } catch { return false; }
   },
 
   cancelSignup: async (oppId, _userId) => {
@@ -446,15 +443,12 @@ export const useOpportunitiesStore = create<OpportunitiesState>((set, get) => ({
       });
       if (res.ok) {
         const updated = await res.json();
-        set((s) => ({
-          opportunities: s.opportunities.map(o => o.id === oppId ? updated : o),
-        }));
+        set((s) => ({ opportunities: s.opportunities.map(o => o.id === oppId ? updated : o) }));
         return true;
       }
+      if (res.status === 401) useAuthStore.getState().logout();
       return false;
-    } catch {
-      return false;
-    }
+    } catch { return false; }
   },
 
   getSignedUpEvents: (userId) => {
@@ -779,6 +773,8 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
       if (res.ok) {
         const data: AppNotification[] = await res.json();
         set({ notifications: data, unreadCount: data.filter(n => !n.read).length });
+      } else if (res.status === 401) {
+        useAuthStore.getState().logout();
       }
     } catch { /* ignore */ }
   },

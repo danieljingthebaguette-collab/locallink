@@ -404,7 +404,7 @@ router.put('/api/auth/profile', requireAuth, async (req: AuthRequest, res: Respo
     }
 
     const updated = db.prepare(
-      'SELECT id, username, email, isAdmin, emailVerified, accountType, notifyOnInterest, notifyOnReopen, profileImage, orgDescription, orgWebsite, orgEmail, orgPhone, emailReminders, hasSeenWelcome, createdAt FROM users WHERE id = ?'
+      'SELECT id, username, email, isAdmin, emailVerified, accountType, notifyOnInterest, notifyOnReopen, profileImage, orgDescription, orgWebsite, orgEmail, orgPhone, emailReminders, hasSeenWelcome, verified, createdAt FROM users WHERE id = ?'
     ).get(userId) as any;
     return res.json({
       ...updated,
@@ -415,6 +415,7 @@ router.put('/api/auth/profile', requireAuth, async (req: AuthRequest, res: Respo
       profileImage: updated.profileImage || null,
       emailReminders: !!updated.emailReminders,
       hasSeenWelcome: !!updated.hasSeenWelcome,
+      verified: !!updated.verified,
     });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
