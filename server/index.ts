@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import express, { type Request, type Response, type NextFunction } from 'express';
+import helmet from 'helmet';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -12,11 +13,24 @@ const app = express();
 app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3001;
 
+// Security headers — sets X-Frame-Options, X-Content-Type-Options, HSTS, etc.
+app.use(helmet());
+
 // Rate limiter: max 20 login/register attempts per IP per 15 minutes
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 20,
   message: { error: 'Too many attempts, please try again later' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Rate limiter: max 30 report/feedback submissions per IP per 15 minutes
+// Separate from authLimiter so the thresholds can be tuned independently
+const reportFeedbackLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  message: { error: 'Too many submissions, please try again later' },
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -32,6 +46,10 @@ app.set('query parser', 'simple');
 // Apply rate limiting to auth endpoints
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/register', authLimiter);
+
+// Apply rate limiting to report and feedback submission endpoints
+app.use('/api/reports', reportFeedbackLimiter);
+app.use('/api/feedback', reportFeedbackLimiter);
 
 // API routes
 app.use(routes);

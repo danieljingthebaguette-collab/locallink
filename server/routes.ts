@@ -141,8 +141,8 @@ router.post('/api/auth/register', async (req: Request, res: Response) => {
     const id = randomUUID();
     const createdAt = new Date().toISOString();
     const isAdmin = email === ADMIN_EMAIL ? 1 : 0;
-    // Auto-verify when: admin email, no SMTP configured, or registered via a valid join link
-    const emailVerified = (isAdmin || !process.env.EMAIL_HOST || !!joinLink) ? 1 : 0;
+    // Auto-verify when: admin email, no Brevo API key configured, or registered via a valid join link
+    const emailVerified = (isAdmin || !process.env.BREVO_API_KEY || !!joinLink) ? 1 : 0;
     // Grant verified badge automatically for join-link registrations
     const verified = joinLink ? 1 : 0;
     const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
@@ -494,7 +494,10 @@ router.get('/api/opportunities', (_req: Request, res: Response) => {
 
 router.get('/api/opportunities/:id', (req: Request, res: Response) => {
   try {
-    const opp = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(req.params.id) as any;
+    // JOIN on users to get hostVerified — same as the main feed query so the badge is consistent
+    const opp = db.prepare(
+      'SELECT o.*, u.verified as hostVerified FROM opportunities o LEFT JOIN users u ON o.hostId = u.id WHERE o.id = ?'
+    ).get(req.params.id) as any;
     if (!opp) return res.status(404).json({ error: 'Opportunity not found' });
     const signups = (db.prepare('SELECT userId FROM signups WHERE opportunityId = ?').all(opp.id) as any[]).map(s => s.userId);
     return res.json(withTags(opp, signups));
@@ -1149,15 +1152,26 @@ router.delete('/api/admin/reports/:id', requireAdmin, (req: Request, res: Respon
 
 // ===== FEEDBACK =====
 
-router.post('/api/feedback', (req: Request, res: Response) => {
+// optionalAuth is applied so authenticated users are identified from their token.
+// Body-supplied userId/username are ignored — anonymous feedback is intentional, spoofed identity isn't.
+router.post('/api/feedback', optionalAuth, (req: AuthRequest, res: Response) => {
   try {
-    const { rating, message, userId, username } = req.body;
+    const { rating, message } = req.body;
     if (!rating || !message) return res.status(400).json({ error: 'Rating and message are required' });
     if (rating < 1 || rating > 5) return res.status(400).json({ error: 'Rating must be 1–5' });
 
+    // Derive identity from the JWT if authenticated; otherwise store as anonymous
+    let feedbackUserId: string | null = null;
+    let feedbackUsername: string | null = null;
+    if (req.userId) {
+      const user = db.prepare('SELECT username FROM users WHERE id = ?').get(req.userId) as any;
+      feedbackUserId = req.userId;
+      feedbackUsername = user?.username || null;
+    }
+
     db.prepare(
       'INSERT INTO feedback (id, userId, username, rating, message, createdAt) VALUES (?, ?, ?, ?, ?, ?)'
-    ).run(randomUUID(), userId || null, username || null, rating, message, new Date().toISOString());
+    ).run(randomUUID(), feedbackUserId, feedbackUsername, rating, message, new Date().toISOString());
 
     return res.status(201).json({ success: true });
   } catch (err: any) {
