@@ -133,6 +133,30 @@ export default function Home() {
 
   const filteredOpportunities = getFiltered();
 
+  // Is any opportunity in the full board currently open?
+  // Checks the unfiltered list so search/category state doesn't affect the banner.
+  const hasOpenPost = opportunities.some(opp => {
+    if (opp.isAvailable === false || (opp.isAvailable as any) === 0) return false;
+    if (!opp.isRecurring && new Date(opp.date) < new Date()) return false;
+    if (opp.isRecurring) {
+      const status = getRecurringStatus(opp);
+      return status ? status.isOpen : true;
+    }
+    return true;
+  });
+
+  // Earliest nextOccurrence across schedule-closed recurring posts (not manually closed).
+  // getRecurringStatus returns nextOccurrence = next Monday 00:00 when the post is closed.
+  const earliestReopen: Date | null = hasOpenPost ? null : (() => {
+    const times = opportunities
+      .filter(opp => !!opp.isRecurring && opp.isAvailable !== false && (opp.isAvailable as any) !== 0)
+      .flatMap(opp => {
+        const s = getRecurringStatus(opp);
+        return s && !s.isOpen ? [s.nextOccurrence] : [];
+      });
+    return times.length > 0 ? new Date(Math.min(...times.map(d => d.getTime()))) : null;
+  })();
+
   // ── Helpers ────────────────────────────────────────────────────────
   const formatDate = (d: string) => new Date(d).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
   const formatTime = (d: string) => new Date(d).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
@@ -405,6 +429,23 @@ export default function Home() {
 
         {(!loading || loaded) && (
           <>
+            {/* Empty-board banner — only when every approved post is closed or past.
+                Cards are kept exactly as-is; this sits above them as a heads-up. */}
+            {!hasOpenPost && opportunities.length > 0 && (
+              <div className="mb-6 rounded-2xl border border-amber-200/70 bg-amber-50/60 dark:bg-amber-950/20 dark:border-amber-800/40 px-5 py-4 flex items-start gap-3">
+                <Clock className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-semibold text-amber-900 dark:text-amber-200 leading-snug">
+                    No open opportunities right now
+                  </p>
+                  <p className="text-xs text-amber-700/90 dark:text-amber-300/80 mt-0.5 leading-relaxed">
+                    {earliestReopen
+                      ? `Sign-ups reopen ${earliestReopen.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })} — recurring events below are still worth bookmarking.`
+                      : 'Check back soon — all current opportunities are closed or ended, but the posts below carry useful details.'}
+                  </p>
+                </div>
+              </div>
+            )}
             <div className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-5 gap-2 auto-rows-[200px] grid-flow-dense mb-12">
 
               {/* Create Post Card */}
