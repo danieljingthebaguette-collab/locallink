@@ -62,15 +62,16 @@ const uploadsPath = dbPath
   : path.join(__dirname, '..', 'uploads');
 app.use('/uploads', express.static(uploadsPath));
 
-// Serve frontend in production
-const distPath = path.join(__dirname, '..', 'dist');
-app.use(express.static(distPath));
-
 // ── OG preview tags for social crawlers ──────────────────────────────────────
-// Browsers hit /?post=ID and get the SPA which opens the modal client-side.
-// Crawlers (Twitterbot, Slack, Discord, WhatsApp, etc.) never run JS — they
-// need real og: meta tags in the HTML they receive.  For those UAs only, look
-// up the post from DB and return a minimal HTML response so link-unfurls work.
+// IMPORTANT: must be registered BEFORE express.static(distPath). The static
+// middleware serves dist/index.html for all GET / requests (stripping the
+// query string to resolve the path), so placing this route after it means
+// crawlers would get the generic index.html instead of per-post OG tags.
+//
+// Browsers hit /?post=ID, get the SPA, and the SPA opens the modal client-side.
+// Crawlers (Twitterbot, Slackbot, etc.) never run JS — they need real og:
+// meta tags baked into the HTML they fetch. For those UAs only, query the DB
+// and return a minimal HTML response so link-unfurls show the right title/image.
 const CRAWLER_UA =
   /Twitterbot|facebookexternalhit|Slackbot|Discordbot|WhatsApp|LinkedInBot|TelegramBot|Googlebot/i;
 
@@ -123,6 +124,9 @@ ${imgTags}
 </html>`);
 });
 
+// Serve frontend in production
+const distPath = path.join(__dirname, '..', 'dist');
+app.use(express.static(distPath));
 app.get('/{*path}', (_req, res) => {
   res.sendFile(path.join(distPath, 'index.html'));
 });
