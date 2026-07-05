@@ -5,22 +5,8 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { useAuthStore, useOpportunitiesStore, useFavoritesStore } from '@/lib/store';
-import { User, Mail, Award, Calendar, LogOut, Loader2, Edit3, Lock, Save, X, Clock, Heart, Building2, Bell, Camera } from 'lucide-react';
+import { User, Mail, Award, Calendar, LogOut, Loader2, Edit3, Lock, Save, X, Heart, Building2, Bell, Camera } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-
-// ── Time-on-site helpers ──────────────────────────────────────────────
-const TIME_KEY = 'locallink_time_on_site'; // stored in minutes
-
-function getStoredMinutes(): number {
-  return parseFloat(localStorage.getItem(TIME_KEY) || '0');
-}
-
-function formatTime(totalMinutes: number): string {
-  const hrs = Math.floor(totalMinutes / 60);
-  const mins = Math.round(totalMinutes % 60);
-  if (hrs === 0) return `${mins} min`;
-  return `${hrs}h ${mins}m`;
-}
 
 export default function Profile() {
   const [, navigate] = useLocation();
@@ -33,9 +19,7 @@ export default function Profile() {
   const [editData, setEditData] = useState({ username: '', currentPassword: '', newPassword: '', confirmPassword: '' });
   const [editErrors, setEditErrors] = useState<{ username?: string; currentPassword?: string; newPassword?: string; confirmPassword?: string }>({});
   const [saving, setSaving] = useState(false);
-  const [timeOnSite, setTimeOnSite] = useState(getStoredMinutes());
   const [avatarUploading, setAvatarUploading] = useState(false);
-  const sessionStartRef = useRef<number>(Date.now());
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [orgEditOpen, setOrgEditOpen] = useState(false);
   const [orgForm, setOrgForm] = useState({
@@ -60,22 +44,6 @@ export default function Profile() {
     }
   }, [currentUser]);
 
-  // Track time on site — accumulate elapsed minutes on unmount
-  useEffect(() => {
-    sessionStartRef.current = Date.now();
-    // Update live every 30s
-    const interval = setInterval(() => {
-      const elapsed = (Date.now() - sessionStartRef.current) / 60000;
-      setTimeOnSite(getStoredMinutes() + elapsed);
-    }, 30000);
-    return () => {
-      clearInterval(interval);
-      const elapsed = (Date.now() - sessionStartRef.current) / 60000;
-      const stored = getStoredMinutes();
-      const newTotal = stored + elapsed;
-      localStorage.setItem(TIME_KEY, String(newTotal));
-    };
-  }, []);
 
   if (!isLoggedIn || !currentUser) {
     return (
@@ -106,7 +74,7 @@ export default function Profile() {
     if (!editData.username.trim()) errors.username = 'Username is required';
     if (editData.newPassword) {
       if (!editData.currentPassword) errors.currentPassword = 'Required to change password';
-      if (editData.newPassword.length < 6) errors.newPassword = 'Min 6 characters';
+      if (editData.newPassword.length < 8) errors.newPassword = 'Min 8 characters';
       if (editData.newPassword !== editData.confirmPassword) errors.confirmPassword = 'Passwords do not match';
     }
     setEditErrors(errors);
@@ -309,7 +277,7 @@ export default function Profile() {
                     <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                     <Input
                       type="password"
-                      placeholder="New password (min. 6 characters)"
+                      placeholder="New password (min. 8 characters)"
                       value={editData.newPassword}
                       onChange={(e) => { setEditData({ ...editData, newPassword: e.target.value }); setEditErrors({ ...editErrors, newPassword: undefined }); }}
                       className={cn('pl-10 h-11 rounded-xl border-2', editErrors.newPassword ? 'border-red-400' : 'border-border')}
@@ -493,11 +461,10 @@ export default function Profile() {
         )}
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-3 gap-3 mb-8">
+        <div className="grid grid-cols-2 gap-3 mb-8">
           {[
             { icon: Award, label: 'Events Interested', value: opLoading && !loaded ? '...' : signedUp.length, color: 'text-purple-500' },
             { icon: Calendar, label: 'Events Hosted', value: opLoading && !loaded ? '...' : hosted.length, color: 'text-green-500' },
-            { icon: Clock, label: 'Time on Site', value: formatTime(timeOnSite), color: 'text-blue-500' },
           ].map((stat) => (
             <div key={stat.label} className="rounded-2xl border-2 border-border bg-card p-4 text-center">
               <stat.icon className={`w-6 h-6 mx-auto mb-2 ${stat.color}`} />
@@ -520,13 +487,9 @@ export default function Profile() {
                 <span className="text-muted-foreground">Events Interested In</span>
                 <span className="font-bold text-foreground">{signedUp.length}</span>
               </div>
-              <div className="flex items-center justify-between py-2 border-b border-border">
+              <div className="flex items-center justify-between py-2">
                 <span className="text-muted-foreground">Events Hosted</span>
                 <span className="font-bold text-foreground">{hosted.length}</span>
-              </div>
-              <div className="flex items-center justify-between py-2">
-                <span className="text-muted-foreground">Time on Site</span>
-                <span className="font-bold text-foreground">{formatTime(timeOnSite)}</span>
               </div>
             </div>
           )}
@@ -625,7 +588,7 @@ export default function Profile() {
                     </div>
                     <div>
                       <p className="text-sm font-semibold text-foreground">{org.username}</p>
-                      <p className="text-xs text-muted-foreground">{org.email}</p>
+                      <p className="text-xs text-muted-foreground">{org.orgEmail || 'no public email listed'}</p>
                     </div>
                   </div>
                   <button

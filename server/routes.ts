@@ -120,8 +120,8 @@ router.post('/api/auth/register', async (req: Request, res: Response) => {
     if (!username || !email || !password) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
-    if (password.length < 6) {
-      return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    if (password.length < 8) {
+      return res.status(400).json({ error: 'Password must be at least 8 characters' });
     }
     const validAccountTypes = ['volunteer', 'organization'];
     const resolvedAccountType = validAccountTypes.includes(accountType) ? accountType : 'volunteer';
@@ -330,7 +330,7 @@ router.post('/api/auth/reset-password', async (req: Request, res: Response) => {
   try {
     const { token, password } = req.body;
     if (!token || !password) return res.status(400).json({ error: 'Missing token or password' });
-    if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    if (password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
 
     const record = db.prepare('SELECT * FROM password_resets WHERE token = ?').get(token) as any;
     if (!record) return res.status(400).json({ error: 'Invalid or already used reset link' });
@@ -369,7 +369,7 @@ router.put('/api/auth/profile', requireAuth, async (req: AuthRequest, res: Respo
       if (!currentPassword) return res.status(400).json({ error: 'Current password required to change password' });
       const match = await bcrypt.compare(currentPassword, user.password);
       if (!match) return res.status(401).json({ error: 'Current password is incorrect' });
-      if (newPassword.length < 6) return res.status(400).json({ error: 'New password must be at least 6 characters' });
+      if (newPassword.length < 8) return res.status(400).json({ error: 'New password must be at least 8 characters' });
       const hashed = await bcrypt.hash(newPassword, SALT_ROUNDS);
       db.prepare('UPDATE users SET password = ? WHERE id = ?').run(hashed, userId);
     }

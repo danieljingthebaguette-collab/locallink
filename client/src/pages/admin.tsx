@@ -542,6 +542,7 @@ function UsersTab({
   const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [confirmDeleteUser, setConfirmDeleteUser] = useState<AppUser | null>(null);
+  const [confirmSuspendUser, setConfirmSuspendUser] = useState<AppUser | null>(null);
 
   // Debounce search — avoids filtering on every keystroke
   useEffect(() => {
@@ -584,6 +585,26 @@ function UsersTab({
               onClick={() => { if (confirmDeleteUser) { onDeleteUser(confirmDeleteUser.id); setConfirmDeleteUser(null); } }}
             >
               Delete User
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!confirmSuspendUser} onOpenChange={(open) => !open && setConfirmSuspendUser(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Suspend User?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to suspend <strong>{confirmSuspendUser?.username}</strong>? They will be unable to log in until reinstated.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-amber-500 hover:bg-amber-600"
+              onClick={() => { if (confirmSuspendUser) { onBanUser(confirmSuspendUser.id); setConfirmSuspendUser(null); } }}
+            >
+              Suspend User
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -654,7 +675,7 @@ function UsersTab({
                         size="sm"
                         variant="outline"
                         className="rounded-full text-xs text-amber-600 border-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950"
-                        onClick={() => onBanUser(user.id)}
+                        onClick={() => setConfirmSuspendUser(user)}
                       >
                         <Ban className="w-3 h-3 mr-1" /> Suspend
                       </Button>

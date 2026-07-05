@@ -56,8 +56,8 @@ export default function Account() {
 
     if (!formData.password) {
       errors.password = 'Password is required';
-    } else if (formData.password.length < 6) {
-      errors.password = 'Password must be at least 6 characters';
+    } else if (formData.password.length < 8) {
+      errors.password = 'Password must be at least 8 characters';
     }
 
     if (!isLoginMode && !formData.username.trim()) {
@@ -398,7 +398,7 @@ export default function Account() {
                   <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                   <Input
                     type="password"
-                    placeholder={isLoginMode ? 'Enter your password' : 'Create a password (min. 6 characters)'}
+                    placeholder={isLoginMode ? 'Enter your password' : 'Create a password (min. 8 characters)'}
                     value={formData.password}
                     onChange={(e) => {
                       setFormData({ ...formData, password: e.target.value });

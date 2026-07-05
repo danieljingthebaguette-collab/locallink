@@ -44,9 +44,22 @@ app.use(cors({
 app.use(express.json());
 app.set('query parser', 'simple');
 
+// Separate limiter for unauthenticated password-recovery routes so that
+// login/register spam cannot drain the forgot-password budget and vice-versa.
+const recoveryLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  message: { error: 'Too many attempts, please try again later' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 // Apply rate limiting to auth endpoints
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/register', authLimiter);
+app.use('/api/auth/forgot-password', recoveryLimiter);
+app.use('/api/auth/resend-verification', recoveryLimiter);
+app.use('/api/auth/reset-password', recoveryLimiter);
 
 // Apply rate limiting to report and feedback submission endpoints
 app.use('/api/reports', reportFeedbackLimiter);

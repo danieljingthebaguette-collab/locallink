@@ -28,8 +28,8 @@ export default function ResetPassword() {
 
     if (!newPassword) {
       errors.newPassword = 'Password is required';
-    } else if (newPassword.length < 6) {
-      errors.newPassword = 'Password must be at least 6 characters';
+    } else if (newPassword.length < 8) {
+      errors.newPassword = 'Password must be at least 8 characters';
     }
 
     if (!confirmPassword) {
