@@ -7,6 +7,7 @@ import { fileURLToPath } from 'url';
 import rateLimit from 'express-rate-limit';
 import routes from './routes.js';
 import { startReopenScheduler } from './scheduler.js';
+import db from './db.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -64,6 +65,64 @@ app.use('/uploads', express.static(uploadsPath));
 // Serve frontend in production
 const distPath = path.join(__dirname, '..', 'dist');
 app.use(express.static(distPath));
+
+// ── OG preview tags for social crawlers ──────────────────────────────────────
+// Browsers hit /?post=ID and get the SPA which opens the modal client-side.
+// Crawlers (Twitterbot, Slack, Discord, WhatsApp, etc.) never run JS — they
+// need real og: meta tags in the HTML they receive.  For those UAs only, look
+// up the post from DB and return a minimal HTML response so link-unfurls work.
+const CRAWLER_UA =
+  /Twitterbot|facebookexternalhit|Slackbot|Discordbot|WhatsApp|LinkedInBot|TelegramBot|Googlebot/i;
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+app.get('/', (req: Request, res: Response, next: NextFunction) => {
+  if (!CRAWLER_UA.test(req.headers['user-agent'] || '')) return next();
+  const postId = req.query.post as string | undefined;
+  if (!postId) return next();
+
+  const opp = db.prepare(
+    "SELECT title, description, image FROM opportunities WHERE id = ? AND status = 'approved'"
+  ).get(postId) as { title: string; description: string | null; image: string | null } | undefined;
+  if (!opp) return next();
+
+  const appUrl = (process.env.APP_URL || 'https://www.localnetlink.com').replace(/\/$/, '');
+  const title = escapeHtml(opp.title);
+  const desc = escapeHtml(
+    opp.description && opp.description.length > 0
+      ? opp.description.slice(0, 200) + (opp.description.length > 200 ? '…' : '')
+      : 'A volunteer opportunity on LocalLink'
+  );
+  const pageUrl = escapeHtml(`${appUrl}/?post=${postId}`);
+
+  let imgTags = '';
+  if (opp.image) {
+    const imgUrl = escapeHtml(opp.image.startsWith('http') ? opp.image : `${appUrl}${opp.image}`);
+    imgTags = `  <meta property="og:image" content="${imgUrl}" />\n  <meta name="twitter:image" content="${imgUrl}" />`;
+  }
+
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>${title} — LocalLink</title>
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="LocalLink" />
+  <meta property="og:url" content="${pageUrl}" />
+  <meta property="og:title" content="${title}" />
+  <meta property="og:description" content="${desc}" />
+${imgTags}
+  <meta name="twitter:card" content="${opp.image ? 'summary_large_image' : 'summary'}" />
+  <meta name="twitter:title" content="${title}" />
+  <meta name="twitter:description" content="${desc}" />
+</head>
+<body></body>
+</html>`);
+});
+
 app.get('/{*path}', (_req, res) => {
   res.sendFile(path.join(distPath, 'index.html'));
 });
