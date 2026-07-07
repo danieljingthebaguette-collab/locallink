@@ -993,7 +993,11 @@ router.post('/api/admin/opportunities/:id/approve', requireAdmin, async (req: Re
     try {
       const host = db.prepare('SELECT email, username FROM users WHERE id = ?').get(opp.hostId) as any;
       if (host) await sendPostApprovedEmail(host.email, host.username, opp.title);
-    } catch { /* non-fatal */ }
+    } catch (err: any) {
+      // Non-fatal, but must be visible in logs — a silent Brevo failure means
+      // the org never learns their post went live.
+      console.error(`[email] post-approved send failed for host ${opp.hostId} (post "${opp.title}"):`, err?.message ?? err);
+    }
 
     const updated = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(oppId) as any;
     const signups = (db.prepare('SELECT userId FROM signups WHERE opportunityId = ?').all(oppId) as any[]).map((s: any) => s.userId);
