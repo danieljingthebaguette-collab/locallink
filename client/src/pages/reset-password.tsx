@@ -145,7 +145,7 @@ export default function ResetPassword() {
                   <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                   <Input
                     type="password"
-                    placeholder="Min. 6 characters"
+                    placeholder="Min. 8 characters"
                     value={newPassword}
                     onChange={(e) => {
                       setNewPassword(e.target.value);
