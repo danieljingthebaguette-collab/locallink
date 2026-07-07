@@ -387,6 +387,20 @@ export default function Home() {
 
       {/* Main Grid */}
       <main className="container mx-auto px-4 py-8">
+        {/* Logged-out hero — not rendered at all once authenticated */}
+        {!isLoggedIn && (
+          <section className="mb-8 rounded-3xl border-2 border-border bg-secondary/40 px-6 py-6 md:p-10">
+            <h1 className="font-heading font-bold text-2xl md:text-4xl text-foreground leading-tight max-w-2xl">
+              Find local volunteer opportunities in Somerset County
+            </h1>
+            <p className="text-muted-foreground text-base md:text-lg mt-2 max-w-2xl">
+              Real organizations, real events, service hours that count.
+            </p>
+            <Button onClick={() => navigate('/account')} className="mt-4 md:mt-6 rounded-full px-8 h-11 font-semibold">
+              Sign up free
+            </Button>
+          </section>
+        )}
         {loading && !loaded && (
           <div className="grid grid-cols-1 md:grid-cols-4 gap-2 auto-rows-[200px] grid-flow-dense mb-12">
             <div className="md:col-span-1 md:row-span-1 rounded-3xl border-2 border-dashed border-border/30 bg-secondary/20 animate-pulse" />
