@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'wouter';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
-import { Plus, MapPin, Users, Clock, Search, Loader2, Heart, Flag, X, Share2, Edit3, Save, ChevronDown } from 'lucide-react';
+import { Plus, MapPin, Users, Clock, Search, Loader2, Heart, Flag, X, Share2, Edit3, Save, ChevronDown, Star } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -132,6 +132,14 @@ export default function Home() {
   }, [selectedCard?.hostId]);
 
   const filteredOpportunities = getFiltered();
+
+  // Featured banner: admin-curated only. The /api/featured-posts endpoint
+  // falls back to top-popularity posts when nothing is featured, so filter
+  // the already-loaded feed on isFeatured instead of consuming it — no
+  // featured post means no banner. Most recent wins; never stack banners.
+  const featuredPost = opportunities
+    .filter(o => !!o.isFeatured)
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0] ?? null;
 
   // ── Helpers ────────────────────────────────────────────────────────
   const formatDate = (d: string) => new Date(d).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
@@ -419,6 +427,58 @@ export default function Home() {
 
         {(!loading || loaded) && (
           <>
+            {/* Featured banner — one admin-featured post, full grid width (the
+                1x4 slot), horizontal on desktop, stacked on mobile. Opens the
+                same modal as any card. Absent entirely when nothing is featured. */}
+            {featuredPost && (() => {
+              const rs = !!featuredPost.isRecurring ? getRecurringStatus(featuredPost) : null;
+              const isPast = rs ? false : new Date(featuredPost.date) < new Date();
+              const manualClosed = featuredPost.isAvailable === false || (featuredPost.isAvailable as any) === 0;
+              const isClosed = manualClosed || (rs ? !rs.isOpen : false);
+              return (
+                <motion.div
+                  initial={{ opacity: 0, y: 16 }}
+                  animate={{ opacity: isPast ? 0.5 : isClosed ? 0.6 : 1, y: 0 }}
+                  transition={{ duration: 0.38, ease: EASE_OUT }}
+                  whileHover={{ y: -4, transition: { duration: 0.18, ease: 'easeOut' } }}
+                  whileTap={{ scale: 0.98, transition: { duration: 0.1 } }}
+                  onClick={() => setSelectedCard(featuredPost)}
+                  className={cn(
+                    "group relative mb-2 rounded-3xl overflow-hidden cursor-pointer border-4 shadow-sm hover:shadow-2xl transition-shadow duration-300 md:h-[200px]",
+                    getCategoryBorder(featuredPost.category),
+                    (isPast || isClosed) && "grayscale"
+                  )}>
+                  <div className={cn("absolute inset-0 bg-gradient-to-br", getCategoryColor(featuredPost.category))} />
+                  <div className="relative z-10 flex flex-col md:flex-row md:h-full text-white">
+                    {featuredPost.image && (
+                      <div className="relative h-24 md:h-full md:w-2/5 flex-shrink-0 overflow-hidden">
+                        <img src={featuredPost.image} alt={featuredPost.title} className="w-full h-full" style={imageTransformStyle(parseImageTransform(featuredPost.cardObjectPosition))} />
+                        <div className="absolute inset-0 bg-gradient-to-r from-transparent to-black/20" />
+                      </div>
+                    )}
+                    <div className="flex-1 px-4 py-3 md:p-6 flex flex-col justify-center gap-1.5 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-[10px] font-bold bg-white/25 text-white px-2 py-0.5 rounded-full inline-flex items-center gap-1">
+                          <Star className="w-3 h-3 fill-current" /> FEATURED
+                        </span>
+                        <p className="text-xs font-bold tracking-widest uppercase opacity-80">{getCategoryLabel(featuredPost.category)}</p>
+                        {!!featuredPost.isRecurring && <span className="text-[10px] font-bold bg-blue-500/80 text-white px-2 py-0.5 rounded-full">{formatRecurringShort(featuredPost)}</span>}
+                        {isPast && !featuredPost.isRecurring && <span className="text-[10px] font-bold bg-white/20 text-white px-2 py-0.5 rounded-full">ENDED</span>}
+                        {isClosed && !!featuredPost.isRecurring && <span className="text-[10px] font-bold bg-orange-500/80 text-white px-2 py-0.5 rounded-full">CLOSED</span>}
+                      </div>
+                      <h2 className="font-heading font-bold text-lg md:text-2xl leading-tight">{featuredPost.title}</h2>
+                      <div className="flex items-center gap-2 text-sm opacity-90 flex-wrap">
+                        <span className="inline-flex items-center gap-1">
+                          by {featuredPost.hostName}
+                          {!!featuredPost.hostVerified && <VerifiedBadge className="w-3.5 h-3.5" />}
+                        </span>
+                        {!featuredPost.isRecurring && <span>· {formatDate(featuredPost.date)}</span>}
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              );
+            })()}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-2 auto-rows-[200px] grid-flow-dense mb-12">
 
               {/* Create Post Card */}
