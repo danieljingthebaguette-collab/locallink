@@ -120,6 +120,11 @@ router.post('/api/auth/register', async (req: Request, res: Response) => {
     if (!username || !email || !password) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
+    // Usernames appear in emails and UI — restrict to a safe charset.
+    // Applies to new registrations only; existing accounts are untouched.
+    if (!/^[a-zA-Z0-9_\- ]{3,30}$/.test(username)) {
+      return res.status(400).json({ error: 'Username must be 3–30 characters using only letters, numbers, spaces, hyphens, or underscores' });
+    }
     if (password.length < 8) {
       return res.status(400).json({ error: 'Password must be at least 8 characters' });
     }
