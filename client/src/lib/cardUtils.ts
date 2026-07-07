@@ -7,6 +7,8 @@ const CARD_SIZE_THRESHOLDS = {
  * Returns a grid cell size based on popularity.
  * Higher popularity = larger card, reflecting engagement visually.
  */
+// IMPORTANT: card widths are 1 or 2 columns. The board grid must stay at
+// md:grid-cols-4 — adding a 5th column creates unfillable 1-col gaps (2+2≠5).
 export const getCardSize = (popularity: number): string => {
   if (popularity >= CARD_SIZE_THRESHOLDS.VERY_LARGE) return 'md:col-span-2 md:row-span-2';
   if (popularity >= CARD_SIZE_THRESHOLDS.LARGE)      return 'md:col-span-2 md:row-span-1';

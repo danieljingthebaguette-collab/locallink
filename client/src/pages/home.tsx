@@ -412,7 +412,7 @@ export default function Home() {
       {/* Main Grid */}
       <main className="container mx-auto px-4 py-8">
         {loading && !loaded && (
-          <div className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-5 gap-2 auto-rows-[200px] grid-flow-dense mb-12">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-2 auto-rows-[200px] grid-flow-dense mb-12">
             <div className="md:col-span-1 md:row-span-1 rounded-3xl border-2 border-dashed border-border/30 bg-secondary/20 animate-pulse" />
             {['md:col-span-2 md:row-span-2','md:col-span-2 md:row-span-1','md:col-span-1 md:row-span-1','md:col-span-1 md:row-span-1','md:col-span-2 md:row-span-1','md:col-span-1 md:row-span-1'].map((size, i) => (
               <div key={i} className={cn("rounded-3xl bg-secondary/30 animate-pulse", size)}>
@@ -446,7 +446,7 @@ export default function Home() {
                 </div>
               </div>
             )}
-            <div className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-5 gap-2 auto-rows-[200px] grid-flow-dense mb-12">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-2 auto-rows-[200px] grid-flow-dense mb-12">
 
               {/* Create Post Card */}
               <motion.div
