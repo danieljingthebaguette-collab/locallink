@@ -60,6 +60,9 @@ app.use('/api/auth/register', authLimiter);
 app.use('/api/auth/forgot-password', recoveryLimiter);
 app.use('/api/auth/resend-verification', recoveryLimiter);
 app.use('/api/auth/reset-password', recoveryLimiter);
+// Appeals are unauthenticated by necessity (suspended users can't log in) —
+// same anonymous low-volume abuse profile as password recovery.
+app.use('/api/appeals', recoveryLimiter);
 
 // Apply rate limiting to report and feedback submission endpoints
 app.use('/api/reports', reportFeedbackLimiter);
