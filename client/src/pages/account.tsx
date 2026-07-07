@@ -56,7 +56,10 @@ export default function Account() {
 
     if (!formData.password) {
       errors.password = 'Password is required';
-    } else if (formData.password.length < 8) {
+    } else if (!isLoginMode && formData.password.length < 8) {
+      // Length rule applies to NEW passwords only — existing accounts may
+      // have 6-7 char passwords from before the minimum was raised, and
+      // they must still be able to log in.
       errors.password = 'Password must be at least 8 characters';
     }
 
