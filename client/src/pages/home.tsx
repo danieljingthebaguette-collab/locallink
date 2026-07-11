@@ -860,10 +860,9 @@ export default function Home() {
                         {(() => {
                           const rs = getRecurringStatus(selectedCard);
                           if (!rs) return null;
-                          const label = rs.isOpen ? 'Open now · Next closes' : 'Closed · Reopens';
                           return (
                             <p className="text-xs opacity-70 mt-1">
-                              {label}: {formatDate(rs.nextOccurrence.toISOString())} at {formatTime(rs.nextOccurrence.toISOString())}
+                              Next session: {formatDate(rs.nextOccurrence.toISOString())} at {formatTime(rs.nextOccurrence.toISOString())}
                             </p>
                           );
                         })()}

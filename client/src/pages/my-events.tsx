@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
-import { useAuthStore, useOpportunitiesStore, getRecurringStatus } from '@/lib/store';
+import { useAuthStore, useOpportunitiesStore } from '@/lib/store';
 import { getCategoryLabel } from '@/lib/categoryUtils';
 import { CATEGORIES, type Category, type Opportunity } from '@/lib/mockData';
 import {
@@ -329,10 +329,9 @@ export default function MyEvents() {
             <div className="space-y-4">
               {hosted.map((opp) => {
                 const isClosed = isOppClosed(opp);
-                // For recurring events, derive open/closed from the weekly schedule
-                const recurringStatus = opp.isRecurring ? getRecurringStatus(opp) : null;
+                // Recurring posts are always open unless the host manually closes them
                 const effectiveOpen = opp.isRecurring
-                  ? !isClosed && (recurringStatus?.isOpen ?? true)
+                  ? !isClosed
                   : !isClosed && !isPast(opp.date);
                 const inactive = !effectiveOpen;
                 return (
@@ -371,8 +370,8 @@ export default function MyEvents() {
                               >
                                 {togglingId === opp.id ? '…' : 'Closed'}
                               </button>
-                            ) : (recurringStatus?.isOpen ?? true) ? (
-                              // Schedule says open — clickable to force-close
+                            ) : (
+                              // Always open unless manually closed — clickable to force-close
                               <button
                                 onClick={() => handleToggleAvailability(opp)}
                                 disabled={togglingId === opp.id}
@@ -381,14 +380,6 @@ export default function MyEvents() {
                               >
                                 {togglingId === opp.id ? '…' : 'Open'}
                               </button>
-                            ) : (
-                              // Schedule says closed (auto) — non-clickable; reopens next Monday
-                              <span
-                                title={recurringStatus ? `Reopens ${recurringStatus.nextOccurrence.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}` : 'Closed until next week'}
-                                className="text-xs font-semibold text-muted-foreground bg-secondary px-2 py-0.5 rounded-full cursor-default"
-                              >
-                                Closed
-                              </span>
                             )
                           ) : isPast(opp.date) ? (
                             // Past one-time event — ended, not togglable

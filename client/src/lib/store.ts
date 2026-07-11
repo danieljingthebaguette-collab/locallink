@@ -4,10 +4,11 @@ import { type Opportunity, type AppUser, type Category } from './mockData';
 const API = '/api';
 
 // ─── Recurring schedule helper ───────────────────────────────────────────────
-// For a recurring post (dayOfWeek 0–6, time "HH:MM"):
-//   • OPEN   window = Monday 00:00 of the current week → event time on event day
-//   • CLOSED window = event time → Monday 00:00 of the following week
-// Example: "Every Wednesday 14:00" → open Mon 00:00–Wed 14:00, closed Wed 14:00–next Mon 00:00
+// Recurring posts are ALWAYS open for sign-ups — the weekly schedule is
+// informational, never a gate. isOpen stays in the return shape for callers
+// but is always true; only a host's manual close takes a recurring post
+// offline. nextOccurrence = the next upcoming session: this week's event
+// time if still ahead, otherwise the same day/time next week.
 export function getRecurringStatus(opp: { recurringDay?: number; recurringTime?: string }): {
   isOpen: boolean;
   nextOccurrence: Date;
@@ -18,32 +19,13 @@ export function getRecurringStatus(opp: { recurringDay?: number; recurringTime?:
   const [h, m] = opp.recurringTime.split(':').map(Number);
   const dayOfWeek = opp.recurringDay as number; // 0=Sun, 1=Mon, …, 6=Sat
 
-  // Monday 00:00 of the current week.
-  // JS getDay(): 0=Sun, 1=Mon, …, 6=Sat
-  // (day + 6) % 7 → 0 for Monday, 6 for Sunday (days elapsed since Monday)
-  const daysSinceMonday = (now.getDay() + 6) % 7;
-  const mondayThisWeek = new Date(now);
-  mondayThisWeek.setDate(now.getDate() - daysSinceMonday);
-  mondayThisWeek.setHours(0, 0, 0, 0);
+  const nextOccurrence = new Date(now);
+  nextOccurrence.setDate(now.getDate() + ((dayOfWeek - now.getDay() + 7) % 7));
+  nextOccurrence.setHours(h, m, 0, 0);
+  // Event time today already passed → next week's session
+  if (nextOccurrence <= now) nextOccurrence.setDate(nextOccurrence.getDate() + 7);
 
-  // Close time = event time on the event day within this week.
-  // (dayOfWeek + 6) % 7 converts JS day-of-week → days-from-Monday (0=Mon, 6=Sun).
-  const daysFromMonday = (dayOfWeek + 6) % 7;
-  const closeTime = new Date(mondayThisWeek);
-  closeTime.setDate(mondayThisWeek.getDate() + daysFromMonday);
-  closeTime.setHours(h, m, 0, 0);
-
-  // OPEN: from Monday 00:00 until event time on event day
-  const isOpen = now >= mondayThisWeek && now < closeTime;
-
-  // nextOccurrence:
-  //   • if open  → closeTime (when it closes)
-  //   • if closed → Monday 00:00 of next week (when it re-opens)
-  const nextMondayReopen = new Date(mondayThisWeek);
-  nextMondayReopen.setDate(nextMondayReopen.getDate() + 7);
-  const nextOccurrence = isOpen ? closeTime : nextMondayReopen;
-
-  return { isOpen, nextOccurrence };
+  return { isOpen: true, nextOccurrence };
 }
 
 // Returns headers with JWT token attached if the user is logged in
