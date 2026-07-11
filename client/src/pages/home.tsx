@@ -410,8 +410,9 @@ export default function Home() {
           </section>
         )}
         {loading && !loaded && (
+          <>
+          <div className="mb-2 h-16 md:h-20 rounded-3xl border-2 border-dashed border-border/30 bg-secondary/20 animate-pulse" />
           <div className="grid grid-cols-1 md:grid-cols-4 gap-2 auto-rows-[200px] grid-flow-dense mb-12">
-            <div className="md:col-span-1 md:row-span-1 rounded-3xl border-2 border-dashed border-border/30 bg-secondary/20 animate-pulse" />
             {['md:col-span-2 md:row-span-2','md:col-span-2 md:row-span-1','md:col-span-1 md:row-span-1','md:col-span-1 md:row-span-1','md:col-span-2 md:row-span-1','md:col-span-1 md:row-span-1'].map((size, i) => (
               <div key={i} className={cn("rounded-3xl bg-secondary/30 animate-pulse", size)}>
                 <div className="h-full p-6 flex flex-col justify-between">
@@ -423,6 +424,7 @@ export default function Home() {
               </div>
             ))}
           </div>
+          </>
         )}
 
         {(!loading || loaded) && (
@@ -479,26 +481,22 @@ export default function Home() {
                 </motion.div>
               );
             })()}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-2 auto-rows-[200px] grid-flow-dense mb-12">
+            {/* Create Post — full-width strip like the banner, but thinner */}
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, ease: EASE_OUT }}
+              whileHover={{ y: -2, transition: { duration: 0.18, ease: 'easeOut' } }}
+              whileTap={{ scale: 0.99, transition: { duration: 0.1 } }}
+              onClick={openCreateModal}
+              className="mb-2 h-16 md:h-20 rounded-3xl border-2 border-dashed border-primary/30 bg-primary/5 hover:bg-primary/10 hover:border-primary/50 transition-colors duration-300 flex items-center justify-center gap-3 cursor-pointer group">
+              <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 group-hover:scale-110 transition-all duration-300">
+                <Plus className="w-5 h-5 text-primary" />
+              </div>
+              <p className="font-semibold text-primary text-sm">Create Post</p>
+            </motion.div>
 
-              {/* Create Post Card */}
-              <motion.div
-                initial={{ opacity: 0, y: 16 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4, ease: EASE_OUT }}
-                whileHover={{ y: -4, transition: { duration: 0.18, ease: 'easeOut' } }}
-                whileTap={{ scale: 0.97, transition: { duration: 0.1 } }}
-                onClick={openCreateModal}
-                className="md:col-span-1 md:row-span-1 rounded-3xl border-2 border-dashed border-primary/30 bg-primary/5 hover:bg-primary/10 hover:border-primary/50 transition-colors duration-300 flex items-center justify-center cursor-pointer group">
-                <div className="text-center space-y-3">
-                  <div className="flex justify-center">
-                    <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 group-hover:scale-110 transition-all duration-300">
-                      <Plus className="w-7 h-7 text-primary" />
-                    </div>
-                  </div>
-                  <p className="font-semibold text-primary text-sm">Create Post</p>
-                </div>
-              </motion.div>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-2 auto-rows-[200px] grid-flow-dense mb-12">
 
               {/* Opportunity Cards */}
               {filteredOpportunities.map((opp, index) => {
@@ -987,7 +985,12 @@ export default function Home() {
                       </p>
                     );
                   })()}
-                  {isInterested(selectedCard) ? (
+                  {!selectedCard.isRecurring && new Date(selectedCard.date) < new Date() ? (
+                    // Ended one-time event — no interest CTA. Recurring posts never end.
+                    <div className="rounded-2xl py-3 font-semibold text-center bg-white/10 border border-white/20 text-white/60 text-lg">
+                      This event has ended
+                    </div>
+                  ) : isInterested(selectedCard) ? (
                     <div className="space-y-2">
                       <motion.div
                         initial={{ scale: 0.95 }}
