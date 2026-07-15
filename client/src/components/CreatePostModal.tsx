@@ -471,7 +471,7 @@ export default function CreatePostModal({ open, onClose }: Props) {
                       <div className="bg-white/15 backdrop-blur-md rounded-2xl p-4 border border-white/20 space-y-3">
                         <div>
                           <label className="text-xs font-bold tracking-widest uppercase opacity-75 block mb-1">Location *</label>
-                          <Input placeholder="Where is this happening?"
+                          <Input placeholder="Full address or place name — shown as a map link"
                             value={formData.location}
                             onChange={e => { setFormData({ ...formData, location: e.target.value }); setFormErrors({ ...formErrors, location: '' }); }}
                             className={cn("rounded-xl bg-white/80 text-foreground border-0 text-sm h-9", formErrors.location && "ring-2 ring-red-400")} />

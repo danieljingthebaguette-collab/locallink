@@ -845,7 +845,20 @@ export default function Home() {
                   {/* Location — full width on mobile, 1 col on desktop */}
                   <div className="col-span-2 md:col-span-1 bg-white/15 backdrop-blur-md rounded-2xl p-3 md:p-4 border border-white/20">
                     <p className="text-xs font-bold tracking-widest uppercase opacity-75 mb-1.5">Location</p>
-                    <p className="text-sm md:text-base font-semibold">{selectedCard.location}</p>
+                    {selectedCard.location?.trim() ? (
+                      <a
+                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(selectedCard.location)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={e => e.stopPropagation()}
+                        className="text-sm md:text-base font-semibold inline-flex items-start gap-1.5 underline decoration-white/40 underline-offset-2 hover:decoration-white transition-colors"
+                      >
+                        <MapPin className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                        <span>{selectedCard.location}</span>
+                      </a>
+                    ) : (
+                      <p className="text-sm md:text-base font-semibold">{selectedCard.location}</p>
+                    )}
                   </div>
                   {/* Date & Time / Schedule — full width on mobile, 1 col on desktop */}
                   <div className="col-span-2 md:col-span-1 bg-white/15 backdrop-blur-md rounded-2xl p-3 md:p-4 border border-white/20">
