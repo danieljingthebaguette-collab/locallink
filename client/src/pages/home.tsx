@@ -1047,6 +1047,12 @@ export default function Home() {
                         className="rounded-2xl py-3 font-semibold text-center bg-green-500/30 border border-green-300/40 text-white text-lg">
                         Interested ✓
                       </motion.div>
+                      {/* Viral loop: the moment someone commits is the moment
+                          they're most likely to bring a friend along */}
+                      <button onClick={() => handleShare(selectedCard.id)}
+                        className="w-full rounded-2xl py-2.5 font-semibold bg-white/15 hover:bg-white/25 border border-white/30 text-white text-sm transition-colors flex items-center justify-center gap-2">
+                        <Share2 className="w-4 h-4" /> Invite a friend — copy link
+                      </button>
                       <button onClick={() => handleCancelSignup(selectedCard.id)} disabled={signingUp}
                         className="w-full rounded-2xl py-2 font-medium text-white/60 hover:text-white/80 text-sm transition-colors">
                         {signingUp ? 'Removing...' : 'Remove interest'}
