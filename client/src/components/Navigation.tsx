@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { useAuthStore, useNotificationStore } from '@/lib/store';
-import { Home, Calendar, Info, User, LogOut, Shield, Bell, Users, X, Trash2, Edit3, UserMinus, RefreshCw, CheckCircle2, XCircle } from 'lucide-react';
+import { Home, Calendar, Info, User, LogOut, Shield, Bell, Users, X, Trash2, Edit3, UserMinus, RefreshCw, CheckCircle2, XCircle, Sun, Moon } from 'lucide-react';
 import Logo from './Logo';
 
 const NAV_ITEMS = [
@@ -18,6 +18,7 @@ export default function Navigation() {
   const { isLoggedIn, currentUser, logout } = useAuthStore();
   const { notifications, unreadCount, fetchNotifications, markRead, markAllRead } = useNotificationStore();
   const [notifOpen, setNotifOpen] = useState(false);
+  const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'));
   const notifRef = useRef<HTMLDivElement>(null);
 
   // Fetch notifications when logged in, poll every 30s
@@ -88,6 +89,18 @@ export default function Navigation() {
 
             {/* Auth */}
             <div className="flex items-center gap-3">
+              {/* Theme toggle — class + localStorage; main.tsx applies it pre-render */}
+              <button
+                onClick={() => {
+                  const dark = document.documentElement.classList.toggle('dark');
+                  localStorage.setItem('locallink_theme', dark ? 'dark' : 'light');
+                  setIsDark(dark);
+                }}
+                className="p-2 rounded-full hover:bg-secondary transition-colors"
+                title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+              >
+                {isDark ? <Sun className="w-5 h-5 text-muted-foreground" /> : <Moon className="w-5 h-5 text-muted-foreground" />}
+              </button>
               {isLoggedIn && currentUser ? (
                 <>
                   {currentUser.isAdmin && (
