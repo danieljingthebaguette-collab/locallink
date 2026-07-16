@@ -53,6 +53,12 @@ export default function Home() {
   const [hostProfile, setHostProfile] = useState<{ profileImage: string | null } | null>(null);
   const [hostProfileLoading, setHostProfileLoading] = useState(false);
   const [signingUp, setSigningUp] = useState(false);
+  // Host "view interested" list — fetched on demand, not preloaded with the board
+  const [showInterestedList, setShowInterestedList] = useState(false);
+  const [interestedVolunteers, setInterestedVolunteers] = useState<
+    { username: string; email: string; signedUpAt: string }[] | null
+  >(null);
+  const [interestedLoading, setInterestedLoading] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [togglingFav, setTogglingFav] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
@@ -249,8 +255,29 @@ export default function Home() {
   const handleCloseModal = () => {
     if (showEditForm && window.confirm('You have unsaved changes. Close anyway?')) {
       setSelectedCard(null); setShowReportModal(false); setReportReason(''); setReportNote(''); setShowEditForm(false);
+      setShowInterestedList(false); setInterestedVolunteers(null);
     } else if (!showEditForm) {
       setSelectedCard(null); setShowReportModal(false); setReportReason(''); setReportNote('');
+      setShowInterestedList(false); setInterestedVolunteers(null);
+    }
+  };
+
+  // ── Host: view interested volunteers (fetched on demand, host-only server-side) ──
+  const toggleInterestedList = async (oppId: string) => {
+    if (showInterestedList) { setShowInterestedList(false); return; }
+    setShowInterestedList(true);
+    if (interestedVolunteers !== null) return; // already fetched for this card
+    setInterestedLoading(true);
+    try {
+      const token = localStorage.getItem('locallink_token');
+      const res = await fetch(`/api/opportunities/${oppId}/interested`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      setInterestedVolunteers(res.ok ? await res.json() : []);
+    } catch {
+      setInterestedVolunteers([]);
+    } finally {
+      setInterestedLoading(false);
     }
   };
 
@@ -1055,58 +1082,114 @@ export default function Home() {
                   </motion.div>
                 )}
 
-                {/* Interest count + CTA */}
+                {/* Interest count + CTA — host sees the interested list, everyone else signs up */}
                 <motion.div
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.29, duration: 0.3, ease: EASE_OUT }}>
-                  {/* Interest count — spots are informational only, never block interest */}
-                  {(() => {
-                    const { signups: sups } = selectedCard;
-                    const count = sups.length;
-                    return (
-                      <p className="text-white/60 text-sm text-center mb-4">
-                        {count === 0 ? 'Be the first to show interest' : `${count} ${count === 1 ? 'person' : 'people'} interested`}
-                      </p>
-                    );
-                  })()}
-                  {!selectedCard.isRecurring && new Date(selectedCard.date) < new Date() ? (
-                    // Ended one-time event — no interest CTA. Recurring posts never end.
-                    <div className="rounded-2xl py-3 font-semibold text-center bg-white/10 border border-white/20 text-white/60 text-lg">
-                      This event has ended
-                    </div>
-                  ) : isInterested(selectedCard) ? (
-                    <div className="space-y-2">
-                      <motion.div
-                        initial={{ scale: 0.95 }}
-                        animate={{ scale: 1 }}
-                        className="rounded-2xl py-3 font-semibold text-center bg-green-500/30 border border-green-300/40 text-white text-lg">
-                        Interested ✓
-                      </motion.div>
-                      {/* Viral loop: the moment someone commits is the moment
-                          they're most likely to bring a friend along */}
-                      <button onClick={() => handleShare(selectedCard.id)}
-                        className="w-full rounded-2xl py-2.5 font-semibold bg-white/15 hover:bg-white/25 border border-white/30 text-white text-sm transition-colors flex items-center justify-center gap-2">
-                        <Share2 className="w-4 h-4" /> Invite a friend — copy link
+                  {(currentUser?.id === selectedCard.hostId || currentUser?.isAdmin) ? (
+                    <div>
+                      <button
+                        onClick={() => toggleInterestedList(selectedCard.id)}
+                        className="w-full rounded-2xl py-3 font-semibold transition-colors border border-white/40 text-white text-lg bg-white/20 hover:bg-white/30 flex items-center justify-center gap-2">
+                        <Users className="w-5 h-5" />
+                        {showInterestedList ? 'Hide' : 'View'} Interested ({selectedCard.signups.length})
+                        <ChevronDown className={cn("w-4 h-4 transition-transform duration-200", showInterestedList && "rotate-180")} />
                       </button>
-                      <button onClick={() => handleCancelSignup(selectedCard.id)} disabled={signingUp}
-                        className="w-full rounded-2xl py-2 font-medium text-white/60 hover:text-white/80 text-sm transition-colors">
-                        {signingUp ? 'Removing...' : 'Remove interest'}
-                      </button>
+                      <AnimatePresence>
+                        {showInterestedList && (
+                          <motion.div
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: 'auto' }}
+                            exit={{ opacity: 0, height: 0 }}
+                            transition={{ duration: 0.25 }}
+                            className="overflow-hidden">
+                            {interestedLoading ? (
+                              <div className="py-6 flex justify-center">
+                                <Loader2 className="w-5 h-5 animate-spin text-white/60" />
+                              </div>
+                            ) : interestedVolunteers && interestedVolunteers.length > 0 ? (
+                              <div className="space-y-2 mt-3">
+                                {interestedVolunteers.map(v => (
+                                  <div key={v.email} className="bg-white/10 rounded-xl px-4 py-2.5 flex items-center justify-between gap-3">
+                                    <div className="min-w-0">
+                                      <p className="text-sm font-semibold truncate">{v.username}</p>
+                                      <p className="text-xs text-white/60 truncate">{v.email}</p>
+                                    </div>
+                                    <p className="text-xs text-white/50 flex-shrink-0">
+                                      {new Date(v.signedUpAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                    </p>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="text-center py-6 mt-3 rounded-2xl border border-dashed border-white/25 bg-white/5">
+                                <Users className="w-6 h-6 mx-auto mb-2 text-white/30" />
+                                <p className="text-sm text-white/70 font-medium">No one's expressed interest yet</p>
+                                <p className="text-xs text-white/40 mt-1">Volunteers who tap "I'm Interested" will show up here.</p>
+                              </div>
+                            )}
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
                     </div>
                   ) : (
-                    <motion.button
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.97 }}
-                      onClick={() => handleSignup(selectedCard.id)}
-                      disabled={signingUp}
-                      className={cn(
-                        "w-full rounded-2xl py-3 font-semibold transition-colors border border-white/40 text-white text-lg flex items-center justify-center gap-2",
-                        signingUp ? "bg-white/20 cursor-not-allowed opacity-70" : "bg-white/30 hover:bg-white/40"
-                      )}>
-                      {signingUp && <Loader2 className="w-5 h-5 animate-spin" />}
-                      {signingUp ? 'Registering...' : "I'm Interested"}
-                    </motion.button>
+                    <>
+                      {/* Interest count — spots are informational only, never block interest */}
+                      {(() => {
+                        const { signups: sups } = selectedCard;
+                        const count = sups.length;
+                        return (
+                          <p className="text-white/60 text-sm text-center mb-4">
+                            {count === 0 ? 'Be the first to show interest' : `${count} ${count === 1 ? 'person' : 'people'} interested`}
+                          </p>
+                        );
+                      })()}
+                      {!selectedCard.isRecurring && new Date(selectedCard.date) < new Date() ? (
+                        // Ended one-time event — no interest CTA. Recurring posts never end.
+                        <div className="rounded-2xl py-3 font-semibold text-center bg-white/10 border border-white/20 text-white/60 text-lg">
+                          This event has ended
+                        </div>
+                      ) : isInterested(selectedCard) ? (
+                        <div className="space-y-2">
+                          <motion.div
+                            initial={{ scale: 0.95 }}
+                            animate={{ scale: 1 }}
+                            className="rounded-2xl py-3 font-semibold text-center bg-green-500/30 border border-green-300/40 text-white text-lg">
+                            Interested ✓
+                          </motion.div>
+                          {/* Viral loop: the moment someone commits is the moment
+                              they're most likely to bring a friend along */}
+                          <button onClick={() => handleShare(selectedCard.id)}
+                            className="w-full rounded-2xl py-2.5 font-semibold bg-white/15 hover:bg-white/25 border border-white/30 text-white text-sm transition-colors flex items-center justify-center gap-2">
+                            <Share2 className="w-4 h-4" /> Invite a friend — copy link
+                          </button>
+                          <button onClick={() => handleCancelSignup(selectedCard.id)} disabled={signingUp}
+                            className="w-full rounded-2xl py-2 font-medium text-white/60 hover:text-white/80 text-sm transition-colors">
+                            {signingUp ? 'Removing...' : 'Remove interest'}
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {/* Disclosure — visible before the click that shares the volunteer's info, not after */}
+                          <p className="text-white/50 text-xs text-center">
+                            Your name and email will be shared with the organization hosting this event.
+                          </p>
+                          <motion.button
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.97 }}
+                            onClick={() => handleSignup(selectedCard.id)}
+                            disabled={signingUp}
+                            className={cn(
+                              "w-full rounded-2xl py-3 font-semibold transition-colors border border-white/40 text-white text-lg flex items-center justify-center gap-2",
+                              signingUp ? "bg-white/20 cursor-not-allowed opacity-70" : "bg-white/30 hover:bg-white/40"
+                            )}>
+                            {signingUp && <Loader2 className="w-5 h-5 animate-spin" />}
+                            {signingUp ? 'Registering...' : "I'm Interested"}
+                          </motion.button>
+                        </div>
+                      )}
+                    </>
                   )}
                 </motion.div>
                 {/* Report button */}

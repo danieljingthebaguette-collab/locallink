@@ -653,6 +653,31 @@ router.delete('/api/opportunities/:id/signup', requireAuth, (req: AuthRequest, r
   }
 });
 
+// List interested volunteers for one opportunity — host (or admin) only.
+// Returns real names/emails, so ownership is enforced server-side; the
+// frontend button being host-gated is not a substitute for this check.
+router.get('/api/opportunities/:id/interested', requireAuth, (req: AuthRequest, res: Response) => {
+  try {
+    const oppId = req.params.id;
+    const opp = db.prepare('SELECT hostId FROM opportunities WHERE id = ?').get(oppId) as any;
+    if (!opp) return res.status(404).json({ error: 'Opportunity not found' });
+    if (opp.hostId !== req.userId && !req.isAdmin) {
+      return res.status(403).json({ error: 'Only the host can view interested volunteers' });
+    }
+
+    const volunteers = db.prepare(
+      `SELECT u.username, u.email, s.createdAt AS signedUpAt
+       FROM signups s JOIN users u ON u.id = s.userId
+       WHERE s.opportunityId = ?
+       ORDER BY s.createdAt ASC`
+    ).all(oppId) as { username: string; email: string; signedUpAt: string }[];
+
+    return res.json(volunteers);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // Edit own opportunity (host or admin)
 router.put('/api/opportunities/:id', requireAuth, (req: AuthRequest, res: Response) => {
   try {
