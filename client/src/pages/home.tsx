@@ -400,19 +400,36 @@ export default function Home() {
 
       {/* Main Grid */}
       <main className="container mx-auto px-4 py-8">
-        {/* Logged-out hero — not rendered at all once authenticated */}
+        {/* Logged-out hero + how-it-works — not rendered at all once authenticated */}
         {!isLoggedIn && (
-          <section className="mb-8 rounded-3xl border-2 border-border bg-secondary/40 px-6 py-6 md:p-10">
-            <h1 className="font-heading font-bold text-2xl md:text-4xl text-foreground leading-tight max-w-2xl">
-              Find local volunteer opportunities in Somerset County
-            </h1>
-            <p className="text-muted-foreground text-base md:text-lg mt-2 max-w-2xl">
-              Real organizations, real events, service hours that count.
-            </p>
-            <Button onClick={() => navigate('/account')} className="mt-4 md:mt-6 rounded-full px-8 h-11 font-semibold">
-              Sign up free
-            </Button>
-          </section>
+          <>
+            <section className="mb-8 rounded-3xl border-2 border-border bg-secondary/40 px-6 py-6 md:p-10">
+              <h1 className="font-heading font-bold text-2xl md:text-4xl text-foreground leading-tight max-w-2xl">
+                Find local volunteer opportunities in Somerset County
+              </h1>
+              <p className="text-muted-foreground text-base md:text-lg mt-2 max-w-2xl">
+                Real organizations, real events, service hours that count.
+              </p>
+              <Button onClick={() => navigate('/account')} className="mt-4 md:mt-6 rounded-full px-8 h-11 font-semibold">
+                Sign up free
+              </Button>
+            </section>
+            <div className="mb-8 rounded-3xl border-2 border-border bg-secondary/40 px-6 py-5 grid grid-cols-1 md:grid-cols-3 gap-4">
+              {[
+                { n: 1, t: 'Browse the board', d: 'Real events from Somerset County orgs' },
+                { n: 2, t: "Tap I'm Interested", d: 'One click — the org gets notified' },
+                { n: 3, t: 'Show up & help', d: 'Earn service hours that count' },
+              ].map(s => (
+                <div key={s.n} className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-full bg-primary/10 text-primary font-bold flex items-center justify-center flex-shrink-0">{s.n}</div>
+                  <div>
+                    <p className="font-semibold text-sm text-foreground">{s.t}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{s.d}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
         )}
         {loading && !loaded && (
           <>
