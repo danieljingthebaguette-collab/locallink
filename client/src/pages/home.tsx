@@ -747,12 +747,26 @@ export default function Home() {
                         className="w-full rounded-xl bg-white/80 text-foreground border-0 text-sm px-3 py-2 resize-none"
                       />
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                        <input
-                          value={editForm.location}
-                          onChange={e => setEditForm(f => ({ ...f, location: e.target.value }))}
-                          placeholder="Location"
-                          className="rounded-xl bg-white/80 text-foreground border-0 text-sm h-9 px-3"
-                        />
+                        <div>
+                          <input
+                            value={editForm.location}
+                            onChange={e => setEditForm(f => ({ ...f, location: e.target.value }))}
+                            placeholder="Location"
+                            className="w-full rounded-xl bg-white/80 text-foreground border-0 text-sm h-9 px-3"
+                          />
+                          {editForm.location.trim().length >= 5 && (
+                            <p className="text-white/70 text-[11px] mt-1">
+                              <a
+                                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(editForm.location.trim())}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="underline hover:text-white"
+                              >
+                                Check it on Google Maps ↗
+                              </a>
+                            </p>
+                          )}
+                        </div>
                         {selectedCard?.isRecurring ? (
                           /* Recurring events: day-of-week dropdown + time picker */
                           <div className="flex gap-1">

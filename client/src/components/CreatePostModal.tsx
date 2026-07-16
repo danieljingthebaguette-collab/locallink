@@ -480,6 +480,21 @@ export default function CreatePostModal({ open, onClose }: Props) {
                             onChange={e => { setFormData({ ...formData, location: e.target.value }); setFormErrors({ ...formErrors, location: '' }); }}
                             className={cn("rounded-xl bg-white/80 text-foreground border-0 text-sm h-9", formErrors.location && "ring-2 ring-red-400")} />
                           {formErrors.location && <p className="text-red-200 text-xs">{formErrors.location}</p>}
+                          {/* No geocoding — the human is the address validator. Show them
+                              exactly what volunteers will see so mistakes surface pre-publish. */}
+                          {formData.location.trim().length >= 5 && (
+                            <p className="text-white/70 text-xs mt-1">
+                              Are you sure this is right?{' '}
+                              <a
+                                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(formData.location.trim())}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="underline hover:text-white"
+                              >
+                                Check it on Google Maps ↗
+                              </a>
+                            </p>
+                          )}
                         </div>
 
                         {/* ── Schedule type toggle ── */}
