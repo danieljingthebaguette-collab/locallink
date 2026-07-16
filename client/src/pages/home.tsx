@@ -133,6 +133,32 @@ export default function Home() {
 
   const filteredOpportunities = getFiltered();
 
+  // Host avatars for board cards — one profile fetch per unique host,
+  // shared with the modal via the same module-level hostProfileCache.
+  const [hostAvatars, setHostAvatars] = useState<Record<string, string | null>>({});
+  useEffect(() => {
+    const ids = Array.from(new Set(opportunities.map(o => o.hostId))).filter(id => !(id in hostAvatars));
+    if (ids.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      const entries = await Promise.all(ids.map(async (id): Promise<readonly [string, string | null]> => {
+        const cached = hostProfileCache.get(id);
+        if (cached) return [id, cached.profileImage] as const;
+        try {
+          const r = await fetch(`/api/users/${id}/profile`);
+          if (!r.ok) return [id, null] as const;
+          const d = await r.json();
+          const img = d.profileImage || null;
+          hostProfileCache.set(id, { profileImage: img });
+          return [id, img] as const;
+        } catch { return [id, null] as const; }
+      }));
+      if (!cancelled) setHostAvatars(prev => ({ ...prev, ...Object.fromEntries(entries) }));
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [opportunities]);
+
   // Featured banner: admin-curated only. The /api/featured-posts endpoint
   // falls back to top-popularity posts when nothing is featured, so filter
   // the already-loaded feed on isFeatured instead of consuming it — no
@@ -492,7 +518,12 @@ export default function Home() {
                       </div>
                       <h2 className="font-heading font-bold text-lg md:text-2xl leading-tight">{featuredPost.title}</h2>
                       <div className="flex items-center gap-2 text-sm opacity-90 flex-wrap">
-                        <span className="inline-flex items-center gap-1">
+                        <span className="inline-flex items-center gap-1.5">
+                          {hostAvatars[featuredPost.hostId] ? (
+                            <img src={hostAvatars[featuredPost.hostId]!} alt="" className="w-5 h-5 rounded-full object-cover ring-1 ring-white/40" />
+                          ) : (
+                            <span className="w-5 h-5 rounded-full bg-white/25 flex items-center justify-center text-[9px] font-bold">{featuredPost.hostName.charAt(0).toUpperCase()}</span>
+                          )}
                           by {featuredPost.hostName}
                           {!!featuredPost.hostVerified && <VerifiedBadge className="w-3.5 h-3.5" />}
                         </span>
@@ -606,8 +637,13 @@ export default function Home() {
                           <p className="text-sm line-clamp-2 opacity-95 font-medium">{opp.description}</p>
                           <button
                             onClick={e => { e.stopPropagation(); navigate(`/org/${opp.hostId}`); }}
-                            className="text-xs opacity-70 font-medium hover:opacity-100 hover:underline transition-opacity text-left"
+                            className="text-xs opacity-70 font-medium hover:opacity-100 hover:underline transition-opacity text-left flex items-center gap-1.5"
                           >
+                            {hostAvatars[opp.hostId] ? (
+                              <img src={hostAvatars[opp.hostId]!} alt="" className="w-5 h-5 rounded-full object-cover ring-1 ring-white/40" />
+                            ) : (
+                              <span className="w-5 h-5 rounded-full bg-white/25 flex items-center justify-center text-[9px] font-bold">{opp.hostName.charAt(0).toUpperCase()}</span>
+                            )}
                             by {opp.hostName}
                           </button>
                           <div className="flex items-center justify-between pt-3 border-t border-white/20">
