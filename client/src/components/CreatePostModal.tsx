@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { cn } from '@/lib/utils';
+import { cn, getLocationError } from '@/lib/utils';
 import { X, Upload, ChevronRight, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -200,6 +200,10 @@ export default function CreatePostModal({ open, onClose }: Props) {
     if (!formData.title.trim()) errors.title = 'Title is required';
     if (!formData.description.trim()) errors.description = 'Description is required';
     if (!formData.location.trim()) errors.location = 'Location is required';
+    else {
+      const locationError = getLocationError(formData.location);
+      if (locationError) errors.location = locationError;
+    }
     if (!isRecurring) {
       if (!formData.date) errors.date = 'Date is required';
       else if (new Date(formData.date) <= new Date()) errors.date = 'Date must be in the future';

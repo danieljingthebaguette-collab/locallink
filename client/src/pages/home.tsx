@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'wouter';
 import { motion, AnimatePresence } from 'framer-motion';
-import { cn } from '@/lib/utils';
+import { cn, getLocationError } from '@/lib/utils';
 import { Plus, MapPin, Users, Clock, Search, Loader2, Heart, Flag, X, Share2, Edit3, Save, ChevronDown, Star } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -260,6 +260,11 @@ export default function Home() {
 
   const handleSaveEdit = async () => {
     if (!selectedCard) return;
+    const locationError = getLocationError(editForm.location);
+    if (locationError) {
+      toast({ title: locationError, variant: 'destructive' });
+      return;
+    }
     setSavingEdit(true);
     // Build update payload — recurring events update day/time schedule; one-time events update date
     const payload: Record<string, any> = {
