@@ -340,6 +340,25 @@ try {
   db.exec('ALTER TABLE opportunities ADD COLUMN town TEXT DEFAULT NULL');
 }
 
+// One-time backfill: tag pre-field posts with a town ONLY when the location or
+// title plainly contains a listed town's name — anything ambiguous stays null
+// for a human to set via the edit form. Idempotent (guarded by town IS NULL);
+// posts in towns not on the list are deliberately left alone. Remove once the
+// July 2026 backfill has shipped and real posts are tagged.
+const TOWN_BACKFILL_ALIASES: [string, string][] = [
+  ['montgomery', 'Montgomery/Skillman'], ['skillman', 'Montgomery/Skillman'],
+  ['hillsborough', 'Hillsborough'], ['princeton', 'Princeton'],
+  ['bridgewater', 'Bridgewater'], ['somerville', 'Somerville'],
+  ['franklin township', 'Franklin Township'], ['manville', 'Manville'],
+  ['raritan', 'Raritan'], ['belle mead', 'Belle Mead/Rocky Hill'],
+  ['rocky hill', 'Belle Mead/Rocky Hill'], ['flemington', 'Flemington'],
+];
+for (const [needle, canonicalTown] of TOWN_BACKFILL_ALIASES) {
+  db.prepare(
+    'UPDATE opportunities SET town = ? WHERE town IS NULL AND (lower(location) LIKE ? OR lower(title) LIKE ?)'
+  ).run(canonicalTown, `%${needle}%`, `%${needle}%`);
+}
+
 // Auto-grant admin and auto-verify the designated admin email
 if (!process.env.ADMIN_EMAIL) {
   console.warn(
