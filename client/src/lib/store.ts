@@ -216,11 +216,13 @@ interface OpportunitiesState {
   myPosts: Opportunity[];
   searchQuery: string;
   currentCategory: Category | 'all';
+  currentTown: string; // one of TOWNS or 'all'
   sortBy: 'newest' | 'oldest' | 'soonest' | 'popular';
   loading: boolean;
   loaded: boolean;
   setSearchQuery: (q: string) => void;
   setCategory: (cat: Category | 'all') => void;
+  setTown: (town: string) => void;
   setSortBy: (sort: 'newest' | 'oldest' | 'soonest' | 'popular') => void;
   getFiltered: () => Opportunity[];
   fetchOpportunities: () => Promise<void>;
@@ -239,20 +241,27 @@ export const useOpportunitiesStore = create<OpportunitiesState>((set, get) => ({
   myPosts: [],
   searchQuery: '',
   currentCategory: 'all',
+  currentTown: 'all',
   sortBy: 'newest',
   loading: false,
   loaded: false,
 
   setSearchQuery: (q) => set({ searchQuery: q }),
   setCategory: (cat) => set({ currentCategory: cat }),
+  setTown: (town) => set({ currentTown: town }),
   setSortBy: (sort) => set({ sortBy: sort }),
 
   getFiltered: () => {
-    const { opportunities, currentCategory, searchQuery, sortBy } = get();
+    const { opportunities, currentCategory, currentTown, searchQuery, sortBy } = get();
     let filtered = [...opportunities];
 
     if (currentCategory !== 'all') {
       filtered = filtered.filter(opp => opp.category === currentCategory);
+    }
+
+    // 'all' includes townless posts (created before the town field existed)
+    if (currentTown !== 'all') {
+      filtered = filtered.filter(opp => opp.town === currentTown);
     }
 
     if (searchQuery) {

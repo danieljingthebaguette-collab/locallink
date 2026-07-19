@@ -65,6 +65,12 @@ function withTags(opp: any, signups: string[] = []) {
 const VALID_SPOTS_TYPES  = ['limited', 'unlimited', 'none'] as const;
 const VALID_CATEGORIES   = ['volunteer', 'education', 'fitness', 'environment', 'community'] as const;
 const VALID_PINNED_SIZES = ['small', 'medium', 'large'] as const;
+// Mirrors TOWNS in client/src/lib/mockData.ts — keep the two lists in sync
+const VALID_TOWNS = [
+  'Montgomery/Skillman', 'Hillsborough', 'Princeton', 'Bridgewater',
+  'Somerville', 'Franklin Township', 'Manville', 'Raritan',
+  'Belle Mead/Rocky Hill', 'Flemington',
+] as const;
 
 type SpotsType = typeof VALID_SPOTS_TYPES[number];
 
@@ -536,12 +542,16 @@ router.get('/api/my-posts', requireAuth, (req: AuthRequest, res: Response) => {
 // Creating an opportunity requires being logged in as an org account (or admin)
 router.post('/api/opportunities', requireAuth, (req: AuthRequest, res: Response) => {
   try {
-    const { title, description, category, location, date, duration, spots, spotsType, image, tags, isRecurring, recurringDay, recurringTime, steps } = req.body;
+    const { title, description, category, location, town, date, duration, spots, spotsType, image, tags, isRecurring, recurringDay, recurringTime, steps } = req.body;
     if (!title || !description || !category || !location || !date || !duration) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
     const locationError = getLocationError(location);
     if (locationError) return res.status(400).json({ error: locationError });
+    // Town is required on NEW posts (existing rows stay null until backfilled)
+    if (!town || !VALID_TOWNS.includes(town)) {
+      return res.status(400).json({ error: 'Please select a town from the list' });
+    }
 
     const hostId = req.userId!;
     const hostUser = db.prepare('SELECT username, accountType FROM users WHERE id = ?').get(hostId) as any;
@@ -562,9 +572,9 @@ router.post('/api/opportunities', requireAuth, (req: AuthRequest, res: Response)
     const status = req.isAdmin ? 'approved' : 'pending';
 
     db.prepare(
-      `INSERT INTO opportunities (id, title, description, category, location, date, duration, spots, spotsRemaining, spotsType, image, hostId, hostName, popularity, tags, steps, createdAt, isRecurring, recurringDay, recurringTime, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(id, title, description, category, location, date, duration, resolvedSpots, resolvedSpots, resolvedSpotsType, image || null, hostId, hostUser?.username || 'Unknown', tagsJson, stepsJson, createdAt, isRecurring ? 1 : 0, recurringDay ?? null, recurringTime ?? null, status);
+      `INSERT INTO opportunities (id, title, description, category, location, town, date, duration, spots, spotsRemaining, spotsType, image, hostId, hostName, popularity, tags, steps, createdAt, isRecurring, recurringDay, recurringTime, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(id, title, description, category, location, town, date, duration, resolvedSpots, resolvedSpots, resolvedSpotsType, image || null, hostId, hostUser?.username || 'Unknown', tagsJson, stepsJson, createdAt, isRecurring ? 1 : 0, recurringDay ?? null, recurringTime ?? null, status);
 
     const opp = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(id) as any;
     return res.status(201).json(withTags(opp, []));
@@ -688,7 +698,7 @@ router.put('/api/opportunities/:id', requireAuth, (req: AuthRequest, res: Respon
     if (!opp) return res.status(404).json({ error: 'Opportunity not found' });
     if (opp.hostId !== userId && !req.isAdmin) return res.status(403).json({ error: 'Not authorized to edit this opportunity' });
 
-    const { title, description, category, location, date, duration, spots, spotsType, image, tags, isAvailable, isRecurring, recurringDay, recurringTime, cardObjectPosition, modalObjectPosition } = req.body;
+    const { title, description, category, location, town, date, duration, spots, spotsType, image, tags, isAvailable, isRecurring, recurringDay, recurringTime, cardObjectPosition, modalObjectPosition } = req.body;
 
     // --- Input validation ---
     if (spotsType !== undefined && !VALID_SPOTS_TYPES.includes(spotsType)) {
@@ -716,6 +726,10 @@ router.put('/api/opportunities/:id', requireAuth, (req: AuthRequest, res: Respon
       const locationError = getLocationError(String(location));
       if (locationError) return res.status(400).json({ error: locationError });
     }
+    // Town stays optional on edits — pre-existing posts may be townless until backfilled
+    if (town !== undefined && town !== null && town !== '' && !VALID_TOWNS.includes(town)) {
+      return res.status(400).json({ error: `Invalid town. Must be one of: ${VALID_TOWNS.join(', ')}` });
+    }
 
     // --- Apply updates (all inside a transaction so they're atomic) ---
     db.transaction(() => {
@@ -723,6 +737,7 @@ router.put('/api/opportunities/:id', requireAuth, (req: AuthRequest, res: Respon
       if (description !== undefined) db.prepare('UPDATE opportunities SET description = ? WHERE id = ?').run(String(description).trim(), oppId);
       if (category    !== undefined) db.prepare('UPDATE opportunities SET category = ? WHERE id = ?').run(category, oppId);
       if (location    !== undefined) db.prepare('UPDATE opportunities SET location = ? WHERE id = ?').run(String(location).trim(), oppId);
+      if (town        !== undefined) db.prepare('UPDATE opportunities SET town = ? WHERE id = ?').run(town || null, oppId);
       if (date        !== undefined) db.prepare('UPDATE opportunities SET date = ? WHERE id = ?').run(date, oppId);
       if (duration    !== undefined) db.prepare('UPDATE opportunities SET duration = ? WHERE id = ?').run(duration, oppId);
       if (image       !== undefined) db.prepare('UPDATE opportunities SET image = ? WHERE id = ?').run(image || null, oppId);
@@ -894,7 +909,7 @@ router.delete('/api/admin/users/:id', requireAdmin, (req: AuthRequest, res: Resp
 router.put('/api/admin/opportunities/:id', requireAdmin, (req: Request, res: Response) => {
   try {
     const oppId = req.params.id;
-    const { title, description, category, location, date, duration, spots, spotsRemaining, adminReason, pinnedSize } = req.body;
+    const { title, description, category, location, town, date, duration, spots, spotsRemaining, adminReason, pinnedSize } = req.body;
 
     const opp = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(oppId) as any;
     if (!opp) return res.status(404).json({ error: 'Opportunity not found' });
@@ -915,11 +930,16 @@ router.put('/api/admin/opportunities/:id', requireAdmin, (req: Request, res: Res
     if (pinnedSize !== undefined && pinnedSize !== null && !VALID_PINNED_SIZES.includes(pinnedSize)) {
       return res.status(400).json({ error: `Invalid pinnedSize. Must be one of: ${VALID_PINNED_SIZES.join(', ')}, or null` });
     }
+    // Town stays optional on edits — pre-existing posts may be townless until backfilled
+    if (town !== undefined && town !== null && town !== '' && !VALID_TOWNS.includes(town)) {
+      return res.status(400).json({ error: `Invalid town. Must be one of: ${VALID_TOWNS.join(', ')}` });
+    }
 
     if (title !== undefined) db.prepare('UPDATE opportunities SET title = ? WHERE id = ?').run(String(title).trim(), oppId);
     if (description !== undefined) db.prepare('UPDATE opportunities SET description = ? WHERE id = ?').run(String(description).trim(), oppId);
     if (category !== undefined) db.prepare('UPDATE opportunities SET category = ? WHERE id = ?').run(category, oppId);
     if (location !== undefined) db.prepare('UPDATE opportunities SET location = ? WHERE id = ?').run(String(location).trim(), oppId);
+    if (town !== undefined) db.prepare('UPDATE opportunities SET town = ? WHERE id = ?').run(town || null, oppId);
     if (date !== undefined) db.prepare('UPDATE opportunities SET date = ? WHERE id = ?').run(date, oppId);
     if (duration !== undefined) db.prepare('UPDATE opportunities SET duration = ? WHERE id = ?').run(duration, oppId);
     if (spots !== undefined) db.prepare('UPDATE opportunities SET spots = ? WHERE id = ?').run(spots, oppId);

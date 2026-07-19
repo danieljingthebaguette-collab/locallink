@@ -9,7 +9,7 @@ import { useAuthStore, useAdminStore, useOpportunitiesStore, type JoinLink } fro
 import { VerifiedBadge } from '@/components/VerifiedBadge';
 import { Ban, CheckCircle2, TrendingUp, Scale, ClipboardCheck, XCircle } from 'lucide-react';
 import type { AppUser, Opportunity } from '@/lib/mockData';
-import { CATEGORIES, type Category } from '@/lib/mockData';
+import { CATEGORIES, TOWNS, type Category } from '@/lib/mockData';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -720,9 +720,9 @@ function OpportunitiesTab({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<{
     title: string; description: string; category: Category;
-    location: string; date: string; duration: number; spots: number;
+    location: string; town: string; date: string; duration: number; spots: number;
     pinnedSize: 'small' | 'medium' | 'large' | null;
-  }>({ title: '', description: '', category: 'volunteer', location: '', date: '', duration: 2, spots: 10, pinnedSize: null });
+  }>({ title: '', description: '', category: 'volunteer', location: '', town: '', date: '', duration: 2, spots: 10, pinnedSize: null });
   const [editReason, setEditReason] = useState('');
   const [savingEdit, setSavingEdit] = useState(false);
 
@@ -745,6 +745,7 @@ function OpportunitiesTab({
       description: opp.description,
       category: opp.category as Category,
       location: opp.location,
+      town: opp.town ?? '',
       date: opp.date,
       duration: opp.duration,
       spots: opp.spots,
@@ -897,7 +898,7 @@ function OpportunitiesTab({
                   <Textarea placeholder="Description *" value={editForm.description}
                     onChange={e => setEditForm({ ...editForm, description: e.target.value })}
                     className="rounded-xl text-sm min-h-[60px]" />
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-3 gap-2">
                     <select value={editForm.category}
                       onChange={e => setEditForm({ ...editForm, category: e.target.value as Category })}
                       className="h-9 rounded-xl border border-input bg-background px-3 text-sm">
@@ -908,6 +909,12 @@ function OpportunitiesTab({
                     <Input placeholder="Location *" value={editForm.location}
                       onChange={e => setEditForm({ ...editForm, location: e.target.value })}
                       className="h-9 rounded-xl text-sm" />
+                    <select value={editForm.town}
+                      onChange={e => setEditForm({ ...editForm, town: e.target.value })}
+                      className="h-9 rounded-xl border border-input bg-background px-3 text-sm">
+                      <option value="">No town set</option>
+                      {TOWNS.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
                   </div>
                   <div className="grid grid-cols-3 gap-2">
                     <Input type="datetime-local" value={editForm.date}

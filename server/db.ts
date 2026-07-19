@@ -333,6 +333,13 @@ try {
   db.exec('ALTER TABLE signups ADD COLUMN lastReminderAt TEXT DEFAULT NULL');
 }
 
+// Migrate: add town to opportunities (fixed Somerset-area list; null = not set yet)
+try {
+  db.prepare('SELECT town FROM opportunities LIMIT 1').get();
+} catch {
+  db.exec('ALTER TABLE opportunities ADD COLUMN town TEXT DEFAULT NULL');
+}
+
 // Auto-grant admin and auto-verify the designated admin email
 if (!process.env.ADMIN_EMAIL) {
   console.warn(

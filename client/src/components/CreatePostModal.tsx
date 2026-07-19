@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { useAuthStore, useOpportunitiesStore } from '@/lib/store';
-import { type Category } from '@/lib/mockData';
+import { type Category, TOWNS } from '@/lib/mockData';
 import { useLocation } from 'wouter';
 
 // ── Questionnaire config ─────────────────────────────────────────────
@@ -137,7 +137,7 @@ export default function CreatePostModal({ open, onClose }: Props) {
   const [recurringTime, setRecurringTime] = useState('12:00');
   const [steps, setSteps] = useState<string[]>(['']);
   const [formData, setFormData] = useState({
-    title: '', description: '', location: '', date: '', duration: 2, spots: 20,
+    title: '', description: '', location: '', town: '', date: '', duration: 2, spots: 20,
   });
   const fileInputRef = useRef<HTMLInputElement>(null);
   const todayStr = new Date().toISOString().slice(0, 16);
@@ -164,7 +164,7 @@ export default function CreatePostModal({ open, onClose }: Props) {
     setTagSearch('');
     setImageFile(null);
     setImagePreview('');
-    setFormData({ title: '', description: '', location: '', date: '', duration: 2, spots: 20 });
+    setFormData({ title: '', description: '', location: '', town: '', date: '', duration: 2, spots: 20 });
     setFormErrors({});
     setSpotsType('limited');
     setIsRecurring(false);
@@ -204,6 +204,7 @@ export default function CreatePostModal({ open, onClose }: Props) {
       const locationError = getLocationError(formData.location);
       if (locationError) errors.location = locationError;
     }
+    if (!formData.town) errors.town = 'Please select a town';
     if (!isRecurring) {
       if (!formData.date) errors.date = 'Date is required';
       else if (new Date(formData.date) <= new Date()) errors.date = 'Date must be in the future';
@@ -239,6 +240,7 @@ export default function CreatePostModal({ open, onClose }: Props) {
       description: formData.description.trim(),
       category: selectedType!,
       location: formData.location.trim(),
+      town: formData.town,
       date: resolvedDate,
       duration: formData.duration,
       spots,
@@ -495,6 +497,18 @@ export default function CreatePostModal({ open, onClose }: Props) {
                               </a>
                             </p>
                           )}
+                        </div>
+
+                        <div>
+                          <label className="text-xs font-bold tracking-widest uppercase opacity-75 block mb-1">Town *</label>
+                          <select
+                            value={formData.town}
+                            onChange={e => { setFormData({ ...formData, town: e.target.value }); setFormErrors({ ...formErrors, town: '' }); }}
+                            className={cn("w-full rounded-xl bg-white/80 text-foreground border-0 text-sm h-9 px-3", formErrors.town && "ring-2 ring-red-400")}>
+                            <option value="">Select a town…</option>
+                            {TOWNS.map(t => <option key={t} value={t}>{t}</option>)}
+                          </select>
+                          {formErrors.town && <p className="text-red-200 text-xs">{formErrors.town}</p>}
                         </div>
 
                         {/* ── Schedule type toggle ── */}

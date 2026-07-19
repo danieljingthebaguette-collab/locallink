@@ -10,7 +10,7 @@ import { useToast } from '@/hooks/use-toast';
 import { getCardSize, isLargeCard, getTitleSize } from '@/lib/cardUtils';
 import { getCategoryColor, getModalGradient, getCategoryBorder, getCategoryLabel } from '@/lib/categoryUtils';
 import { useAuthStore, useOpportunitiesStore, useFavoritesStore, getRecurringStatus } from '@/lib/store';
-import { CATEGORIES, type Category, type Opportunity } from '@/lib/mockData';
+import { CATEGORIES, TOWNS, type Category, type Opportunity } from '@/lib/mockData';
 import CreatePostModal from '@/components/CreatePostModal';
 import { VerifiedBadge } from '@/components/VerifiedBadge';
 import CropEditor, {
@@ -39,8 +39,8 @@ export default function Home() {
   const { toast } = useToast();
   const { isLoggedIn, currentUser } = useAuthStore();
   const {
-    setSearchQuery, setCategory, setSortBy, getFiltered,
-    currentCategory, searchQuery, sortBy,
+    setSearchQuery, setCategory, setSortBy, setTown, getFiltered,
+    currentCategory, searchQuery, sortBy, currentTown,
     signup, cancelSignup, fetchOpportunities, updateOpportunity,
     loading, loaded, opportunities,
   } = useOpportunitiesStore();
@@ -68,14 +68,14 @@ export default function Home() {
   // Edit post state
   const [showEditForm, setShowEditForm] = useState(false);
   const [editForm, setEditForm] = useState<{
-    title: string; description: string; location: string; date: string;
+    title: string; description: string; location: string; town: string; date: string;
     duration: number; spots: number; category: Category;
     spotsType: 'limited' | 'unlimited' | 'none';
     recurringDay?: number; recurringTime?: string;
     cardTransform: ImageTransform;
     modalTransform: ImageTransform;
   }>({
-    title: '', description: '', location: '', date: '', duration: 2, spots: 0,
+    title: '', description: '', location: '', town: '', date: '', duration: 2, spots: 0,
     category: 'volunteer',
     spotsType: 'none',
     cardTransform: DEFAULT_TRANSFORM,
@@ -298,6 +298,7 @@ export default function Home() {
       title: opp.title,
       description: opp.description,
       location: opp.location,
+      town: opp.town ?? '',
       date: opp.date,
       duration: opp.duration,
       spots: opp.spots || 0,
@@ -324,6 +325,7 @@ export default function Home() {
       title: editForm.title,
       description: editForm.description,
       location: editForm.location,
+      town: editForm.town || null,
       duration: editForm.duration,
       spots: editForm.spots,
       category: editForm.category,
@@ -422,14 +424,26 @@ export default function Home() {
                 </button>
               ))}
             </div>
-            {/* Sort toggle + pills */}
+            {/* Sort toggle + town filter + pills */}
             <div>
-              <button
-                onClick={() => setShowSort(s => !s)}
-                className="flex items-center gap-1 text-xs font-semibold text-muted-foreground uppercase tracking-wide hover:text-foreground transition-colors mb-1.5">
-                <span>Sort: {SORT_OPTIONS.find(o => o.value === sortBy)?.label}</span>
-                <ChevronDown className={cn("w-3.5 h-3.5 transition-transform duration-200", showSort && "rotate-180")} />
-              </button>
+              <div className="flex items-center gap-4 flex-wrap mb-1.5">
+                <button
+                  onClick={() => setShowSort(s => !s)}
+                  className="flex items-center gap-1 text-xs font-semibold text-muted-foreground uppercase tracking-wide hover:text-foreground transition-colors">
+                  <span>Sort: {SORT_OPTIONS.find(o => o.value === sortBy)?.label}</span>
+                  <ChevronDown className={cn("w-3.5 h-3.5 transition-transform duration-200", showSort && "rotate-180")} />
+                </button>
+                <label className="flex items-center gap-1 text-xs font-semibold text-muted-foreground uppercase tracking-wide cursor-pointer hover:text-foreground transition-colors">
+                  <span>Town:</span>
+                  <select
+                    value={currentTown}
+                    onChange={e => setTown(e.target.value)}
+                    className="bg-transparent text-xs font-semibold uppercase tracking-wide cursor-pointer focus:outline-none max-w-[150px]">
+                    <option value="all">All towns</option>
+                    {TOWNS.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </label>
+              </div>
               <div className={cn(
                 "overflow-hidden transition-all duration-300 ease-in-out",
                 showSort ? "max-h-20 opacity-100" : "max-h-0 opacity-0 pointer-events-none"
@@ -847,6 +861,14 @@ export default function Home() {
                             </p>
                           )}
                         </div>
+                        <select
+                          value={editForm.town}
+                          onChange={e => setEditForm(f => ({ ...f, town: e.target.value }))}
+                          className="rounded-xl bg-white/80 text-foreground border-0 text-sm h-9 px-3"
+                        >
+                          <option value="">No town set</option>
+                          {TOWNS.map(t => <option key={t} value={t}>{t}</option>)}
+                        </select>
                         {selectedCard?.isRecurring ? (
                           /* Recurring events: day-of-week dropdown + time picker */
                           <div className="flex gap-1">

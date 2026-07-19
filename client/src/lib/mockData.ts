@@ -1,11 +1,28 @@
 export type Category = 'volunteer' | 'education' | 'fitness' | 'community' | 'environment';
 
+// Fixed town list for post tagging and board filtering — the single source of
+// truth for every town dropdown. Mirrored server-side as VALID_TOWNS in
+// routes.ts (client and server don't share modules, same as VALID_CATEGORIES).
+export const TOWNS = [
+  'Montgomery/Skillman',
+  'Hillsborough',
+  'Princeton',
+  'Bridgewater',
+  'Somerville',
+  'Franklin Township',
+  'Manville',
+  'Raritan',
+  'Belle Mead/Rocky Hill',
+  'Flemington',
+] as const;
+
 export interface Opportunity {
   id: string;
   title: string;
   description: string;
   category: Category;
   location: string;
+  town?: string | null; // fixed-list town tag; null on posts created before the field existed
   date: string;
   duration: number;
   spots: number;
