@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useLocation } from 'wouter';
-import { cn } from '@/lib/utils';
+import { cn, getExternalSignupUrlError } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
@@ -722,9 +722,11 @@ function OpportunitiesTab({
     title: string; description: string; category: Category;
     location: string; town: string; date: string; duration: number; spots: number;
     pinnedSize: 'small' | 'medium' | 'large' | null;
-  }>({ title: '', description: '', category: 'volunteer', location: '', town: '', date: '', duration: 2, spots: 10, pinnedSize: null });
+    externalSignupUrl: string;
+  }>({ title: '', description: '', category: 'volunteer', location: '', town: '', date: '', duration: 2, spots: 10, pinnedSize: null, externalSignupUrl: '' });
   const [editReason, setEditReason] = useState('');
   const [savingEdit, setSavingEdit] = useState(false);
+  const [signupUrlError, setSignupUrlError] = useState('');
 
   useEffect(() => {
     const t = setTimeout(() => setSearchQuery(searchInput), 300);
@@ -740,6 +742,7 @@ function OpportunitiesTab({
   const startEdit = (opp: Opportunity) => {
     setEditingId(opp.id);
     setEditReason('');
+    setSignupUrlError('');
     setEditForm({
       title: opp.title,
       description: opp.description,
@@ -750,11 +753,14 @@ function OpportunitiesTab({
       duration: opp.duration,
       spots: opp.spots,
       pinnedSize: (opp.pinnedSize as 'small' | 'medium' | 'large' | null) ?? null,
+      externalSignupUrl: opp.externalSignupUrl ?? '',
     });
   };
 
   const handleSaveEdit = async (oppId: string) => {
     if (!editForm.title || !editForm.description || !editForm.location || !editForm.date) return;
+    const urlError = getExternalSignupUrlError(editForm.externalSignupUrl);
+    if (urlError) { setSignupUrlError(urlError); return; }
     setSavingEdit(true);
     const ok = await onUpdateOpportunity(oppId, editForm, editReason);
     setSavingEdit(false);
@@ -943,6 +949,15 @@ function OpportunitiesTab({
                       <option value="medium">Medium (2×1)</option>
                       <option value="large">Large (2×2, hero)</option>
                     </select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground block mb-1">
+                      Signup page (optional) — if volunteers need to register on your own site
+                    </label>
+                    <Input placeholder="https://your-site.org/signup" value={editForm.externalSignupUrl}
+                      onChange={e => { setEditForm({ ...editForm, externalSignupUrl: e.target.value }); setSignupUrlError(''); }}
+                      className={cn("h-9 rounded-xl text-sm", signupUrlError && "ring-2 ring-red-400")} />
+                    {signupUrlError && <p className="text-red-500 text-xs mt-1">{signupUrlError}</p>}
                   </div>
                   <div className="relative">
                     <Textarea

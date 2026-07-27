@@ -340,6 +340,13 @@ try {
   db.exec('ALTER TABLE opportunities ADD COLUMN town TEXT DEFAULT NULL');
 }
 
+// Migrate: add externalSignupUrl to opportunities (org's own registration page, if any)
+try {
+  db.prepare('SELECT externalSignupUrl FROM opportunities LIMIT 1').get();
+} catch {
+  db.exec('ALTER TABLE opportunities ADD COLUMN externalSignupUrl TEXT DEFAULT NULL');
+}
+
 // One-time backfill: tag pre-field posts with a town ONLY when the location or
 // title plainly contains a listed town's name — anything ambiguous stays null
 // for a human to set via the edit form. Idempotent (guarded by town IS NULL);

@@ -20,3 +20,20 @@ export function getLocationError(location: string): string | null {
   }
   return null;
 }
+
+// Optional external signup URL on a post — validated only when non-blank.
+// Mirrored server-side in routes.ts.
+export function getExternalSignupUrlError(url: string): string | null {
+  const trimmed = url.trim();
+  if (!trimmed) return null;
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    return 'Enter a full web address, starting with http:// or https://';
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    return 'Signup page must start with http:// or https://';
+  }
+  return null;
+}

@@ -46,6 +46,7 @@ export interface Opportunity {
   steps?: string[];  // Volunteer steps/instructions
   isFeatured?: boolean;
   hostVerified?: boolean;
+  externalSignupUrl?: string | null;  // org's own registration page, if volunteers must sign up there instead
 }
 
 export interface AppUser {

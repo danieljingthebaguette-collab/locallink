@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'wouter';
-import { motion, AnimatePresence } from 'framer-motion';
-import { cn, getLocationError } from '@/lib/utils';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
+import { cn, getLocationError, getExternalSignupUrlError } from '@/lib/utils';
 import { Plus, MapPin, Users, Clock, Search, Loader2, Heart, Flag, X, Share2, Edit3, Save, ChevronDown, Star } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -34,6 +34,45 @@ const SORT_OPTIONS: { value: 'newest' | 'oldest' | 'soonest' | 'popular'; label:
 // Easing curve used throughout — smooth deceleration
 const EASE_OUT = [0.25, 0.1, 0.25, 1] as const;
 
+// Fixed spark layout for the "I'm Interested" burst — perimeter points with an
+// outward direction each, so the effect reads as sparks leaving the button's
+// edges rather than a generic radial explosion. Deterministic (no per-render
+// randomness) so the animation is identical and testable every time it fires.
+const INTEREST_BURST_SPARKS = [
+  { left: '4%',  top: '15%',  dx: -20, dy: -16 },
+  { left: '18%', top: '0%',   dx: -12, dy: -24 },
+  { left: '38%', top: '0%',   dx: -2,  dy: -26 },
+  { left: '62%', top: '0%',   dx: 2,   dy: -26 },
+  { left: '82%', top: '0%',   dx: 12,  dy: -24 },
+  { left: '96%', top: '15%',  dx: 20,  dy: -16 },
+  { left: '96%', top: '85%',  dx: 20,  dy: 16 },
+  { left: '82%', top: '100%', dx: 12,  dy: 24 },
+  { left: '62%', top: '100%', dx: 2,   dy: 26 },
+  { left: '38%', top: '100%', dx: -2,  dy: 26 },
+  { left: '18%', top: '100%', dx: -12, dy: 24 },
+  { left: '4%',  top: '85%',  dx: -20, dy: 16 },
+] as const;
+
+/** One-shot spark burst from a button's edges. Mount to fire, unmount to reset —
+ * it never loops. Caller is responsible for skipping this entirely when
+ * prefers-reduced-motion is set; the state change it accompanies still happens either way. */
+function InterestBurst() {
+  return (
+    <div className="absolute inset-0 pointer-events-none overflow-visible" aria-hidden="true">
+      {INTEREST_BURST_SPARKS.map((s, i) => (
+        <motion.span
+          key={i}
+          initial={{ opacity: 1, scale: 0.4, x: 0, y: 0 }}
+          animate={{ opacity: 0, scale: 1, x: s.dx, y: s.dy }}
+          transition={{ duration: 0.5, delay: (i % 4) * 0.02, ease: 'easeOut' }}
+          className="absolute w-1.5 h-1.5 rounded-full bg-white shadow-[0_0_6px_2px_rgba(255,255,255,0.8)]"
+          style={{ left: s.left, top: s.top }}
+        />
+      ))}
+    </div>
+  );
+}
+
 export default function Home() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
@@ -53,6 +92,8 @@ export default function Home() {
   const [hostProfile, setHostProfile] = useState<{ profileImage: string | null } | null>(null);
   const [hostProfileLoading, setHostProfileLoading] = useState(false);
   const [signingUp, setSigningUp] = useState(false);
+  const [showInterestBurst, setShowInterestBurst] = useState(false);
+  const prefersReducedMotion = useReducedMotion();
   // Host "view interested" list — fetched on demand, not preloaded with the board
   const [showInterestedList, setShowInterestedList] = useState(false);
   const [interestedVolunteers, setInterestedVolunteers] = useState<
@@ -74,14 +115,17 @@ export default function Home() {
     recurringDay?: number; recurringTime?: string;
     cardTransform: ImageTransform;
     modalTransform: ImageTransform;
+    externalSignupUrl: string;
   }>({
     title: '', description: '', location: '', town: '', date: '', duration: 2, spots: 0,
     category: 'volunteer',
     spotsType: 'none',
     cardTransform: DEFAULT_TRANSFORM,
     modalTransform: DEFAULT_TRANSFORM,
+    externalSignupUrl: '',
   });
   const [savingEdit, setSavingEdit] = useState(false);
+  const [signupUrlEditError, setSignupUrlEditError] = useState('');
   const [showSort, setShowSort] = useState(false);
 
   // Bump this key whenever sort/category/search changes so cards re-animate entrance
@@ -233,6 +277,10 @@ export default function Home() {
       const success = await signup(oppId, currentUser.id);
       if (success) {
         toast({ title: "You're interested! ✓", description: 'You can view this in My Events.' });
+        if (!prefersReducedMotion) {
+          setShowInterestBurst(true);
+          window.setTimeout(() => setShowInterestBurst(false), 600);
+        }
         const fresh = useOpportunitiesStore.getState().opportunities.find(o => o.id === oppId);
         if (fresh) setSelectedCard(fresh); else setSelectedCard(null);
       } else {
@@ -255,10 +303,10 @@ export default function Home() {
   const handleCloseModal = () => {
     if (showEditForm && window.confirm('You have unsaved changes. Close anyway?')) {
       setSelectedCard(null); setShowReportModal(false); setReportReason(''); setReportNote(''); setShowEditForm(false);
-      setShowInterestedList(false); setInterestedVolunteers(null);
+      setShowInterestedList(false); setInterestedVolunteers(null); setShowInterestBurst(false);
     } else if (!showEditForm) {
       setSelectedCard(null); setShowReportModal(false); setReportReason(''); setReportNote('');
-      setShowInterestedList(false); setInterestedVolunteers(null);
+      setShowInterestedList(false); setInterestedVolunteers(null); setShowInterestBurst(false);
     }
   };
 
@@ -308,7 +356,9 @@ export default function Home() {
       recurringTime: opp.recurringTime,
       cardTransform: parseImageTransform(opp.cardObjectPosition),
       modalTransform: parseImageTransform(opp.modalObjectPosition),
+      externalSignupUrl: opp.externalSignupUrl ?? '',
     });
+    setSignupUrlEditError('');
     setShowEditForm(true);
   };
 
@@ -317,6 +367,11 @@ export default function Home() {
     const locationError = getLocationError(editForm.location);
     if (locationError) {
       toast({ title: locationError, variant: 'destructive' });
+      return;
+    }
+    const signupUrlError = getExternalSignupUrlError(editForm.externalSignupUrl);
+    if (signupUrlError) {
+      setSignupUrlEditError(signupUrlError);
       return;
     }
     setSavingEdit(true);
@@ -339,6 +394,7 @@ export default function Home() {
     }
     payload.cardObjectPosition = serializeImageTransform(editForm.cardTransform);
     payload.modalObjectPosition = serializeImageTransform(editForm.modalTransform);
+    payload.externalSignupUrl = editForm.externalSignupUrl.trim();
     const success = await updateOpportunity(selectedCard.id, payload as any);
     if (success) {
       // Refresh selected card from updated store
@@ -923,6 +979,23 @@ export default function Home() {
                           className="rounded-xl bg-white/80 text-foreground border-0 text-sm h-9 px-3 w-28"
                         />
                       </div>
+                      {/* External signup — org's own registration page, if they use one */}
+                      <div>
+                        <label className="text-xs text-white/75 font-medium block mb-1">
+                          Signup page (optional) — if volunteers need to register on your own site
+                        </label>
+                        <input
+                          type="text"
+                          value={editForm.externalSignupUrl}
+                          onChange={e => { setEditForm(f => ({ ...f, externalSignupUrl: e.target.value })); setSignupUrlEditError(''); }}
+                          placeholder="https://your-site.org/signup"
+                          className={cn(
+                            "w-full rounded-xl bg-white/80 text-foreground border-0 text-sm h-9 px-3",
+                            signupUrlEditError && "ring-2 ring-red-400"
+                          )}
+                        />
+                        {signupUrlEditError && <p className="text-red-200 text-xs mt-1">{signupUrlEditError}</p>}
+                      </div>
                       {/* Image crop editors — drag to pan, scroll/pinch to zoom */}
                       {selectedCard.image && (
                         <div className="space-y-2 pt-1">
@@ -1174,18 +1247,36 @@ export default function Home() {
                         </div>
                       ) : isInterested(selectedCard) ? (
                         <div className="space-y-2">
-                          <motion.div
-                            initial={{ scale: 0.95 }}
-                            animate={{ scale: 1 }}
-                            className="rounded-2xl py-3 font-semibold text-center bg-green-500/30 border border-green-300/40 text-white text-lg">
-                            Interested ✓
-                          </motion.div>
+                          <div className="relative">
+                            <motion.div
+                              initial={{ scale: 0.95 }}
+                              animate={{ scale: 1 }}
+                              className="rounded-2xl py-3 font-semibold text-center bg-green-500/30 border border-green-300/40 text-white text-lg">
+                              Interested ✓
+                            </motion.div>
+                            {/* One-shot spark burst — mounts to fire, unmounts to reset, never loops.
+                                Skipped under prefers-reduced-motion (handleSignup never sets it then);
+                                the state change above still happens regardless. */}
+                            {showInterestBurst && <InterestBurst />}
+                          </div>
                           {/* Viral loop: the moment someone commits is the moment
                               they're most likely to bring a friend along */}
                           <button onClick={() => handleShare(selectedCard.id)}
                             className="w-full rounded-2xl py-2.5 font-semibold bg-white/15 hover:bg-white/25 border border-white/30 text-white text-sm transition-colors flex items-center justify-center gap-2">
                             <Share2 className="w-4 h-4" /> Invite a friend — copy link
                           </button>
+                          {/* Org's own registration page — a separate, clearly distinct control from
+                              the interest confirmation above, so double-tapping "Interested ✓" (which
+                              has no href) can never navigate anywhere. */}
+                          {selectedCard.externalSignupUrl && (
+                            <a
+                              href={selectedCard.externalSignupUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="w-full rounded-2xl py-2.5 font-semibold bg-white/15 hover:bg-white/25 border border-white/30 text-white text-sm transition-colors flex items-center justify-center gap-2">
+                              Complete signup with {selectedCard.hostName} →
+                            </a>
+                          )}
                           <button onClick={() => handleCancelSignup(selectedCard.id)} disabled={signingUp}
                             className="w-full rounded-2xl py-2 font-medium text-white/60 hover:text-white/80 text-sm transition-colors">
                             {signingUp ? 'Removing...' : 'Remove interest'}

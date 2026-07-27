@@ -61,6 +61,21 @@ function withTags(opp: any, signups: string[] = []) {
   return { ...opp, tags: safeJsonParse<string[]>(opp.tags, []), steps: safeJsonParse<string[]>(opp.steps, []), signups, hostVerified: !!opp.hostVerified };
 }
 
+// Optional external signup URL on a post — validated only when non-blank.
+// Mirrored client-side in client/src/lib/utils.ts.
+function getExternalSignupUrlError(url: string): string | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return 'Enter a full web address, starting with http:// or https://';
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    return 'Signup page must start with http:// or https://';
+  }
+  return null;
+}
+
 // Allowed enum values — validated server-side to prevent garbage data
 const VALID_SPOTS_TYPES  = ['limited', 'unlimited', 'none'] as const;
 const VALID_CATEGORIES   = ['volunteer', 'education', 'fitness', 'environment', 'community'] as const;
@@ -542,7 +557,7 @@ router.get('/api/my-posts', requireAuth, (req: AuthRequest, res: Response) => {
 // Creating an opportunity requires being logged in as an org account (or admin)
 router.post('/api/opportunities', requireAuth, (req: AuthRequest, res: Response) => {
   try {
-    const { title, description, category, location, town, date, duration, spots, spotsType, image, tags, isRecurring, recurringDay, recurringTime, steps } = req.body;
+    const { title, description, category, location, town, date, duration, spots, spotsType, image, tags, isRecurring, recurringDay, recurringTime, steps, externalSignupUrl } = req.body;
     if (!title || !description || !category || !location || !date || !duration) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
@@ -551,6 +566,12 @@ router.post('/api/opportunities', requireAuth, (req: AuthRequest, res: Response)
     // Town is required on NEW posts (existing rows stay null until backfilled)
     if (!town || !VALID_TOWNS.includes(town)) {
       return res.status(400).json({ error: 'Please select a town from the list' });
+    }
+    // Never required — validated only when the org actually provided one
+    const trimmedSignupUrl = typeof externalSignupUrl === 'string' ? externalSignupUrl.trim() : '';
+    if (trimmedSignupUrl) {
+      const signupUrlError = getExternalSignupUrlError(trimmedSignupUrl);
+      if (signupUrlError) return res.status(400).json({ error: signupUrlError });
     }
 
     const hostId = req.userId!;
@@ -572,9 +593,9 @@ router.post('/api/opportunities', requireAuth, (req: AuthRequest, res: Response)
     const status = req.isAdmin ? 'approved' : 'pending';
 
     db.prepare(
-      `INSERT INTO opportunities (id, title, description, category, location, town, date, duration, spots, spotsRemaining, spotsType, image, hostId, hostName, popularity, tags, steps, createdAt, isRecurring, recurringDay, recurringTime, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(id, title, description, category, location, town, date, duration, resolvedSpots, resolvedSpots, resolvedSpotsType, image || null, hostId, hostUser?.username || 'Unknown', tagsJson, stepsJson, createdAt, isRecurring ? 1 : 0, recurringDay ?? null, recurringTime ?? null, status);
+      `INSERT INTO opportunities (id, title, description, category, location, town, date, duration, spots, spotsRemaining, spotsType, image, hostId, hostName, popularity, tags, steps, createdAt, isRecurring, recurringDay, recurringTime, status, externalSignupUrl)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(id, title, description, category, location, town, date, duration, resolvedSpots, resolvedSpots, resolvedSpotsType, image || null, hostId, hostUser?.username || 'Unknown', tagsJson, stepsJson, createdAt, isRecurring ? 1 : 0, recurringDay ?? null, recurringTime ?? null, status, trimmedSignupUrl || null);
 
     const opp = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(id) as any;
     return res.status(201).json(withTags(opp, []));
@@ -698,7 +719,7 @@ router.put('/api/opportunities/:id', requireAuth, (req: AuthRequest, res: Respon
     if (!opp) return res.status(404).json({ error: 'Opportunity not found' });
     if (opp.hostId !== userId && !req.isAdmin) return res.status(403).json({ error: 'Not authorized to edit this opportunity' });
 
-    const { title, description, category, location, town, date, duration, spots, spotsType, image, tags, isAvailable, isRecurring, recurringDay, recurringTime, cardObjectPosition, modalObjectPosition } = req.body;
+    const { title, description, category, location, town, date, duration, spots, spotsType, image, tags, isAvailable, isRecurring, recurringDay, recurringTime, cardObjectPosition, modalObjectPosition, externalSignupUrl } = req.body;
 
     // --- Input validation ---
     if (spotsType !== undefined && !VALID_SPOTS_TYPES.includes(spotsType)) {
@@ -730,6 +751,15 @@ router.put('/api/opportunities/:id', requireAuth, (req: AuthRequest, res: Respon
     if (town !== undefined && town !== null && town !== '' && !VALID_TOWNS.includes(town)) {
       return res.status(400).json({ error: `Invalid town. Must be one of: ${VALID_TOWNS.join(', ')}` });
     }
+    // Never required — validated only when a non-blank value was sent; a blank value clears it to null
+    let trimmedSignupUrl: string | undefined;
+    if (externalSignupUrl !== undefined) {
+      trimmedSignupUrl = typeof externalSignupUrl === 'string' ? externalSignupUrl.trim() : '';
+      if (trimmedSignupUrl) {
+        const signupUrlError = getExternalSignupUrlError(trimmedSignupUrl);
+        if (signupUrlError) return res.status(400).json({ error: signupUrlError });
+      }
+    }
 
     // --- Apply updates (all inside a transaction so they're atomic) ---
     db.transaction(() => {
@@ -750,6 +780,7 @@ router.put('/api/opportunities/:id', requireAuth, (req: AuthRequest, res: Respon
       if (recurringTime  !== undefined) db.prepare('UPDATE opportunities SET recurringTime = ? WHERE id = ?').run(recurringTime, oppId);
       if (cardObjectPosition  !== undefined) db.prepare('UPDATE opportunities SET cardObjectPosition = ? WHERE id = ?').run(cardObjectPosition || null, oppId);
       if (modalObjectPosition !== undefined) db.prepare('UPDATE opportunities SET modalObjectPosition = ? WHERE id = ?').run(modalObjectPosition || null, oppId);
+      if (trimmedSignupUrl    !== undefined) db.prepare('UPDATE opportunities SET externalSignupUrl = ? WHERE id = ?').run(trimmedSignupUrl || null, oppId);
     })();
 
     const updated = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(oppId) as any;
@@ -909,7 +940,7 @@ router.delete('/api/admin/users/:id', requireAdmin, (req: AuthRequest, res: Resp
 router.put('/api/admin/opportunities/:id', requireAdmin, (req: Request, res: Response) => {
   try {
     const oppId = req.params.id;
-    const { title, description, category, location, town, date, duration, spots, spotsRemaining, adminReason, pinnedSize } = req.body;
+    const { title, description, category, location, town, date, duration, spots, spotsRemaining, adminReason, pinnedSize, externalSignupUrl } = req.body;
 
     const opp = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(oppId) as any;
     if (!opp) return res.status(404).json({ error: 'Opportunity not found' });
@@ -934,6 +965,15 @@ router.put('/api/admin/opportunities/:id', requireAdmin, (req: Request, res: Res
     if (town !== undefined && town !== null && town !== '' && !VALID_TOWNS.includes(town)) {
       return res.status(400).json({ error: `Invalid town. Must be one of: ${VALID_TOWNS.join(', ')}` });
     }
+    // Never required — validated only when a non-blank value was sent; a blank value clears it to null
+    let trimmedSignupUrl: string | undefined;
+    if (externalSignupUrl !== undefined) {
+      trimmedSignupUrl = typeof externalSignupUrl === 'string' ? externalSignupUrl.trim() : '';
+      if (trimmedSignupUrl) {
+        const signupUrlError = getExternalSignupUrlError(trimmedSignupUrl);
+        if (signupUrlError) return res.status(400).json({ error: signupUrlError });
+      }
+    }
 
     if (title !== undefined) db.prepare('UPDATE opportunities SET title = ? WHERE id = ?').run(String(title).trim(), oppId);
     if (description !== undefined) db.prepare('UPDATE opportunities SET description = ? WHERE id = ?').run(String(description).trim(), oppId);
@@ -947,6 +987,9 @@ router.put('/api/admin/opportunities/:id', requireAdmin, (req: Request, res: Res
     // pinnedSize: admin-only card size override ('small' | 'medium' | 'large' | null = auto)
     if (pinnedSize !== undefined) {
       db.prepare('UPDATE opportunities SET pinnedSize = ? WHERE id = ?').run(pinnedSize, oppId);
+    }
+    if (trimmedSignupUrl !== undefined) {
+      db.prepare('UPDATE opportunities SET externalSignupUrl = ? WHERE id = ?').run(trimmedSignupUrl || null, oppId);
     }
 
     // Notify host if a reason was provided

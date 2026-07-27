@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { cn, getLocationError } from '@/lib/utils';
+import { cn, getLocationError, getExternalSignupUrlError } from '@/lib/utils';
 import { X, Upload, ChevronRight, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -137,7 +137,7 @@ export default function CreatePostModal({ open, onClose }: Props) {
   const [recurringTime, setRecurringTime] = useState('12:00');
   const [steps, setSteps] = useState<string[]>(['']);
   const [formData, setFormData] = useState({
-    title: '', description: '', location: '', town: '', date: '', duration: 2, spots: 20,
+    title: '', description: '', location: '', town: '', date: '', duration: 2, spots: 20, externalSignupUrl: '',
   });
   const fileInputRef = useRef<HTMLInputElement>(null);
   const todayStr = new Date().toISOString().slice(0, 16);
@@ -164,7 +164,7 @@ export default function CreatePostModal({ open, onClose }: Props) {
     setTagSearch('');
     setImageFile(null);
     setImagePreview('');
-    setFormData({ title: '', description: '', location: '', town: '', date: '', duration: 2, spots: 20 });
+    setFormData({ title: '', description: '', location: '', town: '', date: '', duration: 2, spots: 20, externalSignupUrl: '' });
     setFormErrors({});
     setSpotsType('limited');
     setIsRecurring(false);
@@ -205,6 +205,10 @@ export default function CreatePostModal({ open, onClose }: Props) {
       if (locationError) errors.location = locationError;
     }
     if (!formData.town) errors.town = 'Please select a town';
+    if (formData.externalSignupUrl.trim()) {
+      const signupUrlError = getExternalSignupUrlError(formData.externalSignupUrl);
+      if (signupUrlError) errors.externalSignupUrl = signupUrlError;
+    }
     if (!isRecurring) {
       if (!formData.date) errors.date = 'Date is required';
       else if (new Date(formData.date) <= new Date()) errors.date = 'Date must be in the future';
@@ -249,6 +253,7 @@ export default function CreatePostModal({ open, onClose }: Props) {
       image: imageUrl,
       tags: selectedTags,
       steps: steps.filter(s => s.trim()),
+      externalSignupUrl: formData.externalSignupUrl.trim() || null,
       hostId: currentUser?.id || '',
       hostName: currentUser?.username || '',
       ...(isRecurring && { isRecurring: true, recurringDay, recurringTime }),
@@ -661,6 +666,19 @@ export default function CreatePostModal({ open, onClose }: Props) {
                         ))}
                       </div>
                       {formErrors.steps && <p className="text-red-200 text-xs">{formErrors.steps}</p>}
+                    </div>
+
+                    {/* External signup — org's own registration page, if they use one */}
+                    <div className="bg-white/15 backdrop-blur-md rounded-2xl p-4 border border-white/20 space-y-2">
+                      <label className="text-xs font-bold tracking-widest uppercase opacity-75 block">
+                        Signup page (optional)
+                      </label>
+                      <p className="text-white/60 text-xs">If volunteers need to register on your own site.</p>
+                      <Input placeholder="https://your-site.org/signup"
+                        value={formData.externalSignupUrl}
+                        onChange={e => { setFormData({ ...formData, externalSignupUrl: e.target.value }); setFormErrors({ ...formErrors, externalSignupUrl: '' }); }}
+                        className={cn("rounded-xl bg-white/80 text-foreground border-0 text-sm h-9", formErrors.externalSignupUrl && "ring-2 ring-red-400")} />
+                      {formErrors.externalSignupUrl && <p className="text-red-200 text-xs">{formErrors.externalSignupUrl}</p>}
                     </div>
 
                     <div className="bg-white/15 backdrop-blur-md rounded-2xl p-4 border border-white/20 text-center">
