@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useLocation } from 'wouter';
+import { useLocation, Redirect } from 'wouter';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -38,10 +38,11 @@ export default function Account() {
   const [appealSending, setAppealSending] = useState(false);
   const [appealSent, setAppealSent] = useState(false);
 
-  // If already logged in, redirect to profile
+  // If already logged in, redirect to profile. Uses <Redirect> rather than
+  // calling navigate() here: navigate() during render updates the router (and
+  // Navigation) mid-render, which React flags as a setState-during-render.
   if (isLoggedIn && currentUser) {
-    navigate('/profile');
-    return null;
+    return <Redirect to="/profile" />;
   }
 
   const validateForm = (): boolean => {

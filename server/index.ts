@@ -76,7 +76,13 @@ const dbPath = process.env.DB_PATH;
 const uploadsPath = dbPath
   ? path.join(path.dirname(dbPath), 'uploads')
   : path.join(__dirname, '..', 'uploads');
-app.use('/uploads', express.static(uploadsPath));
+// Upload filenames are unique (timestamp + random) and never rewritten, so
+// they're safe to cache hard. Without this they were served max-age=0 and
+// every page view re-fetched every post image.
+app.use('/uploads', express.static(uploadsPath, {
+  maxAge: '30d',
+  immutable: true,
+}));
 
 // ── OG preview tags for social crawlers ──────────────────────────────────────
 // IMPORTANT: must be registered BEFORE express.static(distPath). The static
@@ -142,8 +148,21 @@ ${imgTags}
 
 // Serve frontend in production
 const distPath = path.join(__dirname, '..', 'dist');
-app.use(express.static(distPath));
+app.use(express.static(distPath, {
+  setHeaders(res, filePath) {
+    // Vite fingerprints everything in assets/ (index-<hash>.js), so those are
+    // immutable and can be cached for a year. index.html must NOT be — it's
+    // what points at the current hashes, and a cached copy would pin visitors
+    // to a stale build after every deploy.
+    if (filePath.endsWith('.html')) {
+      res.setHeader('Cache-Control', 'no-cache');
+    } else if (filePath.includes(`${path.sep}assets${path.sep}`)) {
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    }
+  },
+}));
 app.get('/{*path}', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-cache');
   res.sendFile(path.join(distPath, 'index.html'));
 });
 
