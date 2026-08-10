@@ -796,17 +796,45 @@ export default function Home() {
               })}
             </div>
 
-            {filteredOpportunities.length === 0 && loaded && (
-              <motion.div
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.35, ease: EASE_OUT }}
-                className="text-center py-16 space-y-4">
-                <Search className="w-12 h-12 text-muted-foreground mx-auto opacity-50" />
-                <p className="text-muted-foreground text-lg">No opportunities found.</p>
-                <Button onClick={() => { setSearchQuery(''); setCategory('all'); }} className="rounded-full">Clear Filters</Button>
-              </motion.div>
-            )}
+            {filteredOpportunities.length === 0 && loaded && (() => {
+              // Name what's actually filtering, so an empty board reads as a
+              // narrow search rather than an empty site.
+              const activeFilters = [
+                searchQuery.trim() && `“${searchQuery.trim()}”`,
+                currentCategory !== 'all' && getCategoryLabel(currentCategory as Category),
+                currentTown !== 'all' && currentTown,
+              ].filter(Boolean) as string[];
+              return (
+                <motion.div
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.35, ease: EASE_OUT }}
+                  className="text-center py-16 space-y-4">
+                  <div className="w-16 h-16 rounded-full bg-secondary flex items-center justify-center mx-auto">
+                    <Search className="w-7 h-7 text-muted-foreground" />
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-foreground text-lg font-heading font-bold">
+                      {activeFilters.length ? 'Nothing matches those filters' : 'No opportunities posted yet'}
+                    </p>
+                    <p className="text-muted-foreground text-sm max-w-md mx-auto">
+                      {activeFilters.length
+                        ? `Showing ${activeFilters.join(' · ')}. Try widening your search.`
+                        : 'Check back soon — new opportunities go up as local organisations post them.'}
+                    </p>
+                  </div>
+                  {activeFilters.length > 0 && (
+                    // Must clear town too — it used to be left set, so clearing
+                    // filters on an empty town left the board just as empty.
+                    <Button
+                      onClick={() => { setSearchQuery(''); setCategory('all'); setTown('all'); }}
+                      className="rounded-full">
+                      Clear all filters
+                    </Button>
+                  )}
+                </motion.div>
+              );
+            })()}
 
             <div className="rounded-3xl border-2 border-border bg-secondary/40 backdrop-blur-sm p-8 md:p-12 text-center">
               <h2 className="font-heading text-2xl md:text-3xl font-bold text-foreground mb-3">Ready to make a difference?</h2>
