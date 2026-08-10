@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn, getLocationError, getExternalSignupUrlError } from '@/lib/utils';
-import { X, Upload, ChevronRight, Loader2 } from 'lucide-react';
+import { X, Upload, ChevronRight, Loader2, Trash2, FileText, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -75,6 +75,50 @@ const FIELD_TAGS = [
 type CreateStep = 'type' | 'tags' | 'details';
 type SpotsType = 'limited' | 'unlimited' | 'none';
 
+// ── Draft autosave ───────────────────────────────────────────────────
+// A half-filled post is real work; closing the modal shouldn't silently bin it.
+// ponytail: localStorage, not the server — one draft per browser, no schema
+// change, no API. The chosen image is a File object and can't be serialised, so
+// drafts never carry it; the restore banner says so. Move this server-side only
+// if hosts start asking for drafts across devices.
+const DRAFT_KEY = 'locallink_post_draft';
+
+interface PostDraft {
+  savedAt: number;
+  createStep: CreateStep;
+  selectedType: Category | null;
+  selectedTags: string[];
+  formData: { title: string; description: string; location: string; town: string; date: string; duration: number; spots: number; externalSignupUrl: string };
+  spotsType: SpotsType;
+  isRecurring: boolean;
+  recurringDay: number;
+  recurringTime: string;
+  steps: string[];
+}
+
+function readDraft(): PostDraft | null {
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY);
+    if (!raw) return null;
+    const d = JSON.parse(raw) as PostDraft;
+    // Guard against a shape change shipping a crash to anyone holding an old draft
+    return d && d.formData && Array.isArray(d.steps) ? d : null;
+  } catch {
+    return null;
+  }
+}
+
+/** "3 minutes ago" / "2 days ago" — coarse on purpose, exact time isn't useful here. */
+function timeAgo(ts: number): string {
+  const mins = Math.floor((Date.now() - ts) / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins} minute${mins === 1 ? '' : 's'} ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs} hour${hrs === 1 ? '' : 's'} ago`;
+  const days = Math.floor(hrs / 24);
+  return `${days} day${days === 1 ? '' : 's'} ago`;
+}
+
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const DAY_FULL = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
@@ -139,6 +183,8 @@ export default function CreatePostModal({ open, onClose }: Props) {
   const [formData, setFormData] = useState({
     title: '', description: '', location: '', town: '', date: '', duration: 2, spots: 20, externalSignupUrl: '',
   });
+  const [showCloseConfirm, setShowCloseConfirm] = useState(false);
+  const [pendingDraft, setPendingDraft] = useState<PostDraft | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const todayStr = new Date().toISOString().slice(0, 16);
 
@@ -156,6 +202,20 @@ export default function CreatePostModal({ open, onClose }: Props) {
     filteredTags.slice(i * chunkSize, (i + 1) * chunkSize)
   );
 
+  // Offer to restore a saved draft when the modal is (re)opened
+  useEffect(() => {
+    if (open) setPendingDraft(readDraft());
+  }, [open]);
+
+  // Lock background scroll while the modal is up, so dismissing it doesn't
+  // drop the host somewhere else on the board.
+  useEffect(() => {
+    if (!open) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, [open]);
+
   const handleClose = () => {
     // Reset state on close
     setCreateStep('type');
@@ -171,8 +231,86 @@ export default function CreatePostModal({ open, onClose }: Props) {
     setRecurringDay(1);
     setRecurringTime('12:00');
     setSteps(['']);
+    setShowCloseConfirm(false);
     onClose();
   };
+
+  /** Anything the host would be annoyed to lose. */
+  const hasContent = () =>
+    selectedType !== null ||
+    selectedTags.length > 0 ||
+    imageFile !== null ||
+    steps.some(s => s.trim()) ||
+    formData.title.trim() !== '' ||
+    formData.description.trim() !== '' ||
+    formData.location.trim() !== '' ||
+    formData.town !== '' ||
+    formData.date !== '' ||
+    formData.externalSignupUrl.trim() !== '';
+
+  /** Every dismissal path routes through here so nothing closes silently. */
+  const requestClose = () => {
+    if (hasContent()) setShowCloseConfirm(true);
+    else handleClose();
+  };
+
+  const saveDraftAndClose = () => {
+    const draft: PostDraft = {
+      savedAt: Date.now(),
+      createStep, selectedType, selectedTags, formData,
+      spotsType, isRecurring, recurringDay, recurringTime, steps,
+    };
+    try {
+      localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+      toast({
+        title: 'Draft saved',
+        description: imageFile
+          ? 'Pick up where you left off next time. You\'ll need to re-add the photo.'
+          : 'Pick up where you left off next time you open this.',
+      });
+    } catch {
+      // Private mode / quota — better to say so than to pretend it saved
+      toast({ title: 'Could not save draft', description: 'Your browser blocked local storage.', variant: 'destructive' });
+    }
+    handleClose();
+  };
+
+  const discardAndClose = () => {
+    try { localStorage.removeItem(DRAFT_KEY); } catch { /* nothing to clean up */ }
+    handleClose();
+  };
+
+  const resumeDraft = (d: PostDraft) => {
+    setCreateStep(d.createStep);
+    setSelectedType(d.selectedType);
+    setSelectedTags(d.selectedTags);
+    setFormData(d.formData);
+    setSpotsType(d.spotsType);
+    setIsRecurring(d.isRecurring);
+    setRecurringDay(d.recurringDay);
+    setRecurringTime(d.recurringTime);
+    setSteps(d.steps);
+    setPendingDraft(null);
+  };
+
+  const dismissDraft = () => {
+    try { localStorage.removeItem(DRAFT_KEY); } catch { /* nothing to clean up */ }
+    setPendingDraft(null);
+  };
+
+  // Escape routes through the same guard as every other dismissal path.
+  // No dep array: re-subscribing per render keeps the closure honest about
+  // current form state, and one keydown listener is not worth memoising.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (showCloseConfirm) setShowCloseConfirm(false);
+      else requestClose();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  });
 
   const handleTypeSelect = (type: Category) => {
     setSelectedType(type);
@@ -261,6 +399,8 @@ export default function CreatePostModal({ open, onClose }: Props) {
     setCreating(false);
 
     if (result) {
+      // Published — the draft has served its purpose
+      try { localStorage.removeItem(DRAFT_KEY); } catch { /* nothing to clean up */ }
       const isPending = result.status === 'pending';
       toast({
         title: isPending ? 'Post submitted for review!' : 'Post published! 🎉',
@@ -280,7 +420,7 @@ export default function CreatePostModal({ open, onClose }: Props) {
     <AnimatePresence>
       {open && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-          onClick={handleClose}
+          onClick={requestClose}
           className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
           <motion.div initial={{ scale: 0.92, opacity: 0, y: 24 }} animate={{ scale: 1, opacity: 1, y: 0 }}
             exit={{ scale: 0.92, opacity: 0, y: 24 }} transition={{ type: 'spring', stiffness: 320, damping: 32 }}
@@ -337,10 +477,36 @@ export default function CreatePostModal({ open, onClose }: Props) {
                       <p className="text-xs font-bold tracking-widest uppercase text-muted-foreground mb-1">Step 1 of 3</p>
                       <h2 className="text-2xl font-heading font-bold text-foreground">What are you offering?</h2>
                     </div>
-                    <button onClick={handleClose} className="p-2 rounded-full hover:bg-secondary transition-all -mt-1 -mr-1">
+                    <button onClick={requestClose} aria-label="Close" className="p-2 rounded-full hover:bg-secondary transition-all -mt-1 -mr-1">
                       <X className="w-5 h-5 text-muted-foreground" />
                     </button>
                   </div>
+                  {/* Unfinished work from a previous session */}
+                  {pendingDraft && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
+                      className="rounded-2xl border border-primary/30 bg-primary/5 p-4 flex items-start gap-3">
+                      <RotateCcw className="w-4 h-4 text-primary mt-0.5 flex-shrink-0" />
+                      <div className="flex-1 space-y-2.5">
+                        <div>
+                          <p className="text-sm font-semibold text-foreground">You have an unfinished post</p>
+                          <p className="text-xs text-muted-foreground">
+                            Saved {timeAgo(pendingDraft.savedAt)} — photos aren't kept in drafts.
+                          </p>
+                        </div>
+                        <div className="flex gap-2">
+                          <button onClick={() => resumeDraft(pendingDraft)}
+                            className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-colors">
+                            Resume
+                          </button>
+                          <button onClick={dismissDraft}
+                            className="px-3 py-1.5 rounded-lg text-xs font-semibold text-muted-foreground hover:text-red-500 transition-colors">
+                            Discard
+                          </button>
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
                   <div className="space-y-3">
                     {POST_TYPES.map((type, idx) => (
                       <motion.button key={type.id}
@@ -373,7 +539,7 @@ export default function CreatePostModal({ open, onClose }: Props) {
                       <h2 className="text-2xl font-heading font-bold text-foreground">What field is this in?</h2>
                       <p className="text-sm text-muted-foreground mt-1">Select all that apply (optional)</p>
                     </div>
-                    <button onClick={handleClose} className="p-2 rounded-full hover:bg-secondary transition-all -mt-1 -mr-1">
+                    <button onClick={requestClose} aria-label="Close" className="p-2 rounded-full hover:bg-secondary transition-all -mt-1 -mr-1">
                       <X className="w-5 h-5 text-muted-foreground" />
                     </button>
                   </div>
@@ -452,7 +618,7 @@ export default function CreatePostModal({ open, onClose }: Props) {
 
                     <div className="absolute top-4 left-4 right-4 flex items-center justify-between">
                       <span className="text-xs font-bold tracking-widest uppercase text-white/70 bg-black/30 rounded-full px-3 py-1">Step 3 of 3</span>
-                      <button onClick={e => { e.stopPropagation(); handleClose(); }} className="p-1.5 rounded-full bg-black/40 hover:bg-black/60 transition-colors">
+                      <button onClick={e => { e.stopPropagation(); requestClose(); }} aria-label="Close" className="p-1.5 rounded-full bg-black/40 hover:bg-black/60 transition-colors">
                         <X className="w-4 h-4 text-white" />
                       </button>
                     </div>
@@ -702,6 +868,54 @@ export default function CreatePostModal({ open, onClose }: Props) {
               )}
             </AnimatePresence>}
           </motion.div>
+
+          {/* Close confirmation — a half-filled post shouldn't vanish on a stray backdrop click */}
+          <AnimatePresence>
+            {showCloseConfirm && (
+              <motion.div
+                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                onClick={e => { e.stopPropagation(); setShowCloseConfirm(false); }}
+                className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/50">
+                <motion.div
+                  role="dialog" aria-modal="true" aria-labelledby="draft-confirm-title"
+                  initial={{ scale: 0.9, opacity: 0, y: 10 }}
+                  animate={{ scale: 1, opacity: 1, y: 0 }}
+                  exit={{ scale: 0.9, opacity: 0, y: 10 }}
+                  transition={{ type: 'spring', stiffness: 420, damping: 30 }}
+                  onClick={e => e.stopPropagation()}
+                  className="w-full max-w-xs rounded-2xl bg-card border border-border shadow-2xl p-5 space-y-4">
+                  <div className="flex items-start gap-3">
+                    <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                      <FileText className="w-4 h-4 text-primary" />
+                    </div>
+                    <div className="space-y-1">
+                      <h3 id="draft-confirm-title" className="font-heading font-bold text-foreground leading-tight">
+                        Save this as a draft?
+                      </h3>
+                      <p className="text-xs text-muted-foreground leading-relaxed">
+                        You haven't published it yet. Save it and pick up right where you left off.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={discardAndClose}
+                      className="flex-1 h-9 rounded-xl bg-red-500 hover:bg-red-600 text-white text-xs font-semibold transition-colors flex items-center justify-center gap-1.5">
+                      <Trash2 className="w-3.5 h-3.5" />
+                      Discard
+                    </button>
+                    <button onClick={saveDraftAndClose}
+                      className="flex-1 h-9 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-semibold transition-colors">
+                      Save draft
+                    </button>
+                  </div>
+                  <button onClick={() => setShowCloseConfirm(false)}
+                    className="w-full text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors">
+                    Keep editing
+                  </button>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </motion.div>
       )}
     </AnimatePresence>
