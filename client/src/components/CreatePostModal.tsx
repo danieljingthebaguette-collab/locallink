@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { useAuthStore, useOpportunitiesStore } from '@/lib/store';
+import ConfirmBubble from '@/components/ConfirmBubble';
 import { type Category, TOWNS } from '@/lib/mockData';
 import { useLocation } from 'wouter';
 
@@ -870,52 +871,18 @@ export default function CreatePostModal({ open, onClose }: Props) {
           </motion.div>
 
           {/* Close confirmation — a half-filled post shouldn't vanish on a stray backdrop click */}
-          <AnimatePresence>
-            {showCloseConfirm && (
-              <motion.div
-                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                onClick={e => { e.stopPropagation(); setShowCloseConfirm(false); }}
-                className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/50">
-                <motion.div
-                  role="dialog" aria-modal="true" aria-labelledby="draft-confirm-title"
-                  initial={{ scale: 0.9, opacity: 0, y: 10 }}
-                  animate={{ scale: 1, opacity: 1, y: 0 }}
-                  exit={{ scale: 0.9, opacity: 0, y: 10 }}
-                  transition={{ type: 'spring', stiffness: 420, damping: 30 }}
-                  onClick={e => e.stopPropagation()}
-                  className="w-full max-w-xs rounded-2xl bg-card border border-border shadow-2xl p-5 space-y-4">
-                  <div className="flex items-start gap-3">
-                    <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                      <FileText className="w-4 h-4 text-primary" />
-                    </div>
-                    <div className="space-y-1">
-                      <h3 id="draft-confirm-title" className="font-heading font-bold text-foreground leading-tight">
-                        Save this as a draft?
-                      </h3>
-                      <p className="text-xs text-muted-foreground leading-relaxed">
-                        You haven't published it yet. Save it and pick up right where you left off.
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    <button onClick={discardAndClose}
-                      className="flex-1 h-9 rounded-xl bg-red-500 hover:bg-red-600 text-white text-xs font-semibold transition-colors flex items-center justify-center gap-1.5">
-                      <Trash2 className="w-3.5 h-3.5" />
-                      Discard
-                    </button>
-                    <button onClick={saveDraftAndClose}
-                      className="flex-1 h-9 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-semibold transition-colors">
-                      Save draft
-                    </button>
-                  </div>
-                  <button onClick={() => setShowCloseConfirm(false)}
-                    className="w-full text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors">
-                    Keep editing
-                  </button>
-                </motion.div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+          <ConfirmBubble
+            open={showCloseConfirm}
+            icon={<FileText className="w-4 h-4 text-primary" />}
+            title="Save this as a draft?"
+            message="You haven't published it yet. Save it and pick up right where you left off."
+            destructiveLabel={<><Trash2 className="w-3.5 h-3.5" /> Discard</>}
+            onDestructive={discardAndClose}
+            confirmLabel="Save draft"
+            onConfirm={saveDraftAndClose}
+            cancelLabel="Keep editing"
+            onCancel={() => setShowCloseConfirm(false)}
+          />
         </motion.div>
       )}
     </AnimatePresence>

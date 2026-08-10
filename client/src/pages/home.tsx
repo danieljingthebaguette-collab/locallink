@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'wouter';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { cn, getLocationError, getExternalSignupUrlError } from '@/lib/utils';
-import { Plus, MapPin, Users, Clock, Search, Loader2, Heart, Flag, X, Share2, Edit3, Save, ChevronDown, Star } from 'lucide-react';
+import { Plus, MapPin, Users, Clock, Search, Loader2, Heart, Flag, X, Share2, Edit3, Save, ChevronDown, Star, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -12,6 +12,7 @@ import { getCategoryColor, getModalGradient, getCategoryBorder, getCategoryLabel
 import { useAuthStore, useOpportunitiesStore, useFavoritesStore, getRecurringStatus } from '@/lib/store';
 import { CATEGORIES, TOWNS, type Category, type Opportunity } from '@/lib/mockData';
 import CreatePostModal from '@/components/CreatePostModal';
+import ConfirmBubble from '@/components/ConfirmBubble';
 import { VerifiedBadge } from '@/components/VerifiedBadge';
 import CropEditor, {
   type ImageTransform,
@@ -108,6 +109,7 @@ export default function Home() {
   const [submittingReport, setSubmittingReport] = useState(false);
   // Edit post state
   const [showEditForm, setShowEditForm] = useState(false);
+  const [showDiscardEdits, setShowDiscardEdits] = useState(false);
   const [editForm, setEditForm] = useState<{
     title: string; description: string; location: string; town: string; date: string;
     duration: number; spots: number; category: Category;
@@ -300,14 +302,15 @@ export default function Home() {
   };
 
   // ── Close modal — confirm if edit form has unsaved changes ────────
+  const closeModalNow = () => {
+    setSelectedCard(null); setShowReportModal(false); setReportReason(''); setReportNote(''); setShowEditForm(false);
+    setShowInterestedList(false); setInterestedVolunteers(null); setShowInterestBurst(false);
+    setShowDiscardEdits(false);
+  };
+
   const handleCloseModal = () => {
-    if (showEditForm && window.confirm('You have unsaved changes. Close anyway?')) {
-      setSelectedCard(null); setShowReportModal(false); setReportReason(''); setReportNote(''); setShowEditForm(false);
-      setShowInterestedList(false); setInterestedVolunteers(null); setShowInterestBurst(false);
-    } else if (!showEditForm) {
-      setSelectedCard(null); setShowReportModal(false); setReportReason(''); setReportNote('');
-      setShowInterestedList(false); setInterestedVolunteers(null); setShowInterestBurst(false);
-    }
+    if (showEditForm) setShowDiscardEdits(true);
+    else closeModalNow();
   };
 
   // ── Host: view interested volunteers (fetched on demand, host-only server-side) ──
@@ -1361,6 +1364,18 @@ export default function Home() {
 
       {/* ── Create Post Modal ──────────────────────────────────────────── */}
       <CreatePostModal open={showCreateModal} onClose={() => setShowCreateModal(false)} />
+
+      {/* Host edited their post, then clicked away — don't bin the edits silently */}
+      <ConfirmBubble
+        open={showDiscardEdits}
+        icon={<Edit3 className="w-4 h-4 text-primary" />}
+        title="Discard your changes?"
+        message="You've edited this post but haven't saved yet. Closing now loses those edits."
+        destructiveLabel={<><Trash2 className="w-3.5 h-3.5" /> Discard</>}
+        onDestructive={closeModalNow}
+        cancelLabel="Keep editing"
+        onCancel={() => setShowDiscardEdits(false)}
+      />
     </div>
   );
 }
