@@ -185,3 +185,18 @@ html {
   outline-offset: 2px;
   border-radius: 0.25rem;
 }
+
+/* Reduced motion — covers CSS transitions, animate-pulse and the smooth-scroll
+   above. framer-motion is handled separately by <MotionConfig reducedMotion="user">. */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

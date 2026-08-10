@@ -1,4 +1,6 @@
-import { Switch, Route } from "wouter";
+import { useEffect } from "react";
+import { Switch, Route, useLocation } from "wouter";
+import { MotionConfig } from "framer-motion";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -19,6 +21,20 @@ import NotFound from "@/pages/not-found";
 import Leaderboard from "@/pages/leaderboard";
 import OrgProfilePage from "@/pages/org-profile";
 import JoinPage from "@/pages/join";
+
+/**
+ * wouter keeps the window scroll offset across route changes, so clicking
+ * "About" from halfway down the board used to land you halfway down About.
+ * Instant, not smooth — html has scroll-behavior: smooth, and animating the
+ * old page upward on every navigation reads as a glitch.
+ */
+function ScrollToTop() {
+  const [pathname] = useLocation();
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
+  }, [pathname]);
+  return null;
+}
 
 function Router() {
   return (
@@ -45,10 +61,15 @@ function Router() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <Toaster />
-      <Navigation />
-      <Router />
-      <FeedbackButton />
+      {/* "user" defers to the OS reduced-motion setting for every framer-motion
+          animation on the site, so it doesn't have to be handled per component. */}
+      <MotionConfig reducedMotion="user">
+        <ScrollToTop />
+        <Toaster />
+        <Navigation />
+        <Router />
+        <FeedbackButton />
+      </MotionConfig>
     </QueryClientProvider>
   );
 }
