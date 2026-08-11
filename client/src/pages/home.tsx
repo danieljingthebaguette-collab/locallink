@@ -13,6 +13,7 @@ import { useAuthStore, useOpportunitiesStore, useFavoritesStore, getRecurringSta
 import { CATEGORIES, TOWNS, type Category, type Opportunity } from '@/lib/mockData';
 import CreatePostModal from '@/components/CreatePostModal';
 import ConfirmBubble from '@/components/ConfirmBubble';
+import { useScrolled } from '@/hooks/use-scrolled';
 import { VerifiedBadge } from '@/components/VerifiedBadge';
 import CropEditor, {
   type ImageTransform,
@@ -110,6 +111,7 @@ export default function Home() {
   // Edit post state
   const [showEditForm, setShowEditForm] = useState(false);
   const [showDiscardEdits, setShowDiscardEdits] = useState(false);
+  const scrolled = useScrolled();
   const [editForm, setEditForm] = useState<{
     title: string; description: string; location: string; town: string; date: string;
     duration: number; spots: number; category: Category;
@@ -460,15 +462,26 @@ export default function Home() {
     <div className="min-h-screen bg-background pb-24 font-sans">
 
       {/* Search & Filters */}
-      <div className="sticky top-16 z-40 bg-background/95 backdrop-blur-lg border-b border-border/40">
-        <div className="container mx-auto px-4 py-3 space-y-3">
+      {/* Pinned directly under the header, which condenses 64px -> 52px on
+          scroll. This must track that exactly or a gap opens above the pills. */}
+      <div className={cn(
+        "sticky z-40 bg-background/95 backdrop-blur-lg border-b border-border/40 transition-[top] duration-200 ease-out",
+        scrolled ? "top-[52px]" : "top-16"
+      )}>
+        <div className={cn(
+          "container mx-auto px-4 transition-[padding,row-gap] duration-200 ease-out",
+          scrolled ? "py-2 space-y-2" : "py-3 space-y-3"
+        )}>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
               placeholder="Search opportunities..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10 h-10 rounded-full border-border bg-secondary/50"
+              className={cn(
+                "pl-10 rounded-full border-border bg-secondary/50 transition-[height] duration-200 ease-out",
+                scrolled ? "h-9" : "h-10"
+              )}
             />
           </div>
           <div className="overflow-hidden transition-all duration-300"

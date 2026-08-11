@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils';
 import { useAuthStore, useNotificationStore } from '@/lib/store';
 import { Home, Calendar, Info, User, LogOut, Shield, Bell, Users, X, Trash2, Edit3, UserMinus, RefreshCw, CheckCircle2, XCircle, Sun, Moon } from 'lucide-react';
 import Logo from './Logo';
+import { useScrolled } from '@/hooks/use-scrolled';
 
 const NAV_ITEMS = [
   { path: '/', label: 'Home', mobileLabel: 'Home', icon: Home },
@@ -19,6 +20,7 @@ export default function Navigation() {
   const { notifications, unreadCount, fetchNotifications, markRead, markAllRead } = useNotificationStore();
   const [notifOpen, setNotifOpen] = useState(false);
   const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'));
+  const scrolled = useScrolled();
   const notifRef = useRef<HTMLDivElement>(null);
 
   // Fetch notifications when logged in, poll every 30s
@@ -53,17 +55,30 @@ export default function Navigation() {
   return (
     <>
       {/* Desktop Header */}
+      {/* Condenses on scroll: 64px -> 52px. The board's filter bar is pinned
+          directly beneath this and shrinks by the same 12px, so the two stay
+          flush — see HEADER_H / HEADER_H_SCROLLED in home.tsx. */}
       <header className="sticky top-0 z-50 bg-background/95 backdrop-blur-lg border-b border-border/40">
         <div className="container mx-auto px-4">
-          <div className="flex items-center justify-between h-16">
+          <div className={cn(
+            "flex items-center justify-between transition-[height] duration-200 ease-out",
+            scrolled ? "h-[52px]" : "h-16"
+          )}>
             {/* Logo */}
             <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigate('/')}>
-              <Logo size={38} />
+              <Logo size={scrolled ? 30 : 38} />
               <div className="flex flex-col">
-                <h1 className="font-heading font-semibold tracking-tight text-foreground text-xl leading-none">
+                <h1 className={cn(
+                  "font-heading font-semibold tracking-tight text-foreground leading-none transition-[font-size] duration-200 ease-out",
+                  scrolled ? "text-lg" : "text-xl"
+                )}>
                   LocalLink
                 </h1>
-                <p className="text-[10px] font-medium text-muted-foreground tracking-wide hidden sm:block">
+                {/* Tagline is the first thing to go — it's orientation, not navigation */}
+                <p className={cn(
+                  "text-[10px] font-medium text-muted-foreground tracking-wide hidden sm:block overflow-hidden transition-all duration-200 ease-out",
+                  scrolled ? "max-h-0 opacity-0" : "max-h-4 opacity-100"
+                )}>
                   Linking People to Local Action
                 </p>
               </div>
