@@ -96,7 +96,8 @@ export default function Navigation() {
                   localStorage.setItem('locallink_theme', dark ? 'dark' : 'light');
                   setIsDark(dark);
                 }}
-                className="p-2 rounded-full hover:bg-secondary transition-colors"
+                className="w-11 h-11 flex items-center justify-center rounded-full hover:bg-secondary transition-colors"
+                aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
                 title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
               >
                 {isDark ? <Sun className="w-5 h-5 text-muted-foreground" /> : <Moon className="w-5 h-5 text-muted-foreground" />}
@@ -122,7 +123,8 @@ export default function Navigation() {
                   <div className="relative" ref={notifRef}>
                     <button
                       onClick={() => setNotifOpen(o => !o)}
-                      className="relative p-2 rounded-full hover:bg-secondary transition-colors"
+                      className="relative w-11 h-11 flex items-center justify-center rounded-full hover:bg-secondary transition-colors"
+                      aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : 'Notifications'}
                       title="Notifications"
                     >
                       <Bell className="w-5 h-5 text-muted-foreground" />
@@ -207,7 +209,8 @@ export default function Navigation() {
 
                   <button
                     onClick={() => { logout(); navigate('/'); }}
-                    className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+                    aria-label="Log out"
+                    className="min-h-[44px] min-w-[44px] justify-center px-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
                   >
                     <LogOut className="w-4 h-4" />
                     <span className="hidden sm:inline">Logout</span>

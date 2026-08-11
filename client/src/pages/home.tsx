@@ -486,18 +486,22 @@ export default function Home() {
             {/* Sort toggle + town filter + pills */}
             <div>
               <div className="flex items-center gap-4 flex-wrap mb-1.5">
+                {/* min-h-[44px] on these: as inline text they were 16-17px tall,
+                    well under the 44px tap minimum on a phone. */}
                 <button
                   onClick={() => setShowSort(s => !s)}
-                  className="flex items-center gap-1 text-xs font-semibold text-muted-foreground uppercase tracking-wide hover:text-foreground transition-colors">
+                  aria-expanded={showSort}
+                  className="min-h-[44px] flex items-center gap-1 text-xs font-semibold text-muted-foreground uppercase tracking-wide hover:text-foreground transition-colors">
                   <span>Sort: {SORT_OPTIONS.find(o => o.value === sortBy)?.label}</span>
                   <ChevronDown className={cn("w-3.5 h-3.5 transition-transform duration-200", showSort && "rotate-180")} />
                 </button>
-                <label className="flex items-center gap-1 text-xs font-semibold text-muted-foreground uppercase tracking-wide cursor-pointer hover:text-foreground transition-colors">
+                <label className="min-h-[44px] flex items-center gap-1 text-xs font-semibold text-muted-foreground uppercase tracking-wide cursor-pointer hover:text-foreground transition-colors">
                   <span>Town:</span>
                   <select
                     value={currentTown}
                     onChange={e => setTown(e.target.value)}
-                    className="bg-transparent text-xs font-semibold uppercase tracking-wide cursor-pointer focus:outline-none max-w-[150px]">
+                    aria-label="Filter by town"
+                    className="min-h-[44px] bg-transparent text-xs font-semibold uppercase tracking-wide cursor-pointer focus:outline-none max-w-[150px]">
                     <option value="all">All towns</option>
                     {TOWNS.map(t => <option key={t} value={t}>{t}</option>)}
                   </select>
@@ -510,7 +514,7 @@ export default function Home() {
                 <div className="flex items-center gap-2 flex-wrap pb-1">
                   {SORT_OPTIONS.map(opt => (
                     <button key={opt.value} onClick={() => { setSortBy(opt.value); setShowSort(false); }}
-                      className={cn("px-3 py-1 rounded-full text-xs font-semibold transition-all border",
+                      className={cn("px-3 min-h-[38px] rounded-full text-xs font-semibold transition-all border",
                         sortBy === opt.value
                           ? "bg-foreground text-background border-foreground"
                           : "bg-background text-foreground border-border hover:border-foreground/50")}>
