@@ -79,8 +79,10 @@
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
+    /* Surfaces are 1px hairlines rather than 2px outlines, so the border needs a
+       touch more definition to hold its edge against the near-white background. */
+    --border: 214 20% 88%;
+    --input: 214 20% 88%;
     --ring: 221 83% 53%;
 
     --radius: 0.75rem;
@@ -132,8 +134,10 @@
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 210 40% 98%;
 
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
+    /* Same reasoning as light mode — a 1px edge needs slightly more lift off the
+       dark ground than the old 2px outline did. */
+    --border: 217 25% 23%;
+    --input: 217 25% 23%;
     --ring: 224.3 76.3% 48%;
   }
 }

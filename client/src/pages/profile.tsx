@@ -160,7 +160,7 @@ export default function Profile() {
       <main className="container mx-auto px-4 py-8 max-w-2xl">
 
         {/* Profile Header */}
-        <div className="rounded-3xl border-2 border-border bg-card p-8 text-center mb-8 relative">
+        <div className="rounded-3xl border border-border bg-card p-8 text-center mb-8 relative">
           <button
             onClick={openEdit}
             className="absolute top-4 right-4 p-2 rounded-full hover:bg-secondary transition-colors text-muted-foreground"
@@ -316,7 +316,7 @@ export default function Profile() {
 
         {/* Organization Profile — only for org accounts */}
         {currentUser.accountType === 'organization' && (
-          <div className="rounded-3xl border-2 border-border bg-card p-6 mb-8">
+          <div className="rounded-3xl border border-border bg-card p-6 mb-8">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-heading font-bold text-lg text-foreground flex items-center gap-2">
                 <Building2 className="w-5 h-5 text-primary" />
@@ -385,7 +385,7 @@ export default function Profile() {
                     placeholder="Briefly describe what your organization does and your goals..."
                     value={orgForm.orgDescription}
                     onChange={e => setOrgForm(f => ({ ...f, orgDescription: e.target.value }))}
-                    className="rounded-xl border-2 border-border resize-none min-h-[100px]"
+                    className="rounded-xl border border-border resize-none min-h-[100px]"
                   />
                 </div>
                 <div className="space-y-1">
@@ -394,7 +394,7 @@ export default function Profile() {
                     placeholder="https://yourorg.org"
                     value={orgForm.orgWebsite}
                     onChange={e => setOrgForm(f => ({ ...f, orgWebsite: e.target.value }))}
-                    className="rounded-xl border-2 border-border h-11"
+                    className="rounded-xl border border-border h-11"
                   />
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -405,7 +405,7 @@ export default function Profile() {
                       placeholder="contact@yourorg.org"
                       value={orgForm.orgEmail}
                       onChange={e => setOrgForm(f => ({ ...f, orgEmail: e.target.value }))}
-                      className="rounded-xl border-2 border-border h-11"
+                      className="rounded-xl border border-border h-11"
                     />
                   </div>
                   <div className="space-y-1">
@@ -415,7 +415,7 @@ export default function Profile() {
                       placeholder="(555) 555-5555"
                       value={orgForm.orgPhone}
                       onChange={e => setOrgForm(f => ({ ...f, orgPhone: e.target.value }))}
-                      className="rounded-xl border-2 border-border h-11"
+                      className="rounded-xl border border-border h-11"
                     />
                   </div>
                 </div>
@@ -466,7 +466,7 @@ export default function Profile() {
             { icon: Award, label: 'Events Interested', value: opLoading && !loaded ? '...' : signedUp.length, color: 'text-purple-500' },
             { icon: Calendar, label: 'Events Hosted', value: opLoading && !loaded ? '...' : hosted.length, color: 'text-green-500' },
           ].map((stat) => (
-            <div key={stat.label} className="rounded-2xl border-2 border-border bg-card p-4 text-center">
+            <div key={stat.label} className="rounded-2xl border border-border bg-card p-4 text-center">
               <stat.icon className={`w-6 h-6 mx-auto mb-2 ${stat.color}`} />
               <p className="text-xl font-bold text-foreground">{stat.value}</p>
               <p className="text-[10px] text-muted-foreground font-medium leading-tight mt-1">{stat.label}</p>
@@ -475,7 +475,7 @@ export default function Profile() {
         </div>
 
         {/* Activity Summary */}
-        <div className="rounded-2xl border-2 border-border bg-card p-6 mb-6">
+        <div className="rounded-2xl border border-border bg-card p-6 mb-6">
           <h3 className="font-heading font-bold text-lg text-foreground mb-4">Activity Summary</h3>
           {opLoading && !loaded ? (
             <div className="flex items-center justify-center py-8">
@@ -496,7 +496,7 @@ export default function Profile() {
         </div>
 
         {/* Notification Settings — shown to all logged-in users */}
-        <div className="rounded-2xl border-2 border-border bg-card p-6 mb-6">
+        <div className="rounded-2xl border border-border bg-card p-6 mb-6">
           <h3 className="font-heading font-bold text-lg text-foreground mb-4 flex items-center gap-2">
             <Bell className="w-5 h-5 text-primary" />
             Notification Settings
@@ -567,7 +567,7 @@ export default function Profile() {
         </div>
 
         {/* Favorite Organizations */}
-        <div className="rounded-2xl border-2 border-border bg-card p-6 mb-8">
+        <div className="rounded-2xl border border-border bg-card p-6 mb-8">
           <h3 className="font-heading font-bold text-lg text-foreground mb-4 flex items-center gap-2">
             <Heart className="w-5 h-5 text-red-400" />
             Favorite Organizations

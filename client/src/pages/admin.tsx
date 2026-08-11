@@ -564,7 +564,7 @@ function UsersTab({
           placeholder="Search users..."
           value={searchInput}
           onChange={(e) => setSearchInput(e.target.value)}
-          className="pl-11 h-11 rounded-xl border-2 border-border"
+          className="pl-11 h-11 rounded-xl border border-border"
         />
       </div>
 
@@ -776,7 +776,7 @@ function OpportunitiesTab({
           placeholder="Search opportunities..."
           value={searchInput}
           onChange={(e) => setSearchInput(e.target.value)}
-          className="pl-11 h-11 rounded-xl border-2 border-border"
+          className="pl-11 h-11 rounded-xl border border-border"
         />
       </div>
 
@@ -1464,13 +1464,13 @@ function JoinLinksTab({
             placeholder="Organization name (e.g. Montgomery EMS)"
             value={orgName}
             onChange={e => setOrgName(e.target.value)}
-            className="flex-1 min-w-48 h-11 rounded-xl border-2 border-border"
+            className="flex-1 min-w-48 h-11 rounded-xl border border-border"
             onKeyDown={e => e.key === 'Enter' && handleCreate()}
           />
           <select
             value={category}
             onChange={e => setCategory(e.target.value)}
-            className="h-11 rounded-xl border-2 border-border bg-background px-3 text-sm text-foreground"
+            className="h-11 rounded-xl border border-border bg-background px-3 text-sm text-foreground"
           >
             <option value="">Any category</option>
             <option value="volunteer">Volunteer</option>

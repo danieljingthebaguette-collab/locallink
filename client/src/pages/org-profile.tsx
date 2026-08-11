@@ -109,7 +109,7 @@ export default function OrgProfilePage() {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="rounded-3xl border-2 border-border bg-card p-8 mb-6"
+          className="rounded-3xl border border-border bg-card p-8 mb-6"
         >
           <div className="flex items-start gap-5">
             {/* Logo */}
@@ -227,7 +227,7 @@ export default function OrgProfilePage() {
             Active & Upcoming ({activePosts.length})
           </h2>
           {activePosts.length === 0 ? (
-            <div className="rounded-2xl border-2 border-border bg-card p-8 text-center">
+            <div className="rounded-2xl border border-border bg-card p-8 text-center">
               <Calendar className="w-8 h-8 text-muted-foreground mx-auto opacity-40 mb-2" />
               <p className="text-sm text-muted-foreground">No active posts right now</p>
             </div>
@@ -266,7 +266,7 @@ function PostCard({ post, idx, formatDate, past = false }: { post: Opportunity; 
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: idx * 0.05 }}
       className={cn(
-        'rounded-2xl border-2 border-border bg-card p-4 flex gap-4',
+        'rounded-2xl border border-border bg-card p-4 flex gap-4',
         past && 'opacity-80'
       )}
     >

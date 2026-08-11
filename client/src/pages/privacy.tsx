@@ -11,7 +11,7 @@ export default function Privacy() {
           </div>
 
           {/* What We Collect */}
-          <div className="rounded-3xl bg-card border-2 border-border p-8 space-y-3">
+          <div className="rounded-3xl bg-card border border-border p-8 space-y-3">
             <h2 className="text-xl font-bold text-foreground">What We Collect</h2>
             <p className="text-muted-foreground text-sm leading-relaxed">
               We collect only the information necessary to operate the LocalLink platform. This includes:
@@ -40,7 +40,7 @@ export default function Privacy() {
           </div>
 
           {/* How We Use It */}
-          <div className="rounded-3xl bg-card border-2 border-border p-8 space-y-3">
+          <div className="rounded-3xl bg-card border border-border p-8 space-y-3">
             <h2 className="text-xl font-bold text-foreground">How We Use It</h2>
             <p className="text-muted-foreground text-sm leading-relaxed">
               The information we collect is used exclusively to provide and improve the LocalLink
@@ -56,7 +56,7 @@ export default function Privacy() {
           </div>
 
           {/* What We Don't Do */}
-          <div className="rounded-3xl bg-card border-2 border-border p-8 space-y-3">
+          <div className="rounded-3xl bg-card border border-border p-8 space-y-3">
             <h2 className="text-xl font-bold text-foreground">What We Don't Do</h2>
             <p className="text-muted-foreground text-sm leading-relaxed">
               We believe your data belongs to you. We make the following commitments:
@@ -71,7 +71,7 @@ export default function Privacy() {
           </div>
 
           {/* Email Communications */}
-          <div className="rounded-3xl bg-card border-2 border-border p-8 space-y-3">
+          <div className="rounded-3xl bg-card border border-border p-8 space-y-3">
             <h2 className="text-xl font-bold text-foreground">Email Communications</h2>
             <p className="text-muted-foreground text-sm leading-relaxed">
               We send email only when necessary. The emails you may receive from LocalLink are:
@@ -96,7 +96,7 @@ export default function Privacy() {
           </div>
 
           {/* Data Security */}
-          <div className="rounded-3xl bg-card border-2 border-border p-8 space-y-3">
+          <div className="rounded-3xl bg-card border border-border p-8 space-y-3">
             <h2 className="text-xl font-bold text-foreground">Data Security</h2>
             <p className="text-muted-foreground text-sm leading-relaxed">
               We take reasonable steps to protect your information. Our security practices include:
@@ -126,7 +126,7 @@ export default function Privacy() {
           </div>
 
           {/* Your Rights */}
-          <div className="rounded-3xl bg-card border-2 border-border p-8 space-y-3">
+          <div className="rounded-3xl bg-card border border-border p-8 space-y-3">
             <h2 className="text-xl font-bold text-foreground">Your Rights</h2>
             <p className="text-muted-foreground text-sm leading-relaxed">
               You have control over your data on LocalLink:
@@ -152,7 +152,7 @@ export default function Privacy() {
           </div>
 
           {/* Contact */}
-          <div className="rounded-3xl bg-card border-2 border-border p-8 space-y-3">
+          <div className="rounded-3xl bg-card border border-border p-8 space-y-3">
             <h2 className="text-xl font-bold text-foreground">Contact</h2>
             <p className="text-muted-foreground text-sm leading-relaxed">
               If you have any questions, concerns, or requests regarding this Privacy Policy or how

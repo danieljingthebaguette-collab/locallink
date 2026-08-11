@@ -11,7 +11,7 @@ export default function Terms() {
           </div>
 
           {/* Introduction */}
-          <div className="rounded-3xl bg-card border-2 border-border p-8 space-y-3">
+          <div className="rounded-3xl bg-card border border-border p-8 space-y-3">
             <h2 className="text-xl font-bold text-foreground">Introduction</h2>
             <p className="text-muted-foreground text-sm leading-relaxed">
               Welcome to LocalLink, a community volunteer platform that connects volunteers with local
@@ -26,7 +26,7 @@ export default function Terms() {
           </div>
 
           {/* User Accounts */}
-          <div className="rounded-3xl bg-card border-2 border-border p-8 space-y-3">
+          <div className="rounded-3xl bg-card border border-border p-8 space-y-3">
             <h2 className="text-xl font-bold text-foreground">User Accounts</h2>
             <p className="text-muted-foreground text-sm leading-relaxed">
               To use certain features of LocalLink you must register for an account. You agree to:
@@ -47,7 +47,7 @@ export default function Terms() {
           </div>
 
           {/* Acceptable Use */}
-          <div className="rounded-3xl bg-card border-2 border-border p-8 space-y-3">
+          <div className="rounded-3xl bg-card border border-border p-8 space-y-3">
             <h2 className="text-xl font-bold text-foreground">Acceptable Use</h2>
             <p className="text-muted-foreground text-sm leading-relaxed">
               LocalLink is a platform for genuine community volunteering. You agree not to:
@@ -66,7 +66,7 @@ export default function Terms() {
           </div>
 
           {/* Content */}
-          <div className="rounded-3xl bg-card border-2 border-border p-8 space-y-3">
+          <div className="rounded-3xl bg-card border border-border p-8 space-y-3">
             <h2 className="text-xl font-bold text-foreground">Content</h2>
             <p className="text-muted-foreground text-sm leading-relaxed">
               You retain ownership of any content you submit to LocalLink, including event listings,
@@ -83,7 +83,7 @@ export default function Terms() {
           </div>
 
           {/* Limitation of Liability */}
-          <div className="rounded-3xl bg-card border-2 border-border p-8 space-y-3">
+          <div className="rounded-3xl bg-card border border-border p-8 space-y-3">
             <h2 className="text-xl font-bold text-foreground">Limitation of Liability</h2>
             <p className="text-muted-foreground text-sm leading-relaxed">
               LocalLink is a platform that connects volunteers with opportunities posted by third
@@ -107,7 +107,7 @@ export default function Terms() {
           </div>
 
           {/* Changes to Terms */}
-          <div className="rounded-3xl bg-card border-2 border-border p-8 space-y-3">
+          <div className="rounded-3xl bg-card border border-border p-8 space-y-3">
             <h2 className="text-xl font-bold text-foreground">Changes to Terms</h2>
             <p className="text-muted-foreground text-sm leading-relaxed">
               We may update these Terms of Service from time to time to reflect changes to our
@@ -121,7 +121,7 @@ export default function Terms() {
           </div>
 
           {/* Contact */}
-          <div className="rounded-3xl bg-card border-2 border-border p-8 space-y-3">
+          <div className="rounded-3xl bg-card border border-border p-8 space-y-3">
             <h2 className="text-xl font-bold text-foreground">Contact</h2>
             <p className="text-muted-foreground text-sm leading-relaxed">
               If you have any questions about these Terms of Service, please contact us at{' '}

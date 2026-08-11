@@ -48,7 +48,7 @@ export default function About() {
         </div>
 
         {/* Mission */}
-        <section className="rounded-3xl bg-card border-2 border-border shadow-sm p-8 mb-8 space-y-4">
+        <section className="rounded-3xl bg-card border border-border shadow-sm p-8 mb-8 space-y-4">
           <h2 className="text-2xl font-bold text-foreground">Our Mission</h2>
           <p className="text-muted-foreground leading-relaxed">
             LocalLink is a community volunteer platform built to bridge the gap between people who
@@ -69,7 +69,7 @@ export default function About() {
             {TEAM_VALUES.map(({ icon: Icon, title, description }) => (
               <div
                 key={title}
-                className="rounded-2xl bg-card border-2 border-border shadow-sm p-6 space-y-3"
+                className="rounded-2xl bg-card border border-border shadow-sm p-6 space-y-3"
               >
                 <div className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-primary/10">
                   <Icon className="w-5 h-5 text-primary" />
@@ -82,7 +82,7 @@ export default function About() {
         </section>
 
         {/* How it works */}
-        <section className="rounded-3xl bg-card border-2 border-border shadow-sm p-8 mb-8 space-y-4">
+        <section className="rounded-3xl bg-card border border-border shadow-sm p-8 mb-8 space-y-4">
           <h2 className="text-2xl font-bold text-foreground">How It Works</h2>
           <ol className="space-y-4">
             {[
@@ -119,7 +119,7 @@ export default function About() {
             </a>
             <button
               onClick={() => navigate('/')}
-              className="inline-flex items-center gap-2 border-2 border-border rounded-full px-5 py-2.5 text-sm font-semibold text-foreground hover:bg-muted transition-colors"
+              className="inline-flex items-center gap-2 border border-border rounded-full px-5 py-2.5 text-sm font-semibold text-foreground hover:bg-muted transition-colors"
             >
               <Globe className="w-4 h-4" />
               Visit LocalLink

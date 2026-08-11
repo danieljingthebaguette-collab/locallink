@@ -335,7 +335,7 @@ export default function MyEvents() {
                   : !isClosed && !isPast(opp.date);
                 const inactive = !effectiveOpen;
                 return (
-                <div key={opp.id} className={cn('rounded-2xl border-2 border-border bg-card overflow-hidden transition-opacity', inactive && 'opacity-70')}>
+                <div key={opp.id} className={cn('rounded-2xl border border-border bg-card overflow-hidden transition-opacity', inactive && 'opacity-70')}>
                   {/* Card header */}
                   <div className="p-5 space-y-2">
                     <div className="flex items-start justify-between gap-4">
@@ -619,7 +619,7 @@ function EventCard({
   onRequestCancel: () => void;
 }) {
   return (
-    <div className="rounded-2xl border-2 border-border bg-card p-5 hover:shadow-md transition-all">
+    <div className="rounded-2xl border border-border bg-card p-5 hover:shadow-md transition-all">
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1 space-y-2">
           <span className={cn('px-3 py-1 rounded-full text-xs font-bold text-white inline-block', CATEGORY_BG[opp.category] || 'bg-primary')}>

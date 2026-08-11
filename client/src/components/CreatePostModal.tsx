@@ -472,7 +472,7 @@ export default function CreatePostModal({ open, onClose }: Props) {
                 <motion.div key="type"
                   initial={{ opacity: 0, x: 40 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -40 }}
                   transition={{ duration: 0.22 }}
-                  className="rounded-3xl bg-card border-2 border-border shadow-2xl p-8 md:p-10 space-y-6">
+                  className="rounded-3xl bg-card border border-border shadow-2xl p-8 md:p-10 space-y-6">
                   <div className="flex items-start justify-between">
                     <div>
                       <p className="text-xs font-bold tracking-widest uppercase text-muted-foreground mb-1">Step 1 of 3</p>
@@ -515,7 +515,7 @@ export default function CreatePostModal({ open, onClose }: Props) {
                         transition={{ delay: idx * 0.07 }}
                         whileHover={{ x: 6 }} whileTap={{ scale: 0.98 }}
                         onClick={() => handleTypeSelect(type.id)}
-                        className="w-full px-5 py-4 rounded-2xl bg-secondary/60 border-2 border-border hover:border-primary/40 hover:bg-primary/5 text-foreground font-medium transition-all text-left flex items-center gap-4 group">
+                        className="w-full px-5 py-4 rounded-2xl bg-secondary/60 border border-border hover:border-primary/40 hover:bg-primary/5 text-foreground font-medium transition-all text-left flex items-center gap-4 group">
                         <span className="text-2xl group-hover:scale-110 transition-transform">{type.icon}</span>
                         <div>
                           <p className="font-semibold text-foreground">{type.label}</p>
@@ -533,7 +533,7 @@ export default function CreatePostModal({ open, onClose }: Props) {
                 <motion.div key="tags"
                   initial={{ opacity: 0, x: 40 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -40 }}
                   transition={{ duration: 0.22 }}
-                  className="rounded-3xl bg-card border-2 border-border shadow-2xl p-8 md:p-10 space-y-6">
+                  className="rounded-3xl bg-card border border-border shadow-2xl p-8 md:p-10 space-y-6">
                   <div className="flex items-start justify-between">
                     <div>
                       <p className="text-xs font-bold tracking-widest uppercase text-muted-foreground mb-1">Step 2 of 3</p>

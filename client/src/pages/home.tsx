@@ -533,28 +533,33 @@ export default function Home() {
         {/* Logged-out hero + how-it-works — not rendered at all once authenticated */}
         {!isLoggedIn && (
           <>
-            <section className="mb-8 rounded-3xl border-2 border-border bg-secondary/40 px-6 py-6 md:p-10">
-              <h1 className="font-heading font-bold text-2xl md:text-4xl text-foreground leading-tight max-w-2xl">
+            {/* The hero is the one surface carrying weight — a faint wash toward
+                the brand blue, larger type, room to breathe. Everything below it
+                stays quiet so the page has an order to read in. */}
+            <section className="mb-10 rounded-3xl border border-border/60 bg-gradient-to-br from-primary/[0.07] via-secondary/50 to-secondary/20 px-6 py-10 md:px-12 md:py-14">
+              <h1 className="font-heading font-bold text-3xl md:text-5xl text-foreground leading-[1.08] tracking-tight max-w-3xl text-balance">
                 Find local volunteer opportunities in Somerset County
               </h1>
-              <p className="text-muted-foreground text-base md:text-lg mt-2 max-w-2xl">
+              <p className="text-muted-foreground text-base md:text-lg mt-4 max-w-xl leading-relaxed">
                 Real organizations, real events, service hours that count.
               </p>
-              <Button onClick={() => navigate('/account')} className="mt-4 md:mt-6 rounded-full px-8 h-11 font-semibold">
+              <Button onClick={() => navigate('/account')} className="mt-7 rounded-full px-8 h-12 font-semibold">
                 Sign up free
               </Button>
             </section>
-            <div className="mb-8 rounded-3xl border-2 border-border bg-secondary/40 px-6 py-5 grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Deliberately unboxed: a hairline rule groups the steps without
+                adding a third container competing with the hero. */}
+            <div className="mb-10 border-t border-border pt-7 grid grid-cols-1 md:grid-cols-3 gap-7">
               {[
                 { n: 1, t: 'Browse the board', d: 'Real events from Somerset County orgs' },
                 { n: 2, t: "Tap I'm Interested", d: 'One click — the org gets notified' },
                 { n: 3, t: 'Show up & help', d: 'Earn service hours that count' },
               ].map(s => (
-                <div key={s.n} className="flex items-start gap-3">
-                  <div className="w-8 h-8 rounded-full bg-primary/10 text-primary font-bold flex items-center justify-center flex-shrink-0">{s.n}</div>
+                <div key={s.n} className="flex items-start gap-3.5">
+                  <div className="w-8 h-8 rounded-full bg-primary/10 text-primary text-sm font-bold flex items-center justify-center flex-shrink-0 tabular-nums">{s.n}</div>
                   <div>
                     <p className="font-semibold text-sm text-foreground">{s.t}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">{s.d}</p>
+                    <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{s.d}</p>
                   </div>
                 </div>
               ))}
@@ -840,9 +845,9 @@ export default function Home() {
               );
             })()}
 
-            <div className="rounded-3xl border-2 border-border bg-secondary/40 backdrop-blur-sm p-8 md:p-12 text-center">
-              <h2 className="font-heading text-2xl md:text-3xl font-bold text-foreground mb-3">Ready to make a difference?</h2>
-              <p className="text-muted-foreground text-lg mb-6 max-w-2xl mx-auto">Discover local volunteer opportunities and connect with people in your community.</p>
+            <div className="rounded-3xl border border-border bg-secondary/30 p-8 md:p-12 text-center">
+              <h2 className="font-heading text-2xl md:text-3xl font-bold text-foreground mb-3 text-balance">Ready to make a difference?</h2>
+              <p className="text-muted-foreground text-base md:text-lg mb-6 max-w-lg mx-auto leading-relaxed">Discover local volunteer opportunities and connect with people in your community.</p>
               <Button size="lg" className="rounded-full px-8 h-11 font-semibold" onClick={openCreateModal}>Create an Opportunity</Button>
             </div>
           </>
