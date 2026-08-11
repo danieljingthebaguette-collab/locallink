@@ -103,6 +103,11 @@ export default function Navigation() {
                     {active && (
                       <motion.span
                         layoutId="navUnderline"
+                        // Only animate when the route changes. Without this the
+                        // underline also animates the vertical drift from the
+                        // header's 64px -> 52px condense, so it visibly floats
+                        // up from below the nav instead of moving with the text.
+                        layoutDependency={location}
                         className="absolute left-0 right-0 -bottom-px h-0.5 rounded-full bg-foreground"
                         transition={{ type: 'spring', stiffness: 380, damping: 32 }}
                       />

@@ -531,6 +531,10 @@ export default function Home() {
                     {active && (
                       <motion.span
                         layoutId="categoryPill"
+                        // Same reason as the nav underline: the filter bar's
+                        // padding and search height shrink on scroll, and without
+                        // this the indicator animates that drift too.
+                        layoutDependency={currentCategory}
                         className="absolute inset-0 rounded-full bg-foreground"
                         transition={{ type: 'spring', stiffness: 380, damping: 32 }}
                       />
