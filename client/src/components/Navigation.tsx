@@ -1,5 +1,5 @@
 import { useLocation } from 'wouter';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { useAuthStore, useNotificationStore } from '@/lib/store';
@@ -22,6 +22,32 @@ export default function Navigation() {
   const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'));
   const scrolled = useScrolled();
   const notifRef = useRef<HTMLDivElement>(null);
+  const navRef = useRef<HTMLDivElement>(null);
+  const [navIndicator, setNavIndicator] = useState<{ left: number; width: number } | null>(null);
+
+  // Position the underline from the active link's own offsets. offsetLeft is
+  // already relative to navRef (it's the positioned ancestor), so it is used
+  // as-is — subtracting the container's offset would double-count it.
+  //
+  // Nothing renders until there's a measurement, so the first paint puts the
+  // underline straight where it belongs instead of transitioning in from left: 0.
+  useLayoutEffect(() => {
+    const nav = navRef.current;
+    if (!nav) return;
+    const measure = () => {
+      const active = nav.querySelector<HTMLElement>('[data-active="true"]');
+      // offsetWidth is 0 while the nav is display:none below md — don't pin a
+      // stale position we'd then animate away from when it becomes visible.
+      if (!active || active.offsetWidth === 0) return setNavIndicator(null);
+      setNavIndicator({ left: active.offsetLeft, width: active.offsetWidth });
+    };
+    measure();
+    // Label widths move with viewport size and with late-loading fonts; the
+    // container resizes in both cases.
+    const ro = new ResizeObserver(measure);
+    ro.observe(nav);
+    return () => ro.disconnect();
+  }, [location]);
 
   // Fetch notifications when logged in, poll every 30s
   useEffect(() => {
@@ -84,9 +110,22 @@ export default function Navigation() {
               </div>
             </div>
 
-            {/* Desktop Nav — the underline is one shared element that slides
-                between links, matching the category pills on the board. */}
-            <div className="hidden md:flex items-center gap-6">
+            {/* Desktop Nav — one persistent underline that slides between links.
+                Deliberately NOT a Framer layoutId: that snapshots the outgoing
+                element's box at unmount, before any effect runs, and route changes
+                here always coincide with ScrollToTop resetting the scroll. The
+                snapshot was therefore taken at the old scroll offset and the line
+                flew up from below the fold by the full scroll distance.
+                This element never unmounts, so there is nothing to snapshot — it
+                just transitions left/width, driven by offsets inside this
+                container, which the header's scroll condense doesn't affect. */}
+            <div ref={navRef} className="relative hidden md:flex items-center gap-6">
+              {navIndicator && (
+                <span
+                  className="absolute -bottom-px h-0.5 rounded-full bg-foreground transition-[left,width] duration-300 ease-out"
+                  style={{ left: navIndicator.left, width: navIndicator.width }}
+                />
+              )}
               {NAV_ITEMS.map((item) => {
                 const active = location === item.path;
                 return (
@@ -94,28 +133,13 @@ export default function Navigation() {
                     key={item.path}
                     onClick={() => navigate(item.path)}
                     aria-current={active ? 'page' : undefined}
+                    data-active={active ? 'true' : undefined}
                     className={cn(
                       "relative font-medium text-sm transition-colors duration-150 pb-1.5",
                       active ? "text-foreground" : "text-muted-foreground hover:text-foreground"
                     )}
                   >
                     {item.label}
-                    {/* Plain element, deliberately NOT a layoutId shared-layout
-                        animation.
-                        Framer snapshots the outgoing element's box at unmount,
-                        during commit and before any effect runs. Route changes
-                        here always coincide with ScrollToTop resetting the scroll,
-                        so that snapshot is taken at the old scroll offset and the
-                        projection comes out wrong by the entire scroll distance —
-                        measured translate3d(_, 900px, _) after navigating from
-                        900px down, which read as the underline flying up from
-                        below the fold. No effect ordering fixes it, because the
-                        snapshot predates every effect.
-                        The pills on the board keep their layoutId: they animate
-                        within one page, with no route change and no scroll reset. */}
-                    {active && (
-                      <span className="absolute left-0 right-0 -bottom-px h-0.5 rounded-full bg-foreground" />
-                    )}
                   </button>
                 );
               })}
