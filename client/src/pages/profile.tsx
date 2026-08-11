@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { useAuthStore, useOpportunitiesStore, useFavoritesStore } from '@/lib/store';
-import { User, Mail, Award, Calendar, LogOut, Loader2, Edit3, Lock, Save, X, Heart, Building2, Bell, Camera } from 'lucide-react';
+import { User, Mail, Award, Calendar, LogOut, Loader2, Edit3, Lock, Save, X, Heart, Building2, Handshake, Bell, Camera } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 export default function Profile() {
@@ -216,12 +216,14 @@ export default function Profile() {
               Member since {new Date(currentUser.createdAt).toLocaleDateString()}
             </p>
             <span className={cn(
-              "text-xs font-semibold px-2 py-0.5 rounded-full",
+              "text-xs font-semibold px-2 py-0.5 rounded-full inline-flex items-center gap-1",
               currentUser.accountType === 'organization'
                 ? "bg-primary/10 text-primary"
                 : "bg-secondary text-muted-foreground"
             )}>
-              {currentUser.accountType === 'organization' ? '🏢 Organization' : '🤝 Volunteer'}
+              {currentUser.accountType === 'organization'
+                ? <><Building2 className="w-3 h-3" /> Organization</>
+                : <><Handshake className="w-3 h-3" /> Volunteer</>}
             </span>
           </div>
         </div>

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useLocation } from 'wouter';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
-import { Building2, Globe, Mail, Phone, Calendar, MapPin, Clock, Users, ArrowLeft, Loader2 } from 'lucide-react';
+import { Building2, Globe, Mail, Phone, Calendar, Repeat, MapPin, Clock, Users, ArrowLeft, Loader2 } from 'lucide-react';
 import { VerifiedBadge } from '@/components/VerifiedBadge';
 import { Button } from '@/components/ui/button';
 import { useAuthStore, useFavoritesStore } from '@/lib/store';
@@ -130,7 +130,7 @@ export default function OrgProfilePage() {
                     {org.verified && <VerifiedBadge className="w-6 h-6 flex-shrink-0" />}
                   </h1>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    🏢 Organization · Member since {new Date(org.createdAt).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                    <Building2 className="w-3 h-3 inline-block mr-1 -mt-0.5" />Organization · Member since {new Date(org.createdAt).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
                   </p>
                 </div>
                 {/* Favorite button — only for logged-in non-owners */}
@@ -285,8 +285,9 @@ function PostCard({ post, idx, formatDate, past = false }: { post: Opportunity; 
         <p className="text-xs text-muted-foreground line-clamp-2 mb-2">{post.description}</p>
         <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
           <span className="flex items-center gap-1">
-            <Calendar className="w-3 h-3" />
-            {post.isRecurring ? `🔁 Weekly ${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][post.recurringDay ?? 0]}` : formatDate(post.date)}
+            {/* The icon already carries "recurring" — the emoji was saying it twice */}
+            {post.isRecurring ? <Repeat className="w-3 h-3" /> : <Calendar className="w-3 h-3" />}
+            {post.isRecurring ? `Weekly ${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][post.recurringDay ?? 0]}` : formatDate(post.date)}
           </span>
           <span className="flex items-center gap-1">
             <MapPin className="w-3 h-3" />

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'wouter';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { cn, getLocationError, getExternalSignupUrlError } from '@/lib/utils';
-import { Plus, MapPin, Users, Clock, Search, Loader2, Heart, Flag, X, Share2, Edit3, Save, ChevronDown, Star, Trash2 } from 'lucide-react';
+import { Plus, MapPin, Users, Clock, Search, Loader2, Heart, Flag, X, Share2, Edit3, Save, ChevronDown, Star, Trash2, Repeat } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -231,14 +231,16 @@ export default function Home() {
     const ampm = h >= 12 ? 'PM' : 'AM';
     return `${h % 12 || 12}:${m.toString().padStart(2, '0')} ${ampm}`;
   };
+  // Text only — the repeat icon is rendered as an SVG alongside it at the call
+  // sites, so this stays a plain string that can also be read aloud.
   const formatRecurringShort = (opp: Opportunity) => {
     const day = DAY_SHORT[opp.recurringDay ?? 0];
-    if (!opp.recurringTime) return `🔁 ${day}`;
+    if (!opp.recurringTime) return day;
     const [h, m] = opp.recurringTime.split(':').map(Number);
     const ampm = h >= 12 ? 'PM' : 'AM';
     const hr = h % 12 || 12;
     const min = m === 0 ? '' : `:${m.toString().padStart(2, '0')}`;
-    return `🔁 ${day} ${hr}${min}${ampm}`;
+    return `${day} ${hr}${min}${ampm}`;
   };
 
   // Returns capacity/availability string shown on cards (left side).
@@ -636,7 +638,7 @@ export default function Home() {
                           <Star className="w-3 h-3 fill-current" /> FEATURED
                         </span>
                         <p className="text-xs font-bold tracking-widest uppercase opacity-80">{getCategoryLabel(featuredPost.category)}</p>
-                        {!!featuredPost.isRecurring && <span className="text-[10px] font-bold bg-blue-500/80 text-white px-2 py-0.5 rounded-full">{formatRecurringShort(featuredPost)}</span>}
+                        {!!featuredPost.isRecurring && <span className="text-[10px] font-bold bg-blue-500/80 text-white px-2 py-0.5 rounded-full inline-flex items-center gap-1"><Repeat className="w-2.5 h-2.5" />{formatRecurringShort(featuredPost)}</span>}
                         {isPast && !featuredPost.isRecurring && <span className="text-[10px] font-bold bg-white/20 text-white px-2 py-0.5 rounded-full">ENDED</span>}
                         {isClosed && !!featuredPost.isRecurring && <span className="text-[10px] font-bold bg-orange-500/80 text-white px-2 py-0.5 rounded-full">CLOSED</span>}
                       </div>
@@ -734,7 +736,7 @@ export default function Home() {
                       <div className="space-y-2 border-b border-white/20 pb-3">
                         <div className="flex items-center gap-2 flex-wrap">
                           <p className="text-xs font-bold tracking-widest uppercase opacity-80">{getCategoryLabel(opp.category)}</p>
-                          {!!opp.isRecurring && <span className="text-[10px] font-bold bg-blue-500/80 text-white px-2 py-0.5 rounded-full">{formatRecurringShort(opp)}</span>}
+                          {!!opp.isRecurring && <span className="text-[10px] font-bold bg-blue-500/80 text-white px-2 py-0.5 rounded-full inline-flex items-center gap-1"><Repeat className="w-2.5 h-2.5" />{formatRecurringShort(opp)}</span>}
                           {isPast && !opp.isRecurring && <span className="text-[10px] font-bold bg-white/20 text-white px-2 py-0.5 rounded-full">ENDED</span>}
                           {isClosed && !!opp.isRecurring && <span className="text-[10px] font-bold bg-orange-500/80 text-white px-2 py-0.5 rounded-full">CLOSED</span>}
                           {alreadyInterested && (
@@ -1113,7 +1115,7 @@ export default function Home() {
                   <div className="col-span-2 md:col-span-1 bg-white/15 backdrop-blur-md rounded-2xl p-3 md:p-4 border border-white/20">
                     {!!selectedCard.isRecurring ? (
                       <>
-                        <p className="text-xs font-bold tracking-widest uppercase opacity-75 mb-1.5">🔁 Weekly Schedule</p>
+                        <p className="text-xs font-bold tracking-widest uppercase opacity-75 mb-1.5 inline-flex items-center gap-1.5"><Repeat className="w-3 h-3" /> Weekly Schedule</p>
                         <p className="text-sm md:text-base font-semibold">
                           Every {DAY_FULL[selectedCard.recurringDay ?? 0]} at {formatRecurringTime(selectedCard.recurringTime ?? '00:00')}
                         </p>

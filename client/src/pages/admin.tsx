@@ -32,6 +32,7 @@ import {
   Link2,
   Copy,
   BadgeCheck,
+  Calendar,
 } from 'lucide-react';
 
 type Tab = 'overview' | 'users' | 'opportunities' | 'verify' | 'reports' | 'feedback' | 'appeals' | 'join-links';
@@ -1066,7 +1067,7 @@ function VerifyTab({
 
           {/* Meta */}
           <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
-            <span>📅 {new Date(opp.date).toLocaleDateString(undefined, { dateStyle: 'medium' })}</span>
+            <span className="inline-flex items-center gap-1"><Calendar className="w-3 h-3" />{new Date(opp.date).toLocaleDateString(undefined, { dateStyle: 'medium' })}</span>
             <span>⏱ {opp.duration}h</span>
             {opp.spotsType === 'limited' && <span>👥 {opp.spots} spots</span>}
           </div>

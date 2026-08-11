@@ -1,7 +1,11 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn, getLocationError, getExternalSignupUrlError } from '@/lib/utils';
-import { X, Upload, ChevronRight, Loader2, Trash2, FileText, RotateCcw } from 'lucide-react';
+import {
+  X, Upload, ChevronRight, Loader2, Trash2, FileText, RotateCcw,
+  Handshake, BookOpen, Activity, Users, Sprout, Calendar, Repeat,
+  type LucideIcon,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -12,12 +16,14 @@ import { type Category, TOWNS } from '@/lib/mockData';
 import { useLocation } from 'wouter';
 
 // ── Questionnaire config ─────────────────────────────────────────────
-const POST_TYPES: { id: Category; label: string; icon: string; desc: string }[] = [
-  { id: 'volunteer',    label: 'Volunteer Hours',     icon: '🤝', desc: 'Give your time to help others' },
-  { id: 'education',   label: 'Education',            icon: '📚', desc: 'Teach, tutor, or share knowledge' },
-  { id: 'fitness',     label: 'Fitness & Recreation',  icon: '🏃', desc: 'Coaching, tournaments, activities' },
-  { id: 'community',   label: 'Community',            icon: '🏘️', desc: 'Local events and neighbourhood help' },
-  { id: 'environment', label: 'Environment',          icon: '🌱', desc: 'Conservation and green initiatives' },
+// Icons are components, not emoji: emoji render as a different picture on every
+// OS, so the same board looked different on Windows and Mac.
+const POST_TYPES: { id: Category; label: string; Icon: LucideIcon; desc: string }[] = [
+  { id: 'volunteer',   label: 'Volunteer Hours',      Icon: Handshake, desc: 'Give your time to help others' },
+  { id: 'education',   label: 'Education',            Icon: BookOpen,  desc: 'Teach, tutor, or share knowledge' },
+  { id: 'fitness',     label: 'Fitness & Recreation', Icon: Activity,  desc: 'Coaching, tournaments, activities' },
+  { id: 'community',   label: 'Community',            Icon: Users,     desc: 'Local events and neighbourhood help' },
+  { id: 'environment', label: 'Environment',          Icon: Sprout,    desc: 'Conservation and green initiatives' },
 ];
 
 const FIELD_TAGS = [
@@ -516,7 +522,9 @@ export default function CreatePostModal({ open, onClose }: Props) {
                         whileHover={{ x: 6 }} whileTap={{ scale: 0.98 }}
                         onClick={() => handleTypeSelect(type.id)}
                         className="w-full px-5 py-4 rounded-2xl bg-secondary/60 border border-border hover:border-primary/40 hover:bg-primary/5 text-foreground font-medium transition-all text-left flex items-center gap-4 group">
-                        <span className="text-2xl group-hover:scale-110 transition-transform">{type.icon}</span>
+                        <span className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center flex-shrink-0 transition-transform group-hover:scale-110">
+                          <type.Icon className="w-5 h-5" />
+                        </span>
                         <div>
                           <p className="font-semibold text-foreground">{type.label}</p>
                           <p className="text-xs text-muted-foreground">{type.desc}</p>
@@ -690,18 +698,18 @@ export default function CreatePostModal({ open, onClose }: Props) {
                             <button type="button"
                               onClick={() => setIsRecurring(false)}
                               className={cn(
-                                "flex-1 h-9 rounded-xl text-sm font-semibold border transition-all",
+                                "flex-1 h-9 rounded-xl text-sm font-semibold border transition-all inline-flex items-center justify-center gap-1.5",
                                 !isRecurring ? "bg-white text-primary border-white" : "bg-white/20 text-white border-white/30 hover:bg-white/30"
                               )}>
-                              📅 One-time
+                              <Calendar className="w-3.5 h-3.5" /> One-time
                             </button>
                             <button type="button"
                               onClick={() => setIsRecurring(true)}
                               className={cn(
-                                "flex-1 h-9 rounded-xl text-sm font-semibold border transition-all",
+                                "flex-1 h-9 rounded-xl text-sm font-semibold border transition-all inline-flex items-center justify-center gap-1.5",
                                 isRecurring ? "bg-white text-primary border-white" : "bg-white/20 text-white border-white/30 hover:bg-white/30"
                               )}>
-                              🔁 Weekly
+                              <Repeat className="w-3.5 h-3.5" /> Weekly
                             </button>
                           </div>
 
