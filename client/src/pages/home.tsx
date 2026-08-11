@@ -471,17 +471,32 @@ export default function Home() {
           </div>
           <div className="overflow-hidden transition-all duration-300"
             style={{ opacity: selectedCard ? 0 : 1, height: selectedCard ? 0 : 'auto', pointerEvents: selectedCard ? 'none' : 'auto' }}>
-            {/* Category pills */}
+            {/* Category pills — the filled background is one shared element that
+                travels between pills (layoutId) rather than a class that blinks
+                from one to the next. MotionConfig already makes this respect
+                prefers-reduced-motion, so no per-component guard is needed. */}
             <div className="flex items-center gap-2 flex-wrap mb-2">
-              {CATEGORIES.map(cat => (
-                <button key={cat.value} onClick={() => setCategory(cat.value as Category | 'all')}
-                  className={cn("px-4 py-2 rounded-full text-sm font-medium transition-all border",
-                    currentCategory === cat.value
-                      ? "bg-foreground text-background border-foreground"
-                      : "bg-background text-foreground border-border hover:border-foreground/50")}>
-                  {cat.label}
-                </button>
-              ))}
+              {CATEGORIES.map(cat => {
+                const active = currentCategory === cat.value;
+                return (
+                  <button key={cat.value} onClick={() => setCategory(cat.value as Category | 'all')}
+                    aria-pressed={active}
+                    className={cn(
+                      "relative px-4 py-2 rounded-full text-sm font-medium border transition-colors duration-150",
+                      active
+                        ? "text-background border-transparent"
+                        : "bg-background text-foreground border-border hover:border-foreground/50")}>
+                    {active && (
+                      <motion.span
+                        layoutId="categoryPill"
+                        className="absolute inset-0 rounded-full bg-foreground"
+                        transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+                      />
+                    )}
+                    <span className="relative z-10">{cat.label}</span>
+                  </button>
+                );
+              })}
             </div>
             {/* Sort toggle + town filter + pills */}
             <div>

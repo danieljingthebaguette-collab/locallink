@@ -69,22 +69,32 @@ export default function Navigation() {
               </div>
             </div>
 
-            {/* Desktop Nav */}
+            {/* Desktop Nav — the underline is one shared element that slides
+                between links, matching the category pills on the board. */}
             <div className="hidden md:flex items-center gap-6">
-              {NAV_ITEMS.map((item) => (
-                <button
-                  key={item.path}
-                  onClick={() => navigate(item.path)}
-                  className={cn(
-                    "font-medium text-sm transition-colors border-b-2 pb-1",
-                    location === item.path
-                      ? "text-foreground border-foreground"
-                      : "text-muted-foreground border-transparent hover:text-foreground"
-                  )}
-                >
-                  {item.label}
-                </button>
-              ))}
+              {NAV_ITEMS.map((item) => {
+                const active = location === item.path;
+                return (
+                  <button
+                    key={item.path}
+                    onClick={() => navigate(item.path)}
+                    aria-current={active ? 'page' : undefined}
+                    className={cn(
+                      "relative font-medium text-sm transition-colors duration-150 pb-1.5",
+                      active ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    {item.label}
+                    {active && (
+                      <motion.span
+                        layoutId="navUnderline"
+                        className="absolute left-0 right-0 -bottom-px h-0.5 rounded-full bg-foreground"
+                        transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+                      />
+                    )}
+                  </button>
+                );
+              })}
             </div>
 
             {/* Auth */}
