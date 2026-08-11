@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 import { useAuthStore, useOpportunitiesStore, useFavoritesStore } from '@/lib/store';
 import { User, Mail, Award, Calendar, LogOut, Loader2, Edit3, Lock, Save, X, Heart, Building2, Handshake, Bell, Camera } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import ConfirmBubble from '@/components/ConfirmBubble';
 
 export default function Profile() {
   const [, navigate] = useLocation();
@@ -29,6 +30,23 @@ export default function Profile() {
     orgPhone: currentUser?.orgPhone || '',
   });
   const [orgSaving, setOrgSaving] = useState(false);
+  const [showUpgradeConfirm, setShowUpgradeConfirm] = useState(false);
+  const [upgrading, setUpgrading] = useState(false);
+
+  const handleUpgradeToOrg = async () => {
+    setShowUpgradeConfirm(false);
+    setUpgrading(true);
+    const result = await updateProfile({ accountType: 'organization' });
+    setUpgrading(false);
+    if (result.success) {
+      toast({
+        title: 'You now have an organization account',
+        description: 'Add a description and contact email below, then you can post opportunities.',
+      });
+    } else {
+      toast({ title: result.error || 'Could not switch account type', variant: 'destructive' });
+    }
+  };
 
   useEffect(() => {
     fetchOpportunities();
@@ -568,6 +586,35 @@ export default function Profile() {
 
         </div>
 
+        {/* Switch to an organization account — volunteers only, and one-way.
+            Previously the account type was fixed at registration with no way to
+            change it, while the board told anyone who tried to post to "update
+            your account type in settings". This is that setting. */}
+        {currentUser.accountType === 'volunteer' && (
+          <div className="rounded-2xl border border-border bg-card p-6 mb-8">
+            <h3 className="font-heading font-bold text-lg text-foreground mb-1 flex items-center gap-2">
+              <Building2 className="w-5 h-5 text-primary" />
+              Post your own opportunities
+            </h3>
+            <p className="text-sm text-muted-foreground mb-4 leading-relaxed">
+              Volunteer accounts can browse and show interest. To post opportunities of your own,
+              switch to an organization account. You'll add a description and contact email, and
+              your posts are reviewed before they appear on the board.
+            </p>
+            <p className="text-xs text-muted-foreground mb-4">
+              This can't be undone — organization accounts can't switch back.
+            </p>
+            <Button
+              onClick={() => setShowUpgradeConfirm(true)}
+              disabled={upgrading}
+              className="rounded-full px-6 font-semibold"
+            >
+              {upgrading && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+              Switch to an organization account
+            </Button>
+          </div>
+        )}
+
         {/* Favorite Organizations */}
         <div className="rounded-2xl border border-border bg-card p-6 mb-8">
           <h3 className="font-heading font-bold text-lg text-foreground mb-4 flex items-center gap-2">
@@ -616,6 +663,18 @@ export default function Profile() {
           Logout
         </Button>
       </main>
+
+      {/* One-way change, so it gets a confirmation */}
+      <ConfirmBubble
+        open={showUpgradeConfirm}
+        icon={<Building2 className="w-4 h-4 text-primary" />}
+        title="Switch to an organization account?"
+        message="You'll be able to post opportunities. This can't be undone — organization accounts can't switch back to volunteer."
+        destructiveLabel="Switch"
+        onDestructive={handleUpgradeToOrg}
+        cancelLabel="Never mind"
+        onCancel={() => setShowUpgradeConfirm(false)}
+      />
     </div>
   );
 }

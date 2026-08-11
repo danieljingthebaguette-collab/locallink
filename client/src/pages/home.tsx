@@ -36,6 +36,22 @@ const SORT_OPTIONS: { value: 'newest' | 'oldest' | 'soonest' | 'popular'; label:
 // Easing curve used throughout — smooth deceleration
 const EASE_OUT = [0.25, 0.1, 0.25, 1] as const;
 
+// Shown twice: to signed-out visitors under the hero, and once more as a welcome
+// to anyone who has just registered. Previously only signed-out visitors ever saw
+// it, so the explanation reached people who hadn't joined and was hidden from the
+// person who just did.
+const VOLUNTEER_STEPS = [
+  { n: 1, t: 'Browse the board', d: 'Real events from Somerset County orgs' },
+  { n: 2, t: "Tap I'm Interested", d: 'One click — the org gets notified' },
+  { n: 3, t: 'Show up & help', d: 'Earn service hours that count' },
+];
+
+const ORG_STEPS = [
+  { n: 1, t: 'Complete your profile', d: 'Add a description and contact email' },
+  { n: 2, t: 'Post an opportunity', d: 'An admin reviews it before it goes live' },
+  { n: 3, t: 'See who’s interested', d: 'You’re notified as volunteers sign up' },
+];
+
 // Fixed spark layout for the "I'm Interested" burst — perimeter points with an
 // outward direction each, so the effect reads as sparks leaving the button's
 // edges rather than a generic radial explosion. Deterministic (no per-render
@@ -78,7 +94,7 @@ function InterestBurst() {
 export default function Home() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
-  const { isLoggedIn, currentUser } = useAuthStore();
+  const { isLoggedIn, currentUser, markWelcomeSeen } = useAuthStore();
   const {
     setSearchQuery, setCategory, setSortBy, setTown, getFiltered,
     currentCategory, searchQuery, sortBy, currentTown,
@@ -112,6 +128,10 @@ export default function Home() {
   const [showEditForm, setShowEditForm] = useState(false);
   const [showDiscardEdits, setShowDiscardEdits] = useState(false);
   const scrolled = useScrolled();
+  // Signed-out visitors still see the Create Post strip (it prompts sign-up);
+  // signed-in volunteers don't, because for them it goes nowhere.
+  const canPost = !isLoggedIn || !!currentUser?.isAdmin || currentUser?.accountType === 'organization';
+  const isOrgAccount = currentUser?.accountType === 'organization';
   const [editForm, setEditForm] = useState<{
     title: string; description: string; location: string; town: string; date: string;
     duration: number; spots: number; category: Category;
@@ -265,7 +285,14 @@ export default function Home() {
       return;
     }
     if (!currentUser?.isAdmin && currentUser?.accountType !== 'organization') {
-      toast({ title: 'Organization accounts only', description: 'Only organization accounts can create posts. Update your account type in settings.' });
+      // Points at a control that now actually exists (Profile -> "Post your own
+      // opportunities"). The old copy said "update your account type in
+      // settings" when no such setting existed anywhere.
+      toast({
+        title: 'Organization accounts only',
+        description: 'Switch to an organization account on your profile to post opportunities.',
+      });
+      navigate('/profile');
       return;
     }
     setShowCreateModal(true);
@@ -580,11 +607,7 @@ export default function Home() {
             {/* Deliberately unboxed: a hairline rule groups the steps without
                 adding a third container competing with the hero. */}
             <div className="mb-10 border-t border-border pt-7 grid grid-cols-1 md:grid-cols-3 gap-7">
-              {[
-                { n: 1, t: 'Browse the board', d: 'Real events from Somerset County orgs' },
-                { n: 2, t: "Tap I'm Interested", d: 'One click — the org gets notified' },
-                { n: 3, t: 'Show up & help', d: 'Earn service hours that count' },
-              ].map(s => (
+              {VOLUNTEER_STEPS.map(s => (
                 <div key={s.n} className="flex items-start gap-3.5">
                   <div className="w-8 h-8 rounded-full bg-primary/10 text-primary text-sm font-bold flex items-center justify-center flex-shrink-0 tabular-nums">{s.n}</div>
                   <div>
@@ -596,6 +619,47 @@ export default function Home() {
             </div>
           </>
         )}
+
+        {/* First run. hasSeenWelcome, the endpoint and the store action all
+            already existed server-side; nothing ever rendered them, so a new
+            account landed on a bare board with no orientation at all. */}
+        {isLoggedIn && currentUser && !currentUser.hasSeenWelcome && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3, ease: EASE_OUT }}
+            className="mb-8 rounded-3xl border border-primary/25 bg-primary/[0.04] px-6 py-5 relative">
+            <button
+              onClick={() => markWelcomeSeen()}
+              aria-label="Dismiss welcome"
+              className="absolute top-3 right-3 w-9 h-9 flex items-center justify-center rounded-full text-muted-foreground hover:bg-secondary transition-colors">
+              <X className="w-4 h-4" />
+            </button>
+            <p className="font-heading font-bold text-lg text-foreground pr-10">
+              Welcome, {currentUser.username}
+            </p>
+            <p className="text-sm text-muted-foreground mt-0.5 mb-5">
+              {isOrgAccount ? "Here's how posting works." : "Here's how it works."}
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {(isOrgAccount ? ORG_STEPS : VOLUNTEER_STEPS).map(s => (
+                <div key={s.n} className="flex items-start gap-3.5">
+                  <div className="w-8 h-8 rounded-full bg-primary/10 text-primary text-sm font-bold flex items-center justify-center flex-shrink-0 tabular-nums">{s.n}</div>
+                  <div>
+                    <p className="font-semibold text-sm text-foreground">{s.t}</p>
+                    <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{s.d}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <button
+              onClick={() => markWelcomeSeen()}
+              className="mt-5 text-xs font-semibold text-primary hover:underline">
+              Got it
+            </button>
+          </motion.div>
+        )}
+
         {loading && !loaded && (
           <>
           <div className="mb-2 h-16 md:h-20 rounded-3xl border-2 border-dashed border-border/30 bg-secondary/20 animate-pulse" />
@@ -673,20 +737,26 @@ export default function Home() {
                 </motion.div>
               );
             })()}
-            {/* Create Post — full-width strip like the banner, but thinner */}
-            <motion.div
-              initial={{ opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, ease: EASE_OUT }}
-              whileHover={{ y: -2, transition: { duration: 0.18, ease: 'easeOut' } }}
-              whileTap={{ scale: 0.99, transition: { duration: 0.1 } }}
-              onClick={openCreateModal}
-              className="mb-2 h-16 md:h-20 rounded-3xl border-2 border-dashed border-primary/30 bg-primary/5 hover:bg-primary/10 hover:border-primary/50 transition-colors duration-300 flex items-center justify-center gap-3 cursor-pointer group">
-              <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 group-hover:scale-110 transition-all duration-300">
-                <Plus className="w-5 h-5 text-primary" />
-              </div>
-              <p className="font-semibold text-primary text-sm">Create Post</p>
-            </motion.div>
+            {/* Create Post — full-width strip like the banner, but thinner.
+                Hidden from signed-in volunteers: it was the most prominent thing
+                on their first screen and led only to a "you can't do this" toast.
+                Still shown to signed-out visitors, where it doubles as a prompt
+                to sign up, and openCreateModal routes them to /account. */}
+            {canPost && (
+              <motion.div
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, ease: EASE_OUT }}
+                whileHover={{ y: -2, transition: { duration: 0.18, ease: 'easeOut' } }}
+                whileTap={{ scale: 0.99, transition: { duration: 0.1 } }}
+                onClick={openCreateModal}
+                className="mb-2 h-16 md:h-20 rounded-3xl border-2 border-dashed border-primary/30 bg-primary/5 hover:bg-primary/10 hover:border-primary/50 transition-colors duration-300 flex items-center justify-center gap-3 cursor-pointer group">
+                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 group-hover:scale-110 transition-all duration-300">
+                  <Plus className="w-5 h-5 text-primary" />
+                </div>
+                <p className="font-semibold text-primary text-sm">Create Post</p>
+              </motion.div>
+            )}
 
             <div className="grid grid-cols-1 md:grid-cols-4 gap-2 auto-rows-[200px] grid-flow-dense mb-12">
 

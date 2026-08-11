@@ -397,11 +397,32 @@ router.post('/api/auth/reset-password', async (req: Request, res: Response) => {
 // Edit profile (username and/or password and/or notification settings and/or profile image)
 router.put('/api/auth/profile', requireAuth, async (req: AuthRequest, res: Response) => {
   try {
-    const { username, currentPassword, newPassword, notifyOnInterest, notifyOnReopen, profileImage, orgDescription, orgWebsite, orgEmail, orgPhone, emailReminders } = req.body;
+    const { username, currentPassword, newPassword, notifyOnInterest, notifyOnReopen, profileImage, orgDescription, orgWebsite, orgEmail, orgPhone, emailReminders, accountType } = req.body;
     const userId = req.userId!;
 
     const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId) as any;
     if (!user) return res.status(404).json({ error: 'User not found' });
+
+    // Account type: one-way, volunteer -> organization only.
+    //
+    // Upgrading is safe because it grants no ability to publish unreviewed: every
+    // non-admin post is inserted with status 'pending' and has to clear the admin
+    // queue. Before this existed the type was fixed at registration with no way to
+    // change it, while the UI told people to "update your account type in settings"
+    // — a setting that did not exist.
+    //
+    // The reverse is refused on purpose: an organization's posts are keyed to it as
+    // host, and demoting would leave those posts owned by an account that is no
+    // longer allowed to own them.
+    if (accountType !== undefined && accountType !== user.accountType) {
+      if (user.accountType === 'volunteer' && accountType === 'organization') {
+        db.prepare('UPDATE users SET accountType = ? WHERE id = ?').run('organization', userId);
+      } else {
+        return res.status(400).json({
+          error: 'Organization accounts cannot be changed back. Contact support if this is wrong.',
+        });
+      }
+    }
 
     if (username && username.trim() && username.trim() !== user.username) {
       const taken = db.prepare('SELECT id FROM users WHERE username = ? AND id != ?').get(username.trim(), userId);

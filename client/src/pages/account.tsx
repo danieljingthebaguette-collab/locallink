@@ -102,10 +102,20 @@ export default function Account() {
         if (result.needsVerification) {
           setPendingVerificationEmail(result.email || formData.email);
         } else {
-          // Account is immediately active (join link or no email configured) — switch to login
-          toast({ title: 'Account created!', description: 'You can now log in.' });
-          setIsLoginMode(true);
-          setFormData(d => ({ ...d, password: '' }));
+          // Account is immediately active (join link or no email configured).
+          // Sign them straight in rather than bouncing them to the login form to
+          // retype the password they just chose. If that sign-in somehow fails,
+          // fall back to the old behaviour rather than stranding them.
+          const signedIn = await login(formData.email, formData.password);
+          if (signedIn.success) {
+            toast({ title: 'Welcome to LocalLink!' });
+            // The board shows the first-run walkthrough via hasSeenWelcome
+            navigate('/');
+          } else {
+            toast({ title: 'Account created!', description: 'You can now log in.' });
+            setIsLoginMode(true);
+            setFormData(d => ({ ...d, password: '' }));
+          }
         }
       } else {
         setFormError(result.error || 'Registration failed');
@@ -340,6 +350,15 @@ export default function Account() {
                         </div>
                       </button>
                     </div>
+                  )}
+                  {!joinPrefill && (
+                    // Honest now that the upgrade exists on the profile page. Note
+                    // it's one-way, so the warning belongs on the Organization side.
+                    <p className="text-xs text-muted-foreground mt-2">
+                      {accountType === 'volunteer'
+                        ? 'You can switch to an organization account later from your profile.'
+                        : 'Organization accounts cannot be switched back to volunteer.'}
+                    </p>
                   )}
                 </div>
               )}
