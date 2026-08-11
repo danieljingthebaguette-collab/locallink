@@ -4,9 +4,16 @@ import { cva, type VariantProps } from "class-variance-authority"
 
 import { cn } from "@/lib/utils"
 
+// Press feedback lives here rather than at each call site, so every Button on
+// the site acknowledges a tap. 150ms and a 3% dip: enough to feel, not enough
+// to notice. The transitioned property is `scale`, NOT `transform` — Tailwind v4
+// compiles scale-* to the standalone `scale` property, so naming `transform`
+// here would leave the press snapping instantly. The global
+// prefers-reduced-motion rule in index.css collapses the duration.
+// ("hover-elevate active-elevate-2" used to sit here — leftover Replit scaffold
+//  class names that were defined nowhere and produced no styles.)
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0" +
-" hover-elevate active-elevate-2",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-[color,background-color,border-color,scale] duration-150 ease-out active:scale-[0.97] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 disabled:active:scale-100 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
   {
     variants: {
       variant: {
