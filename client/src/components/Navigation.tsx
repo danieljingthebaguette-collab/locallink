@@ -100,17 +100,21 @@ export default function Navigation() {
                     )}
                   >
                     {item.label}
+                    {/* Plain element, deliberately NOT a layoutId shared-layout
+                        animation.
+                        Framer snapshots the outgoing element's box at unmount,
+                        during commit and before any effect runs. Route changes
+                        here always coincide with ScrollToTop resetting the scroll,
+                        so that snapshot is taken at the old scroll offset and the
+                        projection comes out wrong by the entire scroll distance —
+                        measured translate3d(_, 900px, _) after navigating from
+                        900px down, which read as the underline flying up from
+                        below the fold. No effect ordering fixes it, because the
+                        snapshot predates every effect.
+                        The pills on the board keep their layoutId: they animate
+                        within one page, with no route change and no scroll reset. */}
                     {active && (
-                      <motion.span
-                        layoutId="navUnderline"
-                        // Only animate when the route changes. Without this the
-                        // underline also animates the vertical drift from the
-                        // header's 64px -> 52px condense, so it visibly floats
-                        // up from below the nav instead of moving with the text.
-                        layoutDependency={location}
-                        className="absolute left-0 right-0 -bottom-px h-0.5 rounded-full bg-foreground"
-                        transition={{ type: 'spring', stiffness: 380, damping: 32 }}
-                      />
+                      <span className="absolute left-0 right-0 -bottom-px h-0.5 rounded-full bg-foreground" />
                     )}
                   </button>
                 );
