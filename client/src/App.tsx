@@ -21,6 +21,8 @@ import NotFound from "@/pages/not-found";
 import Leaderboard from "@/pages/leaderboard";
 import OrgProfilePage from "@/pages/org-profile";
 import JoinPage from "@/pages/join";
+import Tracker from "@/pages/tracker";
+import CheckIn from "@/pages/checkin";
 
 /**
  * wouter keeps the window scroll offset across route changes, so clicking
@@ -52,6 +54,8 @@ function Router() {
       <Route path="/terms" component={Terms} />
       <Route path="/privacy" component={Privacy} />
       <Route path="/org/:id" component={OrgProfilePage} />
+      <Route path="/tracker" component={Tracker} />
+      <Route path="/checkin/:opportunityId" component={CheckIn} />
       <Route path="/join/:slug" component={JoinPage} />
       <Route component={NotFound} />
     </Switch>

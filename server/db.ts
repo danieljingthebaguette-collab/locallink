@@ -77,6 +77,31 @@ db.exec(`
     UNIQUE(opportunityId, userId)
   );
 
+  -- Attendance is deliberately separate from signups: a signup means "tapped
+  -- Interested," this means "actually checked in and out at the event." A
+  -- volunteer can have one without the other. occurrenceDate (not just
+  -- opportunityId) is what lets a recurring weekly event have a fresh
+  -- check-in every week instead of the unique constraint blocking it after
+  -- the first Saturday.
+  CREATE TABLE IF NOT EXISTS attendance (
+    id TEXT PRIMARY KEY,
+    opportunityId TEXT NOT NULL,
+    userId TEXT NOT NULL,
+    occurrenceDate TEXT NOT NULL,
+    checkInAt TEXT NOT NULL,
+    checkOutAt TEXT DEFAULT NULL,
+    hoursClaimed REAL DEFAULT NULL,
+    hoursVerified REAL DEFAULT NULL,
+    status TEXT DEFAULT 'checked_in',
+    verifiedBy TEXT DEFAULT NULL,
+    verifiedAt TEXT DEFAULT NULL,
+    note TEXT DEFAULT NULL,
+    createdAt TEXT NOT NULL,
+    FOREIGN KEY (opportunityId) REFERENCES opportunities(id),
+    FOREIGN KEY (userId) REFERENCES users(id),
+    UNIQUE(opportunityId, userId, occurrenceDate)
+  );
+
   CREATE TABLE IF NOT EXISTS notifications (
     id TEXT PRIMARY KEY,
     userId TEXT NOT NULL,

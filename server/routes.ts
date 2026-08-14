@@ -77,6 +77,7 @@ function getExternalSignupUrlError(url: string): string | null {
 }
 
 // Allowed enum values — validated server-side to prevent garbage data
+const VALID_ATTENDANCE_DECISIONS = ['verified', 'rejected'] as const;
 const VALID_SPOTS_TYPES  = ['limited', 'unlimited', 'none'] as const;
 const VALID_CATEGORIES   = ['volunteer', 'education', 'fitness', 'environment', 'community'] as const;
 const VALID_PINNED_SIZES = ['small', 'medium', 'large'] as const;
@@ -1596,6 +1597,206 @@ router.put('/api/admin/users/:id/verify', requireAdmin, (req: Request, res: Resp
     const newVerified = user.verified ? 0 : 1;
     db.prepare('UPDATE users SET verified = ? WHERE id = ?').run(newVerified, req.params.id);
     return res.json({ verified: newVerified === 1 });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ===== TRACKER (attendance / hour verification) =====
+// Org-side v1. Deliberately separate from `signups`: a signup means "tapped
+// Interested," attendance means "actually checked in and out." Check-in
+// requires an existing signup (no cold walk-ins yet) — see POST /api/checkin.
+
+/** The date (YYYY-MM-DD) of the session someone checking in right now is
+ * attending. For a one-time event that's just the event's own date. For a
+ * recurring one, getRecurringStatus() only looks forward to the *next*
+ * occurrence, which is useless at the event itself — this looks backward to
+ * the most recent occurrence of recurringDay (today's date, if today is
+ * that day), so a weekly event gets a fresh check-in every week rather than
+ * being permanently claimed by whoever showed up first. */
+function currentOccurrenceDate(opp: { date: string; isRecurring?: number | boolean; recurringDay?: number | null }): string {
+  if (!opp.isRecurring || opp.recurringDay === null || opp.recurringDay === undefined) {
+    return opp.date.slice(0, 10);
+  }
+  const now = new Date();
+  const diff = (now.getDay() - opp.recurringDay + 7) % 7;
+  const occ = new Date(now);
+  occ.setDate(now.getDate() - diff);
+  return occ.toISOString().slice(0, 10);
+}
+
+router.post('/api/checkin/:opportunityId', requireAuth, (req: AuthRequest, res: Response) => {
+  try {
+    const oppId = req.params.opportunityId;
+    const userId = req.userId!;
+    const opp = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(oppId) as any;
+    if (!opp) return res.status(404).json({ error: 'Opportunity not found' });
+
+    const signedUp = db.prepare('SELECT 1 FROM signups WHERE opportunityId = ? AND userId = ?').get(oppId, userId);
+    if (!signedUp) return res.status(403).json({ error: 'You need to be signed up (Interested) for this event before checking in.' });
+
+    const occurrenceDate = currentOccurrenceDate(opp);
+    const existing = db.prepare('SELECT * FROM attendance WHERE opportunityId = ? AND userId = ? AND occurrenceDate = ?').get(oppId, userId, occurrenceDate);
+    if (existing) return res.json(existing); // idempotent — a repeat scan/tap doesn't error
+
+    const id = randomUUID();
+    const now = new Date().toISOString();
+    db.prepare(
+      `INSERT INTO attendance (id, opportunityId, userId, occurrenceDate, checkInAt, status, createdAt)
+       VALUES (?, ?, ?, ?, ?, 'checked_in', ?)`
+    ).run(id, oppId, userId, occurrenceDate, now, now);
+
+    const row = db.prepare('SELECT * FROM attendance WHERE id = ?').get(id);
+    return res.json(row);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/api/checkout/:opportunityId', requireAuth, (req: AuthRequest, res: Response) => {
+  try {
+    const oppId = req.params.opportunityId;
+    const userId = req.userId!;
+    const opp = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(oppId) as any;
+    if (!opp) return res.status(404).json({ error: 'Opportunity not found' });
+
+    const occurrenceDate = currentOccurrenceDate(opp);
+    const row = db.prepare(
+      'SELECT * FROM attendance WHERE opportunityId = ? AND userId = ? AND occurrenceDate = ?'
+    ).get(oppId, userId, occurrenceDate) as any;
+    if (!row) return res.status(404).json({ error: "You haven't checked in to this session yet." });
+    // Once the org has acted, this is final — no more volunteer-side edits.
+    // Before that (checked_in, or pending-but-not-yet-reviewed) checkout can
+    // be called again to revise hoursClaimed: the volunteer's own client
+    // flow re-submits through this same endpoint when they edit the
+    // pre-filled hours before confirming, and the first checkout call
+    // already moved status to 'pending' — a second call must not become a
+    // no-op just because it's no longer 'checked_in'.
+    if (row.status === 'verified' || row.status === 'rejected') return res.json(row);
+
+    const now = new Date();
+    const checkInAt = new Date(row.checkInAt);
+    const elapsedHours = Math.max(0, (now.getTime() - checkInAt.getTime()) / 3_600_000);
+    // Snap to the nearest quarter hour — timestamps-to-the-second reads as
+    // false precision for a self-reported volunteer hour count.
+    const computedHours = Math.round(elapsedHours * 4) / 4;
+    // req.body is undefined (not {}) when the request has no body at all —
+    // the normal checkout call from the check-in page sends none, since the
+    // hours are usually just computed from the timestamps.
+    const { hoursClaimed } = req.body || {};
+    const finalHours = typeof hoursClaimed === 'number' && hoursClaimed >= 0 ? hoursClaimed : computedHours;
+
+    db.prepare(
+      `UPDATE attendance SET checkOutAt = ?, hoursClaimed = ?, status = 'pending' WHERE id = ?`
+    ).run(now.toISOString(), finalHours, row.id);
+
+    // Notify the host, same pattern as the interest notification.
+    const host = db.prepare('SELECT id, notifyOnInterest FROM users WHERE id = ?').get(opp.hostId) as any;
+    if (host?.notifyOnInterest) {
+      const volunteer = db.prepare('SELECT username FROM users WHERE id = ?').get(userId) as any;
+      db.prepare('INSERT INTO notifications (id, userId, type, message, postId, read, createdAt) VALUES (?, ?, ?, ?, ?, 0, ?)').run(
+        randomUUID(), opp.hostId, 'hours_submitted',
+        `${volunteer?.username || 'Someone'} submitted ${finalHours} hrs for "${opp.title}" — pending your review`,
+        oppId, new Date().toISOString()
+      );
+    }
+
+    const updated = db.prepare('SELECT * FROM attendance WHERE id = ?').get(row.id);
+    return res.json(updated);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/api/opportunities/:id/attendance', requireAuth, (req: AuthRequest, res: Response) => {
+  try {
+    const oppId = req.params.id;
+    const opp = db.prepare('SELECT hostId FROM opportunities WHERE id = ?').get(oppId) as any;
+    if (!opp) return res.status(404).json({ error: 'Opportunity not found' });
+    if (opp.hostId !== req.userId && !req.isAdmin) {
+      return res.status(403).json({ error: 'Only the host can view this roster' });
+    }
+
+    const rows = db.prepare(
+      `SELECT a.id, a.userId, u.username, u.email, a.occurrenceDate, a.checkInAt, a.checkOutAt,
+              a.hoursClaimed, a.hoursVerified, a.status, a.note
+       FROM attendance a JOIN users u ON u.id = a.userId
+       WHERE a.opportunityId = ?
+       ORDER BY a.occurrenceDate DESC, a.checkInAt ASC`
+    ).all(oppId);
+    return res.json(rows);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+router.put('/api/attendance/:id', requireAuth, (req: AuthRequest, res: Response) => {
+  try {
+    const row = db.prepare(
+      `SELECT a.*, o.hostId, o.title FROM attendance a JOIN opportunities o ON o.id = a.opportunityId WHERE a.id = ?`
+    ).get(req.params.id) as any;
+    if (!row) return res.status(404).json({ error: 'Attendance record not found' });
+    if (row.hostId !== req.userId && !req.isAdmin) {
+      return res.status(403).json({ error: 'Only the host can verify this record' });
+    }
+
+    const { status, hoursVerified, note } = req.body || {};
+    if (!VALID_ATTENDANCE_DECISIONS.includes(status)) {
+      return res.status(400).json({ error: `status must be one of: ${VALID_ATTENDANCE_DECISIONS.join(', ')}` });
+    }
+    if (hoursVerified !== undefined && (typeof hoursVerified !== 'number' || hoursVerified < 0)) {
+      return res.status(400).json({ error: 'hoursVerified must be a non-negative number' });
+    }
+
+    // Approving defaults to whatever the volunteer claimed — the org only
+    // needs to touch the number when it's actually wrong.
+    const finalHours = status === 'rejected' ? 0 : (hoursVerified ?? row.hoursClaimed ?? 0);
+    const now = new Date().toISOString();
+    db.prepare(
+      `UPDATE attendance SET status = ?, hoursVerified = ?, note = ?, verifiedBy = ?, verifiedAt = ? WHERE id = ?`
+    ).run(status, finalHours, note || null, req.userId, now, row.id);
+
+    const volunteer = db.prepare('SELECT notifyOnInterest FROM users WHERE id = ?').get(row.userId) as any;
+    if (volunteer?.notifyOnInterest) {
+      const message = status === 'verified'
+        ? `Your ${finalHours} hrs for "${row.title}" were verified`
+        : `Your submitted hours for "${row.title}" were not approved${note ? `: ${note}` : ''}`;
+      db.prepare('INSERT INTO notifications (id, userId, type, message, postId, read, createdAt) VALUES (?, ?, ?, ?, ?, 0, ?)').run(
+        randomUUID(), row.userId, status === 'verified' ? 'hours_verified' : 'hours_rejected', message, row.opportunityId, now
+      );
+    }
+
+    const updated = db.prepare('SELECT * FROM attendance WHERE id = ?').get(row.id);
+    return res.json(updated);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/api/opportunities/:id/attendance/export', requireAuth, (req: AuthRequest, res: Response) => {
+  try {
+    const oppId = req.params.id;
+    const opp = db.prepare('SELECT hostId, title FROM opportunities WHERE id = ?').get(oppId) as any;
+    if (!opp) return res.status(404).json({ error: 'Opportunity not found' });
+    if (opp.hostId !== req.userId && !req.isAdmin) {
+      return res.status(403).json({ error: 'Only the host can export this roster' });
+    }
+
+    const rows = db.prepare(
+      `SELECT u.username, u.email, a.occurrenceDate, a.checkInAt, a.checkOutAt, a.hoursClaimed, a.hoursVerified, a.status
+       FROM attendance a JOIN users u ON u.id = a.userId
+       WHERE a.opportunityId = ? ORDER BY a.occurrenceDate DESC, a.checkInAt ASC`
+    ).all(oppId) as any[];
+
+    const esc = (v: any) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const header = 'Name,Email,Date,Check In,Check Out,Hours Claimed,Hours Verified,Status';
+    const body = rows.map(r => [r.username, r.email, r.occurrenceDate, r.checkInAt, r.checkOutAt, r.hoursClaimed, r.hoursVerified, r.status].map(esc).join(',')).join('\n');
+    const csv = header + '\n' + body;
+
+    const filename = opp.title.replace(/[^a-z0-9]+/gi, '_').toLowerCase() + '_attendance.csv';
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    return res.send(csv);
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
