@@ -54,7 +54,7 @@ function Router() {
       <Route path="/terms" component={Terms} />
       <Route path="/privacy" component={Privacy} />
       <Route path="/org/:id" component={OrgProfilePage} />
-      <Route path="/tracker" component={Tracker} />
+      <Route path="/tracker/:opportunityId" component={Tracker} />
       <Route path="/checkin/:opportunityId" component={CheckIn} />
       <Route path="/join/:slug" component={JoinPage} />
       <Route component={NotFound} />

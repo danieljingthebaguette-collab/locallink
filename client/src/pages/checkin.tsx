@@ -3,14 +3,22 @@ import { useParams, useLocation } from 'wouter';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { useAuthStore } from '@/lib/store';
-import { Loader2, MapPin, Clock as ClockIcon, CheckCircle2 } from 'lucide-react';
+import { Loader2, MapPin, Clock as ClockIcon, CheckCircle2, Lock } from 'lucide-react';
 
-interface AttendanceState {
+interface Attendance {
   id: string;
   checkInAt: string;
   checkOutAt: string | null;
   hoursClaimed: number | null;
-  status: 'checked_in' | 'pending' | 'verified' | 'rejected';
+  hoursVerified: number | null;
+  status: 'checked_in' | 'credited' | 'auto_closed' | 'rejected';
+}
+
+interface StatusResponse {
+  gateOpensAt: string;
+  gateEndsAt: string;
+  signedUp: boolean;
+  attendance: Attendance | null;
 }
 
 interface OppSummary {
@@ -18,7 +26,6 @@ interface OppSummary {
   title: string;
   location: string;
   hostName: string;
-  date: string;
 }
 
 function authHeaders(): Record<string, string> {
@@ -26,8 +33,13 @@ function authHeaders(): Record<string, string> {
   return { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) };
 }
 
-/** What a volunteer lands on after scanning the event's QR/link. No nav entry
- * — reached only via that link, same as /org/:id. */
+/** What a volunteer lands on after scanning the event's QR/link, or tapping
+ * it from the pre-event email. No nav entry — reached only via that link,
+ * same as /org/:id. One scan starts the clock, the same link scanned again
+ * stops it and credits hours immediately; there's no review screen in
+ * between, so the number a volunteer sees is exactly what lands on their
+ * profile — nothing to edit here closes the self-report inflation gap that
+ * an editable field would reopen. */
 export default function CheckIn() {
   const params = useParams<{ opportunityId: string }>();
   const [, navigate] = useLocation();
@@ -35,49 +47,57 @@ export default function CheckIn() {
   const { isLoggedIn, currentUser } = useAuthStore();
 
   const [opp, setOpp] = useState<OppSummary | null>(null);
+  const [status, setStatus] = useState<StatusResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [attendance, setAttendance] = useState<AttendanceState | null>(null);
   const [acting, setActing] = useState(false);
-  const [hoursInput, setHoursInput] = useState('');
   const [elapsedLabel, setElapsedLabel] = useState('00:00');
-  // Server has no separate "reviewing before submit" state — checkout sets
-  // status='pending' immediately with the computed hours. This is purely a
-  // client-side phase so the volunteer gets one screen to adjust the number
-  // before it's treated as final, without inventing a server-side status
-  // that would complicate the org's side for no reason.
-  const [finalized, setFinalized] = useState(false);
+  const [now, setNow] = useState(Date.now());
+
+  const loadStatus = async () => {
+    const res = await fetch(`/api/checkin/${params.opportunityId}/status`, { headers: authHeaders() });
+    if (res.ok) setStatus(await res.json());
+  };
 
   useEffect(() => {
-    fetch(`/api/opportunities/${params.opportunityId}`)
-      .then(r => r.ok ? r.json() : Promise.reject())
-      .then(data => setOpp(data))
-      .catch(() => setError('Event not found'))
-      .finally(() => setLoading(false));
-  }, [params.opportunityId]);
+    let cancelled = false;
+    (async () => {
+      const oppRes = await fetch(`/api/opportunities/${params.opportunityId}`);
+      if (cancelled) return;
+      if (!oppRes.ok) { setError('Event not found'); setLoading(false); return; }
+      setOpp(await oppRes.json());
+      if (isLoggedIn) await loadStatus();
+      if (!cancelled) setLoading(false);
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params.opportunityId, isLoggedIn]);
 
   // Live elapsed-time display while checked in — cosmetic only; the server
   // computes the real hours from timestamps at checkout regardless of
-  // whether this tab stayed open.
+  // whether this tab stayed open. Also drives the "past listed end, still
+  // running" ticker used to decide when to show the reassurance note below.
   useEffect(() => {
-    if (!attendance || attendance.status !== 'checked_in') return;
-    const start = new Date(attendance.checkInAt).getTime();
+    if (status?.attendance?.status !== 'checked_in') return;
+    const start = new Date(status.attendance.checkInAt).getTime();
     const tick = () => {
-      const s = Math.max(0, Math.floor((Date.now() - start) / 1000));
+      const t = Date.now();
+      setNow(t);
+      const s = Math.max(0, Math.floor((t - start) / 1000));
       const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
       setElapsedLabel(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
     };
     tick();
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
-  }, [attendance]);
+  }, [status]);
 
   const handleCheckIn = async () => {
     setActing(true);
     try {
       const res = await fetch(`/api/checkin/${params.opportunityId}`, { method: 'POST', headers: authHeaders() });
       const data = await res.json();
-      if (res.ok) setAttendance(data);
+      if (res.ok) await loadStatus();
       else toast({ title: data.error || 'Could not check in', variant: 'destructive' });
     } finally {
       setActing(false);
@@ -89,26 +109,8 @@ export default function CheckIn() {
     try {
       const res = await fetch(`/api/checkout/${params.opportunityId}`, { method: 'POST', headers: authHeaders() });
       const data = await res.json();
-      if (res.ok) { setAttendance(data); setHoursInput(String(data.hoursClaimed ?? '')); }
+      if (res.ok) { await loadStatus(); toast({ title: 'Checked out' }); }
       else toast({ title: data.error || 'Could not check out', variant: 'destructive' });
-    } finally {
-      setActing(false);
-    }
-  };
-
-  const handleSubmitHours = async () => {
-    const hours = parseFloat(hoursInput);
-    if (isNaN(hours) || hours < 0) { toast({ title: 'Enter a valid number of hours', variant: 'destructive' }); return; }
-    setActing(true);
-    try {
-      // Re-checkout with the (possibly edited) hours — checkout is idempotent
-      // server-side and just updates hoursClaimed on the existing row.
-      const res = await fetch(`/api/checkout/${params.opportunityId}`, {
-        method: 'POST', headers: authHeaders(), body: JSON.stringify({ hoursClaimed: hours }),
-      });
-      const data = await res.json();
-      if (res.ok) { setAttendance(data); setFinalized(true); toast({ title: 'Submitted for review' }); }
-      else toast({ title: data.error || 'Could not submit', variant: 'destructive' });
     } finally {
       setActing(false);
     }
@@ -142,6 +144,18 @@ export default function CheckIn() {
     );
   }
 
+  if (!status) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  const gateNotYetOpen = now < new Date(status.gateOpensAt).getTime() && !status.attendance;
+  const gateClosed = now > new Date(status.gateEndsAt).getTime() && !status.attendance;
+  const attendance = status.attendance;
+
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-4 py-10">
       <div className="w-full max-w-sm">
@@ -153,14 +167,35 @@ export default function CheckIn() {
           </p>
         </div>
 
-        {!attendance && (
+        {gateNotYetOpen && (
+          <div className="text-center py-6">
+            <div className="w-12 h-12 rounded-full bg-secondary flex items-center justify-center mx-auto mb-3">
+              <Lock className="w-5 h-5 text-muted-foreground" />
+            </div>
+            <p className="font-heading font-bold text-foreground">Check-in isn't open yet</p>
+            <p className="text-sm text-muted-foreground mt-1">
+              Opens at {new Date(status.gateOpensAt).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}.
+            </p>
+          </div>
+        )}
+
+        {gateClosed && (
+          <div className="text-center py-6">
+            <p className="font-heading font-bold text-foreground">This session has ended</p>
+            <p className="text-sm text-muted-foreground mt-1">Check-in is only open during the event.</p>
+          </div>
+        )}
+
+        {!gateNotYetOpen && !gateClosed && !attendance && (
           <>
             <p className="text-sm text-muted-foreground text-center mb-5">
-              You're signed up for this event. Check in when you arrive to start tracking your hours.
+              {status.signedUp
+                ? "You're signed up for this event. Check in when you arrive to start tracking your hours."
+                : "You're not signed up for this yet — checking in adds you to the list and starts your clock together."}
             </p>
             <Button onClick={handleCheckIn} disabled={acting} className="w-full rounded-full h-12 font-semibold">
               {acting && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
-              Check In
+              {status.signedUp ? 'Check In' : 'Join & Check In'}
             </Button>
           </>
         )}
@@ -181,44 +216,42 @@ export default function CheckIn() {
               {acting && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
               Check Out
             </Button>
+            {now > new Date(status.gateEndsAt).getTime() && (
+              <p className="text-xs text-amber-600 dark:text-amber-400 text-center mt-4">
+                This session's listed end has passed — check out now, or we'll close it out automatically in a couple hours.
+              </p>
+            )}
           </>
         )}
 
-        {attendance?.status === 'pending' && !finalized && (
-          <>
-            <p className="text-sm font-semibold text-foreground mb-1">Checked out</p>
-            <p className="text-xs text-muted-foreground mb-4">We calculated your time. Adjust it if it's not quite right, then submit.</p>
-            <label className="text-xs font-bold text-muted-foreground uppercase tracking-wide block mb-1.5">Hours worked</label>
-            <input
-              type="text" inputMode="decimal" value={hoursInput}
-              onChange={e => setHoursInput(e.target.value)}
-              className="w-full text-2xl font-heading font-bold rounded-2xl border border-border bg-secondary/40 px-4 py-3 mb-4 text-foreground"
-            />
-            <Button onClick={handleSubmitHours} disabled={acting} className="w-full rounded-full h-12 font-semibold">
-              {acting && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
-              Submit for verification
-            </Button>
-          </>
-        )}
-
-        {attendance?.status === 'pending' && finalized && (
+        {attendance?.status === 'credited' && (
           <div className="text-center py-6">
-            <div className="w-12 h-12 rounded-full bg-amber-500/15 flex items-center justify-center mx-auto mb-3">
-              <CheckCircle2 className="w-6 h-6 text-amber-500" />
+            <div className="w-12 h-12 rounded-full bg-emerald-500/15 flex items-center justify-center mx-auto mb-3">
+              <CheckCircle2 className="w-6 h-6 text-emerald-500" />
             </div>
-            <p className="font-heading font-bold text-foreground">Submitted — pending review</p>
+            <p className="font-heading font-bold text-foreground">Checked out</p>
             <p className="text-sm text-muted-foreground mt-1 tabular-nums">
-              {attendance.hoursClaimed} hrs sent to {opp.hostName} for verification.
+              {attendance.hoursVerified} hrs credited — verified by {opp.hostName}.
             </p>
           </div>
         )}
 
-        {(attendance?.status === 'verified' || attendance?.status === 'rejected') && (
+        {attendance?.status === 'auto_closed' && (
           <div className="text-center py-6">
-            <p className="font-heading font-bold text-foreground">
-              {attendance.status === 'verified' ? 'Hours verified' : 'Not approved'}
+            <div className="w-12 h-12 rounded-full bg-amber-500/15 flex items-center justify-center mx-auto mb-3">
+              <ClockIcon className="w-6 h-6 text-amber-500" />
+            </div>
+            <p className="font-heading font-bold text-foreground">Checked out automatically</p>
+            <p className="text-sm text-muted-foreground mt-1 tabular-nums">
+              You didn't check out, so we assumed {attendance.hoursVerified} hrs (the listed length). Contact {opp.hostName} if that's not right.
             </p>
-            <p className="text-sm text-muted-foreground mt-1">Check your Profile for details.</p>
+          </div>
+        )}
+
+        {attendance?.status === 'rejected' && (
+          <div className="text-center py-6">
+            <p className="font-heading font-bold text-foreground">Not credited</p>
+            <p className="text-sm text-muted-foreground mt-1">Check your Profile for details, or contact {opp.hostName}.</p>
           </div>
         )}
       </div>

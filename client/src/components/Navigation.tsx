@@ -3,7 +3,7 @@ import { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { useAuthStore, useNotificationStore } from '@/lib/store';
-import { Home, Calendar, Info, User, LogOut, Shield, Bell, Users, X, Trash2, Edit3, UserMinus, RefreshCw, CheckCircle2, XCircle, Sun, Moon, ClipboardList } from 'lucide-react';
+import { Home, Calendar, Info, User, LogOut, Shield, Bell, Users, X, Trash2, Edit3, UserMinus, RefreshCw, CheckCircle2, XCircle, Sun, Moon } from 'lucide-react';
 import Logo from './Logo';
 import { useScrolled } from '@/hooks/use-scrolled';
 
@@ -143,25 +143,6 @@ export default function Navigation() {
                   </button>
                 );
               })}
-              {/* Tracker — organization accounts only (and admins). Volunteers
-                  don't get this tab yet; the roster/verification screen it
-                  leads to has nothing for them to do. */}
-              {isLoggedIn && (currentUser?.accountType === 'organization' || currentUser?.isAdmin) && (() => {
-                const active = location === '/tracker';
-                return (
-                  <button
-                    onClick={() => navigate('/tracker')}
-                    aria-current={active ? 'page' : undefined}
-                    data-active={active ? 'true' : undefined}
-                    className={cn(
-                      "relative font-medium text-sm transition-colors duration-150 pb-1.5",
-                      active ? "text-foreground" : "text-muted-foreground hover:text-foreground"
-                    )}
-                  >
-                    Tracker
-                  </button>
-                );
-              })()}
             </div>
 
             {/* Auth */}
@@ -327,20 +308,6 @@ export default function Navigation() {
               </button>
             );
           })}
-
-          {/* Tracker — organization accounts only, same gate as the desktop tab */}
-          {isLoggedIn && (currentUser?.accountType === 'organization' || currentUser?.isAdmin) && (
-            <button
-              onClick={() => navigate('/tracker')}
-              className={cn(
-                "flex flex-col items-center gap-0.5 py-2 px-1 flex-1 transition-colors",
-                location === '/tracker' ? "text-primary" : "text-muted-foreground"
-              )}
-            >
-              <ClipboardList className="w-5 h-5" />
-              <span className="text-[10px] font-medium">Tracker</span>
-            </button>
-          )}
 
           {/* Notification Bell — logged-in users only */}
           {isLoggedIn && currentUser && (

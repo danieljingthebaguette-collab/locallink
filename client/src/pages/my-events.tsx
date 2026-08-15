@@ -12,7 +12,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { MapPin, Clock, Users, Calendar, XCircle, Loader2, Edit3, Trash2, ChevronUp, X, Save, Upload, Plus } from 'lucide-react';
+import { MapPin, Clock, Users, Calendar, XCircle, Loader2, Edit3, Trash2, ChevronUp, X, Save, Upload, Plus, ClipboardList } from 'lucide-react';
 import CreatePostModal from '@/components/CreatePostModal';
 import CropEditor, {
   type ImageTransform,
@@ -408,6 +408,16 @@ export default function MyEvents() {
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
+                        {/* Tracker lives here now, not as its own nav tab —
+                            it's an action on the event you're hosting, same
+                            family as edit/delete. */}
+                        <button
+                          onClick={() => navigate(`/tracker/${opp.id}`)}
+                          className="p-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 transition-colors"
+                          title="Track attendance"
+                        >
+                          <ClipboardList className="w-4 h-4" />
+                        </button>
                         <button
                           onClick={() => editingId === opp.id ? setEditingId(null) : startEdit(opp)}
                           className="p-2 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary transition-colors"

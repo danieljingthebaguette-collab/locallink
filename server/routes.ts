@@ -77,7 +77,6 @@ function getExternalSignupUrlError(url: string): string | null {
 }
 
 // Allowed enum values — validated server-side to prevent garbage data
-const VALID_ATTENDANCE_DECISIONS = ['verified', 'rejected'] as const;
 const VALID_SPOTS_TYPES  = ['limited', 'unlimited', 'none'] as const;
 const VALID_CATEGORIES   = ['volunteer', 'education', 'fitness', 'environment', 'community'] as const;
 const VALID_PINNED_SIZES = ['small', 'medium', 'large'] as const;
@@ -1603,17 +1602,26 @@ router.put('/api/admin/users/:id/verify', requireAdmin, (req: Request, res: Resp
 });
 
 // ===== TRACKER (attendance / hour verification) =====
-// Org-side v1. Deliberately separate from `signups`: a signup means "tapped
-// Interested," attendance means "actually checked in and out." Check-in
-// requires an existing signup (no cold walk-ins yet) — see POST /api/checkin.
+// A signup means "tapped Interested." Attendance means "scanned in and out
+// at the event." The roster merges both: a signup with no attendance row
+// shows as Pending (session still ahead) or No-show (session's over) —
+// derived at read time from their absence, never stored, so there's nothing
+// to keep in sync or clean up.
+//
+// Checkout credits hours the instant someone scans out — there is no host
+// review queue. The integrity control is a time-gate on check-in (scanning
+// only works in the session's actual window, so a photographed poster is
+// worthless outside it) plus the host's standing ability to adjust or revoke
+// afterward — not a pre-approval step. That trade was made deliberately:
+// review-then-approve is the exact model this replaced.
 
-/** The date (YYYY-MM-DD) of the session someone checking in right now is
- * attending. For a one-time event that's just the event's own date. For a
- * recurring one, getRecurringStatus() only looks forward to the *next*
+/** The date (YYYY-MM-DD) of the session happening right now, or the one most
+ * recently ended. For a one-time event that's just the event's own date. For
+ * a recurring one, getRecurringStatus() only looks forward to the *next*
  * occurrence, which is useless at the event itself — this looks backward to
- * the most recent occurrence of recurringDay (today's date, if today is
- * that day), so a weekly event gets a fresh check-in every week rather than
- * being permanently claimed by whoever showed up first. */
+ * the most recent occurrence of recurringDay, so a weekly event gets a fresh
+ * check-in every week instead of the unique constraint permanently claiming
+ * it for whoever showed up first. */
 function currentOccurrenceDate(opp: { date: string; isRecurring?: number | boolean; recurringDay?: number | null }): string {
   if (!opp.isRecurring || opp.recurringDay === null || opp.recurringDay === undefined) {
     return opp.date.slice(0, 10);
@@ -1625,6 +1633,92 @@ function currentOccurrenceDate(opp: { date: string; isRecurring?: number | boole
   return occ.toISOString().slice(0, 10);
 }
 
+/** Start/end instants for one occurrence — the only thing check-in gating
+ * and no-show/auto-close derivation need. Local server time throughout; see
+ * the ponytail note below on why that's a deliberately bounded gap. */
+function occurrenceWindow(opp: { date: string; duration: number; isRecurring?: number | boolean; recurringTime?: string | null }, occurrenceDate: string): { start: Date; end: Date } {
+  let start: Date;
+  if (opp.isRecurring && opp.recurringTime) {
+    const [h, m] = opp.recurringTime.split(':').map(Number);
+    start = new Date(`${occurrenceDate}T00:00:00`);
+    start.setHours(h, m, 0, 0);
+  } else {
+    start = new Date(opp.date);
+  }
+  return { start, end: new Date(start.getTime() + opp.duration * 3_600_000) };
+}
+
+const CHECKIN_GRACE_BEFORE_MS = 30 * 60_000;   // gate opens 30 min before listed start
+const AUTO_CLOSE_DELAY_MS = 2 * 60 * 60_000;   // auto-close 2h after listed end, not exactly at it — gives a real chance to self-correct first
+
+const VALID_ATTENDANCE_DECISIONS = ['credited', 'rejected'] as const;
+
+/** Closes out anyone still mid-session long after the event ended, crediting
+ * the listed duration and flagging the record so the host knows the number
+ * is an assumption, not a measurement. Runs inline at roster-read time
+ * rather than on a schedule.
+ * ponytail: scoped to one opportunity per call, O(open rows on that event) —
+ * fine at this scale. A platform-wide cron sweep is the upgrade if the
+ * per-request cost ever matters. */
+function sweepAutoClose(oppId: string, opp: any) {
+  const openRows = db.prepare(`SELECT * FROM attendance WHERE opportunityId = ? AND status = 'checked_in'`).all(oppId) as any[];
+  const now = Date.now();
+  for (const row of openRows) {
+    const { end } = occurrenceWindow(opp, row.occurrenceDate);
+    if (now - end.getTime() < AUTO_CLOSE_DELAY_MS) continue;
+    db.prepare(
+      `UPDATE attendance SET checkOutAt = ?, hoursClaimed = ?, hoursVerified = ?, status = 'auto_closed' WHERE id = ?`
+    ).run(end.toISOString(), opp.duration, opp.duration, row.id);
+  }
+}
+
+/** The merged roster for one occurrence: every signup, left-joined to that
+ * occurrence's attendance row if one exists. No row at all becomes Pending
+ * or No-show depending on whether the session's already over — both
+ * derived, neither stored. */
+function getMergedRoster(oppId: string, opp: any, occurrenceDate: string) {
+  const { end } = occurrenceWindow(opp, occurrenceDate);
+  const eventEnded = Date.now() > end.getTime();
+  const rows = db.prepare(
+    `SELECT u.id as userId, u.username, u.email, s.createdAt as signedUpAt,
+            a.id as attendanceId, a.checkInAt, a.checkOutAt, a.hoursClaimed, a.hoursVerified, a.status, a.note
+     FROM signups s
+     JOIN users u ON u.id = s.userId
+     LEFT JOIN attendance a ON a.opportunityId = s.opportunityId AND a.userId = s.userId AND a.occurrenceDate = ?
+     WHERE s.opportunityId = ?
+     ORDER BY s.createdAt ASC`
+  ).all(occurrenceDate, oppId) as any[];
+  return { eventEnded, roster: rows.map(r => ({ ...r, status: r.status || (eventEnded ? 'no_show' : 'pending') })) };
+}
+
+// What the check-in page reads on load, before anyone taps anything — lets
+// it show "check-in opens at 8:45" or an already-credited result immediately,
+// rather than only surfacing that after a failed tap.
+router.get('/api/checkin/:opportunityId/status', requireAuth, (req: AuthRequest, res: Response) => {
+  try {
+    const oppId = req.params.opportunityId;
+    const opp = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(oppId) as any;
+    if (!opp) return res.status(404).json({ error: 'Opportunity not found' });
+
+    const occurrenceDate = currentOccurrenceDate(opp);
+    const { start, end } = occurrenceWindow(opp, occurrenceDate);
+    const attendance = db.prepare(
+      'SELECT * FROM attendance WHERE opportunityId = ? AND userId = ? AND occurrenceDate = ?'
+    ).get(oppId, req.userId, occurrenceDate) || null;
+    const signedUp = !!db.prepare('SELECT 1 FROM signups WHERE opportunityId = ? AND userId = ?').get(oppId, req.userId);
+
+    return res.json({
+      occurrenceDate,
+      gateOpensAt: new Date(start.getTime() - CHECKIN_GRACE_BEFORE_MS).toISOString(),
+      gateEndsAt: end.toISOString(),
+      signedUp,
+      attendance,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 router.post('/api/checkin/:opportunityId', requireAuth, (req: AuthRequest, res: Response) => {
   try {
     const oppId = req.params.opportunityId;
@@ -1632,19 +1726,46 @@ router.post('/api/checkin/:opportunityId', requireAuth, (req: AuthRequest, res: 
     const opp = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(oppId) as any;
     if (!opp) return res.status(404).json({ error: 'Opportunity not found' });
 
-    const signedUp = db.prepare('SELECT 1 FROM signups WHERE opportunityId = ? AND userId = ?').get(oppId, userId);
-    if (!signedUp) return res.status(403).json({ error: 'You need to be signed up (Interested) for this event before checking in.' });
-
     const occurrenceDate = currentOccurrenceDate(opp);
-    const existing = db.prepare('SELECT * FROM attendance WHERE opportunityId = ? AND userId = ? AND occurrenceDate = ?').get(oppId, userId, occurrenceDate);
+    const { start, end } = occurrenceWindow(opp, occurrenceDate);
+    const now = new Date();
+    // The gate is what makes a photographed poster worthless outside the
+    // event window — the QR/link carries no identity or secrecy of its own.
+    if (now.getTime() < start.getTime() - CHECKIN_GRACE_BEFORE_MS) {
+      return res.status(403).json({ error: `Check-in opens at ${start.toLocaleString('en-US', { hour: 'numeric', minute: '2-digit' })}.`, opensAt: start.toISOString() });
+    }
+    if (now.getTime() > end.getTime()) {
+      return res.status(403).json({ error: 'This session has ended.' });
+    }
+
+    const existing = db.prepare(
+      'SELECT * FROM attendance WHERE opportunityId = ? AND userId = ? AND occurrenceDate = ?'
+    ).get(oppId, userId, occurrenceDate);
     if (existing) return res.json(existing); // idempotent — a repeat scan/tap doesn't error
 
+    // Walk-in: scanning in place of tapping Interested first. One action
+    // does both, mirroring what POST /signup does, so nobody has to work
+    // out which button to press standing at the door.
+    const signedUp = db.prepare('SELECT 1 FROM signups WHERE opportunityId = ? AND userId = ?').get(oppId, userId);
+    if (!signedUp) {
+      db.prepare('INSERT INTO signups (opportunityId, userId, createdAt) VALUES (?, ?, ?)').run(oppId, userId, now.toISOString());
+      db.prepare('UPDATE opportunities SET popularity = popularity + 1 WHERE id = ?').run(oppId);
+      if (opp.hostId !== userId) {
+        const host = db.prepare('SELECT id, notifyOnInterest FROM users WHERE id = ?').get(opp.hostId) as any;
+        if (host?.notifyOnInterest) {
+          const volunteer = db.prepare('SELECT username FROM users WHERE id = ?').get(userId) as any;
+          db.prepare('INSERT INTO notifications (id, userId, type, message, postId, read, createdAt) VALUES (?, ?, ?, ?, ?, 0, ?)').run(
+            randomUUID(), opp.hostId, 'interest', `${volunteer?.username || 'Someone'} is interested in "${opp.title}"`, oppId, now.toISOString()
+          );
+        }
+      }
+    }
+
     const id = randomUUID();
-    const now = new Date().toISOString();
     db.prepare(
       `INSERT INTO attendance (id, opportunityId, userId, occurrenceDate, checkInAt, status, createdAt)
        VALUES (?, ?, ?, ?, ?, 'checked_in', ?)`
-    ).run(id, oppId, userId, occurrenceDate, now, now);
+    ).run(id, oppId, userId, occurrenceDate, now.toISOString(), now.toISOString());
 
     const row = db.prepare('SELECT * FROM attendance WHERE id = ?').get(id);
     return res.json(row);
@@ -1665,40 +1786,35 @@ router.post('/api/checkout/:opportunityId', requireAuth, (req: AuthRequest, res:
       'SELECT * FROM attendance WHERE opportunityId = ? AND userId = ? AND occurrenceDate = ?'
     ).get(oppId, userId, occurrenceDate) as any;
     if (!row) return res.status(404).json({ error: "You haven't checked in to this session yet." });
-    // Once the org has acted, this is final — no more volunteer-side edits.
-    // Before that (checked_in, or pending-but-not-yet-reviewed) checkout can
-    // be called again to revise hoursClaimed: the volunteer's own client
-    // flow re-submits through this same endpoint when they edit the
-    // pre-filled hours before confirming, and the first checkout call
-    // already moved status to 'pending' — a second call must not become a
-    // no-op just because it's no longer 'checked_in'.
-    if (row.status === 'verified' || row.status === 'rejected') return res.json(row);
+    // Instant-credit means the volunteer's one chance to be right is the
+    // scan itself — no post-checkout edit screen (that was the self-report
+    // inflation gap: letting someone freely retype their own hours right
+    // after the number that would otherwise be trusted). A repeat call
+    // after credit is a no-op, not a re-edit.
+    if (row.status !== 'checked_in') return res.json(row);
 
     const now = new Date();
     const checkInAt = new Date(row.checkInAt);
     const elapsedHours = Math.max(0, (now.getTime() - checkInAt.getTime()) / 3_600_000);
     // Snap to the nearest quarter hour — timestamps-to-the-second reads as
-    // false precision for a self-reported volunteer hour count.
-    const computedHours = Math.round(elapsedHours * 4) / 4;
-    // req.body is undefined (not {}) when the request has no body at all —
-    // the normal checkout call from the check-in page sends none, since the
-    // hours are usually just computed from the timestamps.
-    const { hoursClaimed } = req.body || {};
-    const finalHours = typeof hoursClaimed === 'number' && hoursClaimed >= 0 ? hoursClaimed : computedHours;
+    // false precision for a volunteer hour count.
+    const finalHours = Math.round(elapsedHours * 4) / 4;
 
     db.prepare(
-      `UPDATE attendance SET checkOutAt = ?, hoursClaimed = ?, status = 'pending' WHERE id = ?`
-    ).run(now.toISOString(), finalHours, row.id);
+      `UPDATE attendance SET checkOutAt = ?, hoursClaimed = ?, hoursVerified = ?, status = 'credited' WHERE id = ?`
+    ).run(now.toISOString(), finalHours, finalHours, row.id);
 
-    // Notify the host, same pattern as the interest notification.
-    const host = db.prepare('SELECT id, notifyOnInterest FROM users WHERE id = ?').get(opp.hostId) as any;
-    if (host?.notifyOnInterest) {
-      const volunteer = db.prepare('SELECT username FROM users WHERE id = ?').get(userId) as any;
-      db.prepare('INSERT INTO notifications (id, userId, type, message, postId, read, createdAt) VALUES (?, ?, ?, ?, ?, 0, ?)').run(
-        randomUUID(), opp.hostId, 'hours_submitted',
-        `${volunteer?.username || 'Someone'} submitted ${finalHours} hrs for "${opp.title}" — pending your review`,
-        oppId, new Date().toISOString()
-      );
+    // Bell only, no email — per-checkout emails don't scale against the
+    // provider's daily cap; the org gets a batched digest instead (not yet
+    // built). The bell is free, so there's no reason to withhold it too.
+    if (opp.hostId !== userId) {
+      const host = db.prepare('SELECT id, notifyOnInterest FROM users WHERE id = ?').get(opp.hostId) as any;
+      if (host?.notifyOnInterest) {
+        const volunteer = db.prepare('SELECT username FROM users WHERE id = ?').get(userId) as any;
+        db.prepare('INSERT INTO notifications (id, userId, type, message, postId, read, createdAt) VALUES (?, ?, ?, ?, ?, 0, ?)').run(
+          randomUUID(), opp.hostId, 'hours_credited', `${volunteer?.username || 'Someone'} checked out — ${finalHours} hrs credited for "${opp.title}"`, oppId, now.toISOString()
+        );
+      }
     }
 
     const updated = db.prepare('SELECT * FROM attendance WHERE id = ?').get(row.id);
@@ -1711,20 +1827,49 @@ router.post('/api/checkout/:opportunityId', requireAuth, (req: AuthRequest, res:
 router.get('/api/opportunities/:id/attendance', requireAuth, (req: AuthRequest, res: Response) => {
   try {
     const oppId = req.params.id;
-    const opp = db.prepare('SELECT hostId FROM opportunities WHERE id = ?').get(oppId) as any;
+    const opp = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(oppId) as any;
     if (!opp) return res.status(404).json({ error: 'Opportunity not found' });
     if (opp.hostId !== req.userId && !req.isAdmin) {
       return res.status(403).json({ error: 'Only the host can view this roster' });
     }
 
-    const rows = db.prepare(
-      `SELECT a.id, a.userId, u.username, u.email, a.occurrenceDate, a.checkInAt, a.checkOutAt,
-              a.hoursClaimed, a.hoursVerified, a.status, a.note
-       FROM attendance a JOIN users u ON u.id = a.userId
-       WHERE a.opportunityId = ?
-       ORDER BY a.occurrenceDate DESC, a.checkInAt ASC`
-    ).all(oppId);
-    return res.json(rows);
+    sweepAutoClose(oppId, opp);
+
+    const requestedDate = typeof req.query.date === 'string' ? req.query.date : null;
+    const occurrenceDate = requestedDate || currentOccurrenceDate(opp);
+    const { eventEnded, roster } = getMergedRoster(oppId, opp, occurrenceDate);
+
+    // Within-org reliability: of this volunteer's past events with THIS
+    // host (any of them, not just this one) that have already happened, how
+    // many did they no-show? Scoped to one org on purpose — a rough stretch
+    // at one place shouldn't follow anyone across the whole platform.
+    const reliability: Record<string, { noShows: number; total: number }> = {};
+    for (const r of roster) {
+      const pastWithHost = db.prepare(
+        `SELECT o.id, o.date, o.duration, o.isRecurring, o.recurringDay, o.recurringTime
+         FROM signups s JOIN opportunities o ON o.id = s.opportunityId
+         WHERE s.userId = ? AND o.hostId = ?`
+      ).all(r.userId, opp.hostId) as any[];
+      let noShows = 0, total = 0;
+      for (const p of pastWithHost) {
+        const occDate = p.id === oppId ? occurrenceDate : currentOccurrenceDate(p);
+        const { end: pEnd } = occurrenceWindow(p, occDate);
+        if (Date.now() <= pEnd.getTime()) continue; // hasn't happened yet — not countable either way
+        total++;
+        const attended = db.prepare(
+          `SELECT 1 FROM attendance WHERE opportunityId = ? AND userId = ? AND occurrenceDate = ? AND status IN ('credited', 'auto_closed')`
+        ).get(p.id, r.userId, occDate);
+        if (!attended) noShows++;
+      }
+      reliability[r.userId] = { noShows, total };
+    }
+
+    const pastDates = (db.prepare(
+      `SELECT DISTINCT occurrenceDate FROM attendance WHERE opportunityId = ? ORDER BY occurrenceDate DESC`
+    ).all(oppId) as any[]).map(d => d.occurrenceDate);
+    const availableDates = Array.from(new Set([currentOccurrenceDate(opp), ...pastDates]));
+
+    return res.json({ occurrenceDate, eventEnded, roster, reliability, availableDates });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
@@ -1737,7 +1882,7 @@ router.put('/api/attendance/:id', requireAuth, (req: AuthRequest, res: Response)
     ).get(req.params.id) as any;
     if (!row) return res.status(404).json({ error: 'Attendance record not found' });
     if (row.hostId !== req.userId && !req.isAdmin) {
-      return res.status(403).json({ error: 'Only the host can verify this record' });
+      return res.status(403).json({ error: 'Only the host can adjust this record' });
     }
 
     const { status, hoursVerified, note } = req.body || {};
@@ -1748,9 +1893,11 @@ router.put('/api/attendance/:id', requireAuth, (req: AuthRequest, res: Response)
       return res.status(400).json({ error: 'hoursVerified must be a non-negative number' });
     }
 
-    // Approving defaults to whatever the volunteer claimed — the org only
-    // needs to touch the number when it's actually wrong.
-    const finalHours = status === 'rejected' ? 0 : (hoursVerified ?? row.hoursClaimed ?? 0);
+    // This is an adjustment, not a first approval — hours already landed at
+    // checkout. Defaults to leaving the number alone; the host only needs to
+    // touch it when it's actually wrong (scenario: correcting an
+    // auto-closed guess, or revoking a credit entirely).
+    const finalHours = status === 'rejected' ? 0 : (hoursVerified ?? row.hoursVerified ?? row.hoursClaimed ?? 0);
     const now = new Date().toISOString();
     db.prepare(
       `UPDATE attendance SET status = ?, hoursVerified = ?, note = ?, verifiedBy = ?, verifiedAt = ? WHERE id = ?`
@@ -1758,11 +1905,11 @@ router.put('/api/attendance/:id', requireAuth, (req: AuthRequest, res: Response)
 
     const volunteer = db.prepare('SELECT notifyOnInterest FROM users WHERE id = ?').get(row.userId) as any;
     if (volunteer?.notifyOnInterest) {
-      const message = status === 'verified'
-        ? `Your ${finalHours} hrs for "${row.title}" were verified`
-        : `Your submitted hours for "${row.title}" were not approved${note ? `: ${note}` : ''}`;
+      const message = status === 'credited'
+        ? `Your hours for "${row.title}" were adjusted to ${finalHours}`
+        : `Your credited hours for "${row.title}" were revoked${note ? `: ${note}` : ''}`;
       db.prepare('INSERT INTO notifications (id, userId, type, message, postId, read, createdAt) VALUES (?, ?, ?, ?, ?, 0, ?)').run(
-        randomUUID(), row.userId, status === 'verified' ? 'hours_verified' : 'hours_rejected', message, row.opportunityId, now
+        randomUUID(), row.userId, status === 'credited' ? 'hours_adjusted' : 'hours_rejected', message, row.opportunityId, now
       );
     }
 
@@ -1773,27 +1920,64 @@ router.put('/api/attendance/:id', requireAuth, (req: AuthRequest, res: Response)
   }
 });
 
+// The kiosk substitute: a dead phone or an unscannable poster shouldn't mean
+// lost hours. The org's own device stands in for the door, entering someone
+// who was actually there but never scanned.
+router.post('/api/opportunities/:id/attendance/mark-present', requireAuth, (req: AuthRequest, res: Response) => {
+  try {
+    const oppId = req.params.id;
+    const opp = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(oppId) as any;
+    if (!opp) return res.status(404).json({ error: 'Opportunity not found' });
+    if (opp.hostId !== req.userId && !req.isAdmin) {
+      return res.status(403).json({ error: 'Only the host can mark attendance' });
+    }
+
+    const { userId, hours, occurrenceDate: reqDate } = req.body || {};
+    if (typeof userId !== 'string' || !userId) return res.status(400).json({ error: 'userId is required' });
+    const finalHours = typeof hours === 'number' && hours >= 0 ? hours : opp.duration;
+    const occurrenceDate = typeof reqDate === 'string' && reqDate ? reqDate : currentOccurrenceDate(opp);
+
+    const signedUp = db.prepare('SELECT 1 FROM signups WHERE opportunityId = ? AND userId = ?').get(oppId, userId);
+    if (!signedUp) db.prepare('INSERT INTO signups (opportunityId, userId, createdAt) VALUES (?, ?, ?)').run(oppId, userId, new Date().toISOString());
+
+    const now = new Date().toISOString();
+    const existing = db.prepare('SELECT id FROM attendance WHERE opportunityId = ? AND userId = ? AND occurrenceDate = ?').get(oppId, userId, occurrenceDate) as any;
+    if (existing) {
+      db.prepare(`UPDATE attendance SET checkInAt = ?, checkOutAt = ?, hoursClaimed = ?, hoursVerified = ?, status = 'credited', verifiedBy = ?, verifiedAt = ? WHERE id = ?`)
+        .run(now, now, finalHours, finalHours, req.userId, now, existing.id);
+    } else {
+      db.prepare(
+        `INSERT INTO attendance (id, opportunityId, userId, occurrenceDate, checkInAt, checkOutAt, hoursClaimed, hoursVerified, status, verifiedBy, verifiedAt, createdAt)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'credited', ?, ?, ?)`
+      ).run(randomUUID(), oppId, userId, occurrenceDate, now, now, finalHours, finalHours, req.userId, now, now);
+    }
+    const row = db.prepare('SELECT * FROM attendance WHERE opportunityId = ? AND userId = ? AND occurrenceDate = ?').get(oppId, userId, occurrenceDate);
+    return res.json(row);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/api/opportunities/:id/attendance/export', requireAuth, (req: AuthRequest, res: Response) => {
   try {
     const oppId = req.params.id;
-    const opp = db.prepare('SELECT hostId, title FROM opportunities WHERE id = ?').get(oppId) as any;
+    const opp = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(oppId) as any;
     if (!opp) return res.status(404).json({ error: 'Opportunity not found' });
     if (opp.hostId !== req.userId && !req.isAdmin) {
       return res.status(403).json({ error: 'Only the host can export this roster' });
     }
 
-    const rows = db.prepare(
-      `SELECT u.username, u.email, a.occurrenceDate, a.checkInAt, a.checkOutAt, a.hoursClaimed, a.hoursVerified, a.status
-       FROM attendance a JOIN users u ON u.id = a.userId
-       WHERE a.opportunityId = ? ORDER BY a.occurrenceDate DESC, a.checkInAt ASC`
-    ).all(oppId) as any[];
+    sweepAutoClose(oppId, opp);
+    const requestedDate = typeof req.query.date === 'string' ? req.query.date : null;
+    const occurrenceDate = requestedDate || currentOccurrenceDate(opp);
+    const { roster } = getMergedRoster(oppId, opp, occurrenceDate);
 
     const esc = (v: any) => `"${String(v ?? '').replace(/"/g, '""')}"`;
     const header = 'Name,Email,Date,Check In,Check Out,Hours Claimed,Hours Verified,Status';
-    const body = rows.map(r => [r.username, r.email, r.occurrenceDate, r.checkInAt, r.checkOutAt, r.hoursClaimed, r.hoursVerified, r.status].map(esc).join(',')).join('\n');
+    const body = roster.map(r => [r.username, r.email, occurrenceDate, r.checkInAt, r.checkOutAt, r.hoursClaimed, r.hoursVerified, r.status].map(esc).join(',')).join('\n');
     const csv = header + '\n' + body;
 
-    const filename = opp.title.replace(/[^a-z0-9]+/gi, '_').toLowerCase() + '_attendance.csv';
+    const filename = `${opp.title.replace(/[^a-z0-9]+/gi, '_').toLowerCase()}_${occurrenceDate}_attendance.csv`;
     res.setHeader('Content-Type', 'text/csv');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     return res.send(csv);
