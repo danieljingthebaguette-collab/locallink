@@ -1602,18 +1602,26 @@ router.put('/api/admin/users/:id/verify', requireAdmin, (req: Request, res: Resp
 });
 
 // ===== TRACKER (attendance / hour verification) =====
-// A signup means "tapped Interested." Attendance means "scanned in and out
-// at the event." The roster merges both: a signup with no attendance row
-// shows as Pending (session still ahead) or No-show (session's over) —
-// derived at read time from their absence, never stored, so there's nothing
-// to keep in sync or clean up.
+// A signup means "tapped Interested." Attendance means "scanned at the
+// event." The roster merges both: a signup with no scan shows as Pending
+// (session still ahead) or No-show (session's over) — derived at read time
+// from a row simply not existing, never stored, so there's nothing to keep
+// in sync or clean up.
 //
-// Checkout credits hours the instant someone scans out — there is no host
-// review queue. The integrity control is a time-gate on check-in (scanning
-// only works in the session's actual window, so a photographed poster is
-// worthless outside it) plus the host's standing ability to adjust or revoke
-// afterward — not a pre-approval step. That trade was made deliberately:
-// review-then-approve is the exact model this replaced.
+// One scan credits the event's FULL listed duration immediately — no timer,
+// no second scan, nothing that can get stuck half-finished. That's a
+// deliberate trade against precision: someone who leaves after twenty
+// minutes still gets full credit unless the host manually adjusts it (the
+// same adjust action they'd use for any other correction). The earlier
+// version of this measured real elapsed time between two scans, which
+// meant a live clock, a second scan to remember, and a sweep to catch
+// whoever forgot — three moving parts in exchange for precision most hour-
+// verification tools don't bother with either. Simplicity won.
+//
+// The integrity control is a time-gate on check-in (scanning only works in
+// the session's actual window, so a photographed poster is worthless
+// outside it) plus the host's standing ability to adjust or revoke
+// afterward — not a pre-approval step.
 
 /** The date (YYYY-MM-DD) of the session happening right now, or the one most
  * recently ended. For a one-time event that's just the event's own date. For
@@ -1649,28 +1657,8 @@ function occurrenceWindow(opp: { date: string; duration: number; isRecurring?: n
 }
 
 const CHECKIN_GRACE_BEFORE_MS = 30 * 60_000;   // gate opens 30 min before listed start
-const AUTO_CLOSE_DELAY_MS = 2 * 60 * 60_000;   // auto-close 2h after listed end, not exactly at it — gives a real chance to self-correct first
 
 const VALID_ATTENDANCE_DECISIONS = ['credited', 'rejected'] as const;
-
-/** Closes out anyone still mid-session long after the event ended, crediting
- * the listed duration and flagging the record so the host knows the number
- * is an assumption, not a measurement. Runs inline at roster-read time
- * rather than on a schedule.
- * ponytail: scoped to one opportunity per call, O(open rows on that event) —
- * fine at this scale. A platform-wide cron sweep is the upgrade if the
- * per-request cost ever matters. */
-function sweepAutoClose(oppId: string, opp: any) {
-  const openRows = db.prepare(`SELECT * FROM attendance WHERE opportunityId = ? AND status = 'checked_in'`).all(oppId) as any[];
-  const now = Date.now();
-  for (const row of openRows) {
-    const { end } = occurrenceWindow(opp, row.occurrenceDate);
-    if (now - end.getTime() < AUTO_CLOSE_DELAY_MS) continue;
-    db.prepare(
-      `UPDATE attendance SET checkOutAt = ?, hoursClaimed = ?, hoursVerified = ?, status = 'auto_closed' WHERE id = ?`
-    ).run(end.toISOString(), opp.duration, opp.duration, row.id);
-  }
-}
 
 /** The merged roster for one occurrence: every signup, left-joined to that
  * occurrence's attendance row if one exists. No row at all becomes Pending
@@ -1741,7 +1729,7 @@ router.post('/api/checkin/:opportunityId', requireAuth, (req: AuthRequest, res: 
     const existing = db.prepare(
       'SELECT * FROM attendance WHERE opportunityId = ? AND userId = ? AND occurrenceDate = ?'
     ).get(oppId, userId, occurrenceDate);
-    if (existing) return res.json(existing); // idempotent — a repeat scan/tap doesn't error
+    if (existing) return res.json(existing); // idempotent — a repeat scan doesn't double-credit
 
     // Walk-in: scanning in place of tapping Interested first. One action
     // does both, mirroring what POST /signup does, so nobody has to work
@@ -1761,50 +1749,14 @@ router.post('/api/checkin/:opportunityId', requireAuth, (req: AuthRequest, res: 
       }
     }
 
+    // The scan credits the event's full listed duration right away.
     const id = randomUUID();
     db.prepare(
-      `INSERT INTO attendance (id, opportunityId, userId, occurrenceDate, checkInAt, status, createdAt)
-       VALUES (?, ?, ?, ?, ?, 'checked_in', ?)`
-    ).run(id, oppId, userId, occurrenceDate, now.toISOString(), now.toISOString());
+      `INSERT INTO attendance (id, opportunityId, userId, occurrenceDate, checkInAt, hoursClaimed, hoursVerified, status, createdAt)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'credited', ?)`
+    ).run(id, oppId, userId, occurrenceDate, now.toISOString(), opp.duration, opp.duration, now.toISOString());
 
-    const row = db.prepare('SELECT * FROM attendance WHERE id = ?').get(id);
-    return res.json(row);
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message });
-  }
-});
-
-router.post('/api/checkout/:opportunityId', requireAuth, (req: AuthRequest, res: Response) => {
-  try {
-    const oppId = req.params.opportunityId;
-    const userId = req.userId!;
-    const opp = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(oppId) as any;
-    if (!opp) return res.status(404).json({ error: 'Opportunity not found' });
-
-    const occurrenceDate = currentOccurrenceDate(opp);
-    const row = db.prepare(
-      'SELECT * FROM attendance WHERE opportunityId = ? AND userId = ? AND occurrenceDate = ?'
-    ).get(oppId, userId, occurrenceDate) as any;
-    if (!row) return res.status(404).json({ error: "You haven't checked in to this session yet." });
-    // Instant-credit means the volunteer's one chance to be right is the
-    // scan itself — no post-checkout edit screen (that was the self-report
-    // inflation gap: letting someone freely retype their own hours right
-    // after the number that would otherwise be trusted). A repeat call
-    // after credit is a no-op, not a re-edit.
-    if (row.status !== 'checked_in') return res.json(row);
-
-    const now = new Date();
-    const checkInAt = new Date(row.checkInAt);
-    const elapsedHours = Math.max(0, (now.getTime() - checkInAt.getTime()) / 3_600_000);
-    // Snap to the nearest quarter hour — timestamps-to-the-second reads as
-    // false precision for a volunteer hour count.
-    const finalHours = Math.round(elapsedHours * 4) / 4;
-
-    db.prepare(
-      `UPDATE attendance SET checkOutAt = ?, hoursClaimed = ?, hoursVerified = ?, status = 'credited' WHERE id = ?`
-    ).run(now.toISOString(), finalHours, finalHours, row.id);
-
-    // Bell only, no email — per-checkout emails don't scale against the
+    // Bell only, no email — per-scan emails don't scale against the
     // provider's daily cap; the org gets a batched digest instead (not yet
     // built). The bell is free, so there's no reason to withhold it too.
     if (opp.hostId !== userId) {
@@ -1812,13 +1764,13 @@ router.post('/api/checkout/:opportunityId', requireAuth, (req: AuthRequest, res:
       if (host?.notifyOnInterest) {
         const volunteer = db.prepare('SELECT username FROM users WHERE id = ?').get(userId) as any;
         db.prepare('INSERT INTO notifications (id, userId, type, message, postId, read, createdAt) VALUES (?, ?, ?, ?, ?, 0, ?)').run(
-          randomUUID(), opp.hostId, 'hours_credited', `${volunteer?.username || 'Someone'} checked out — ${finalHours} hrs credited for "${opp.title}"`, oppId, now.toISOString()
+          randomUUID(), opp.hostId, 'hours_credited', `${volunteer?.username || 'Someone'} checked in — ${opp.duration} hrs credited for "${opp.title}"`, oppId, now.toISOString()
         );
       }
     }
 
-    const updated = db.prepare('SELECT * FROM attendance WHERE id = ?').get(row.id);
-    return res.json(updated);
+    const row = db.prepare('SELECT * FROM attendance WHERE id = ?').get(id);
+    return res.json(row);
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
@@ -1832,8 +1784,6 @@ router.get('/api/opportunities/:id/attendance', requireAuth, (req: AuthRequest, 
     if (opp.hostId !== req.userId && !req.isAdmin) {
       return res.status(403).json({ error: 'Only the host can view this roster' });
     }
-
-    sweepAutoClose(oppId, opp);
 
     const requestedDate = typeof req.query.date === 'string' ? req.query.date : null;
     const occurrenceDate = requestedDate || currentOccurrenceDate(opp);
@@ -1857,7 +1807,7 @@ router.get('/api/opportunities/:id/attendance', requireAuth, (req: AuthRequest, 
         if (Date.now() <= pEnd.getTime()) continue; // hasn't happened yet — not countable either way
         total++;
         const attended = db.prepare(
-          `SELECT 1 FROM attendance WHERE opportunityId = ? AND userId = ? AND occurrenceDate = ? AND status IN ('credited', 'auto_closed')`
+          `SELECT 1 FROM attendance WHERE opportunityId = ? AND userId = ? AND occurrenceDate = ? AND status = 'credited'`
         ).get(p.id, r.userId, occDate);
         if (!attended) noShows++;
       }
@@ -1967,14 +1917,15 @@ router.get('/api/opportunities/:id/attendance/export', requireAuth, (req: AuthRe
       return res.status(403).json({ error: 'Only the host can export this roster' });
     }
 
-    sweepAutoClose(oppId, opp);
     const requestedDate = typeof req.query.date === 'string' ? req.query.date : null;
     const occurrenceDate = requestedDate || currentOccurrenceDate(opp);
     const { roster } = getMergedRoster(oppId, opp, occurrenceDate);
 
+    // No "Check Out" column — there's no second scan anymore, so it would
+    // just be an empty column in every row.
     const esc = (v: any) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-    const header = 'Name,Email,Date,Check In,Check Out,Hours Claimed,Hours Verified,Status';
-    const body = roster.map(r => [r.username, r.email, occurrenceDate, r.checkInAt, r.checkOutAt, r.hoursClaimed, r.hoursVerified, r.status].map(esc).join(',')).join('\n');
+    const header = 'Name,Email,Date,Checked In,Hours,Status';
+    const body = roster.map(r => [r.username, r.email, occurrenceDate, r.checkInAt, r.hoursVerified ?? r.hoursClaimed, r.status].map(esc).join(',')).join('\n');
     const csv = header + '\n' + body;
 
     const filename = `${opp.title.replace(/[^a-z0-9]+/gi, '_').toLowerCase()}_${occurrenceDate}_attendance.csv`;
