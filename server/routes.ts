@@ -1937,4 +1937,20 @@ router.get('/api/opportunities/:id/attendance/export', requireAuth, (req: AuthRe
   }
 });
 
+/** A volunteer's own verified hours. Every other attendance endpoint is
+ * host-facing ("who came to my event"); this is the other direction. Only
+ * 'credited' rows count, so the number on a profile is always one an
+ * organization signed off on — never self-reported. */
+router.get('/api/me/hours', requireAuth, (req: AuthRequest, res: Response) => {
+  try {
+    const row = db.prepare(
+      `SELECT COALESCE(SUM(hoursVerified), 0) as total
+       FROM attendance WHERE userId = ? AND status = 'credited'`
+    ).get(req.userId!) as any;
+    return res.json({ total: row.total });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;

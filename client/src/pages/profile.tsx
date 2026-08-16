@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { useAuthStore, useOpportunitiesStore, useFavoritesStore } from '@/lib/store';
-import { User, Mail, Award, Calendar, LogOut, Loader2, Edit3, Lock, Save, X, Heart, Building2, Handshake, Bell, Camera } from 'lucide-react';
+import { User, Mail, Award, Calendar, Clock, LogOut, Loader2, Edit3, Lock, Save, X, Heart, Building2, Handshake, Bell, Camera } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import ConfirmBubble from '@/components/ConfirmBubble';
 
@@ -32,6 +32,7 @@ export default function Profile() {
   const [orgSaving, setOrgSaving] = useState(false);
   const [showUpgradeConfirm, setShowUpgradeConfirm] = useState(false);
   const [upgrading, setUpgrading] = useState(false);
+  const [hours, setHours] = useState<number | null>(null);
 
   const handleUpgradeToOrg = async () => {
     setShowUpgradeConfirm(false);
@@ -55,6 +56,17 @@ export default function Profile() {
   useEffect(() => {
     if (isLoggedIn) fetchFavorites();
   }, [isLoggedIn, fetchFavorites]);
+
+  useEffect(() => {
+    const token = localStorage.getItem('locallink_token');
+    if (!isLoggedIn || !token) return;
+    let cancelled = false;
+    fetch('/api/me/hours', { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => { if (!cancelled && d) setHours(d.total); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [isLoggedIn]);
 
   useEffect(() => {
     if (currentUser) {
@@ -483,8 +495,12 @@ export default function Profile() {
         {/* Stats Grid */}
         <div className="grid grid-cols-2 gap-3 mb-8">
           {[
+            // Volunteers never host (the upgrade only runs one way), so that
+            // tile was permanently 0 for them — hours take the slot instead.
+            currentUser.accountType === 'organization'
+              ? { icon: Calendar, label: 'Events Hosted', value: opLoading && !loaded ? '...' : hosted.length, color: 'text-green-500' }
+              : { icon: Clock, label: 'Hours Verified', value: hours === null ? '...' : Number(hours.toFixed(1)), color: 'text-emerald-500' },
             { icon: Award, label: 'Events Interested', value: opLoading && !loaded ? '...' : signedUp.length, color: 'text-purple-500' },
-            { icon: Calendar, label: 'Events Hosted', value: opLoading && !loaded ? '...' : hosted.length, color: 'text-green-500' },
           ].map((stat) => (
             <div key={stat.label} className="rounded-2xl border border-border bg-card p-4 text-center">
               <stat.icon className={`w-6 h-6 mx-auto mb-2 ${stat.color}`} />
@@ -503,14 +519,16 @@ export default function Profile() {
             </div>
           ) : (
             <div className="space-y-3">
-              <div className="flex items-center justify-between py-2 border-b border-border">
+              <div className={cn("flex items-center justify-between py-2", currentUser.accountType === 'organization' && "border-b border-border")}>
                 <span className="text-muted-foreground">Events Interested In</span>
                 <span className="font-bold text-foreground">{signedUp.length}</span>
               </div>
-              <div className="flex items-center justify-between py-2">
-                <span className="text-muted-foreground">Events Hosted</span>
-                <span className="font-bold text-foreground">{hosted.length}</span>
-              </div>
+              {currentUser.accountType === 'organization' && (
+                <div className="flex items-center justify-between py-2">
+                  <span className="text-muted-foreground">Events Hosted</span>
+                  <span className="font-bold text-foreground">{hosted.length}</span>
+                </div>
+              )}
             </div>
           )}
         </div>
