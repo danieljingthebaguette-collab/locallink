@@ -12,7 +12,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { MapPin, Clock, Users, Calendar, XCircle, Loader2, Edit3, Trash2, ChevronUp, X, Save, Upload, Plus, ClipboardList, Check } from 'lucide-react';
+import { MapPin, Clock, Users, Calendar, XCircle, Loader2, Edit3, Trash2, ChevronUp, X, Save, Upload, Plus, ClipboardList, Check, Award } from 'lucide-react';
 import CreatePostModal from '@/components/CreatePostModal';
 import CropEditor, {
   type ImageTransform,
@@ -68,6 +68,8 @@ export default function MyEvents() {
 
   const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [committingId, setCommittingId] = useState<string | null>(null);
+  const [certRequests, setCertRequests] = useState<any[]>([]);
+  const [certActingId, setCertActingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmCancel, setConfirmCancel] = useState<Opportunity | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<Opportunity | null>(null);
@@ -91,6 +93,50 @@ export default function MyEvents() {
     fetchOpportunities();
     if (isLoggedIn) fetchMyPosts();
   }, [fetchOpportunities, fetchMyPosts, isLoggedIn]);
+
+  const loadCertRequests = async () => {
+    const token = localStorage.getItem('locallink_token');
+    if (!token) return;
+    try {
+      const res = await fetch('/api/my-org/certificate-applications', { headers: { Authorization: `Bearer ${token}` } });
+      if (res.ok) {
+        const d = await res.json();
+        setCertRequests(Array.isArray(d) ? d : []);
+      }
+    } catch { /* ignore */ }
+  };
+
+  useEffect(() => {
+    if (isLoggedIn && currentUser?.accountType === 'organization') loadCertRequests();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoggedIn, currentUser?.accountType]);
+
+  const decideCertificate = async (r: any, action: 'approve' | 'decline') => {
+    const token = localStorage.getItem('locallink_token');
+    if (!token) return;
+    setCertActingId(r.id);
+    try {
+      const res = await fetch(`/api/my-org/certificate-applications/${r.id}/${action}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({}),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setCertRequests(list => list.filter(x => x.id !== r.id));
+        toast({
+          title: action === 'approve'
+            ? `Confirmed — LocalLink will issue ${r.volunteerName}'s certificate`
+            : 'Request declined',
+        });
+      } else {
+        toast({ title: d.error || 'Could not update', variant: 'destructive' });
+        loadCertRequests();
+      }
+    } finally {
+      setCertActingId(null);
+    }
+  };
 
   // Revoke blob URL when the preview changes or the component unmounts to prevent memory leaks
   useEffect(() => {
@@ -314,6 +360,51 @@ export default function MyEvents() {
             <div className="space-y-4 opacity-70">
               {past.map((opp) => (
                 <EventCard key={opp.id} opp={opp} type="past" cancellingId={null} onRequestCancel={() => {}} />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ── Certificate requests ──
+            Sits above Hosted Events because it's a task with someone waiting
+            on it, not a list to browse. Only renders when there's something
+            to decide, so it never becomes furniture. */}
+        {certRequests.length > 0 && (
+          <div className="mb-8">
+            <h3 className="text-lg font-semibold text-foreground mb-1 flex items-center gap-2">
+              <Award className="w-5 h-5 text-primary" />
+              Certificate requests ({certRequests.length})
+            </h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              These volunteers reached a milestone with your organization and are asking for a
+              certificate. It will carry your name, so you confirm before LocalLink issues it.
+            </p>
+            <div className="space-y-3">
+              {certRequests.map(r => (
+                <div key={r.id} className="rounded-2xl border border-border bg-card p-5">
+                  <div className="flex items-start justify-between gap-4 flex-wrap">
+                    <div className="min-w-0">
+                      <p className="font-heading font-bold text-foreground">
+                        {r.volunteerName} · {r.tier}-hour certificate
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1 tabular-nums">
+                        {r.currentHours} verified hours with you
+                      </p>
+                    </div>
+                    <div className="flex gap-2 flex-shrink-0">
+                      <Button size="sm" disabled={certActingId === r.id}
+                              onClick={() => decideCertificate(r, 'approve')}
+                              className="rounded-full text-xs">
+                        Confirm
+                      </Button>
+                      <Button size="sm" variant="outline" disabled={certActingId === r.id}
+                              onClick={() => decideCertificate(r, 'decline')}
+                              className="rounded-full text-xs text-red-500 hover:text-red-500">
+                        Decline
+                      </Button>
+                    </div>
+                  </div>
+                </div>
               ))}
             </div>
           </div>

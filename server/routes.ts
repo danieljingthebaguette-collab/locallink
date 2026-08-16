@@ -874,6 +874,20 @@ router.put('/api/opportunities/:id', requireAuth, (req: AuthRequest, res: Respon
 });
 
 // Delete own opportunity (host or admin)
+/** Everything the tracker attached to an event. Foreign keys point at
+ * opportunities from four directions now, so any delete path that predates
+ * the tracker fails with a raw constraint error unless it clears these
+ * first. Callers decide the policy (refuse vs proceed); this only does the
+ * clearing. */
+function purgeTrackerData(oppId: string) {
+  db.prepare('DELETE FROM attendance WHERE opportunityId = ?').run(oppId);
+  db.prepare('DELETE FROM attendance_segments WHERE opportunityId = ?').run(oppId);
+  db.prepare(
+    'DELETE FROM session_pauses WHERE sessionId IN (SELECT id FROM event_sessions WHERE opportunityId = ?)'
+  ).run(oppId);
+  db.prepare('DELETE FROM event_sessions WHERE opportunityId = ?').run(oppId);
+}
+
 router.delete('/api/opportunities/:id', requireAuth, async (req: AuthRequest, res: Response) => {
   try {
     const oppId = req.params.id;
@@ -894,7 +908,22 @@ router.delete('/api/opportunities/:id', requireAuth, async (req: AuthRequest, re
       }
     } catch { /* non-fatal */ }
 
+    // Verified hours live on volunteers' profiles and may already sit behind
+    // an issued certificate, so deleting the event would take those with it.
+    // Refuse and point at closing, which is what retiring an old event
+    // actually means. Previously the foreign keys refused for us and the
+    // organizer just saw "FOREIGN KEY constraint failed".
+    const credited = (db.prepare(
+      "SELECT COUNT(DISTINCT userId) as c FROM attendance WHERE opportunityId = ? AND status = 'credited'"
+    ).get(oppId) as any).c;
+    if (credited > 0) {
+      return res.status(409).json({
+        error: `This event has verified hours for ${credited} ${credited === 1 ? 'volunteer' : 'volunteers'}, so it can't be deleted. Close it instead — it stops taking sign-ups and their hours stay on their profiles.`,
+      });
+    }
+
     db.transaction(() => {
+      purgeTrackerData(oppId);
       db.prepare('DELETE FROM signups WHERE opportunityId = ?').run(oppId);
       db.prepare('DELETE FROM reports WHERE postId = ?').run(oppId);
       db.prepare('DELETE FROM opportunities WHERE id = ?').run(oppId);
@@ -994,9 +1023,15 @@ router.delete('/api/admin/users/:id', requireAdmin, (req: AuthRequest, res: Resp
       // 2. All signups and reports ON their hosted events (before deleting the events themselves)
       const hostedIds = (db.prepare('SELECT id FROM opportunities WHERE hostId = ?').all(userId) as any[]).map((o: any) => o.id);
       for (const oppId of hostedIds) {
+        purgeTrackerData(oppId);
         db.prepare('DELETE FROM signups WHERE opportunityId = ?').run(oppId);
         db.prepare('DELETE FROM reports WHERE postId = ?').run(oppId);
       }
+      // Their own attendance at OTHER organizations' events, plus any
+      // certificate applications either side of the relationship.
+      db.prepare('DELETE FROM attendance WHERE userId = ?').run(userId);
+      db.prepare('DELETE FROM attendance_segments WHERE userId = ?').run(userId);
+      db.prepare('DELETE FROM certificate_applications WHERE userId = ? OR hostId = ?').run(userId, userId);
       // 3. Their hosted opportunities
       db.prepare('DELETE FROM opportunities WHERE hostId = ?').run(userId);
       // 4. Their notifications
@@ -1115,7 +1150,11 @@ router.delete('/api/admin/opportunities/:id', requireAdmin, (req: Request, res: 
       }
     }
 
+    // Admin removal is the moderation escape hatch, so unlike the
+    // organization's own delete it proceeds even when hours exist — but it
+    // has to clear the tracker rows itself or the foreign keys reject it.
     db.transaction(() => {
+      purgeTrackerData(oppId);
       db.prepare('DELETE FROM signups WHERE opportunityId = ?').run(oppId);
       db.prepare('DELETE FROM reports WHERE postId = ?').run(oppId);
       db.prepare('DELETE FROM opportunities WHERE id = ?').run(oppId);
@@ -1239,6 +1278,72 @@ router.post('/api/admin/opportunities/:id/deny', requireAdmin, async (req: Reque
   }
 });
 
+// ===== CERTIFICATE REVIEW (organization) =====
+// Namespaced under /api/my-org rather than /api/org because /api/org/:id is
+// the public organization profile and would match a literal path segment
+// first, resolving "certificate-applications" as an organization id.
+// The certificate reads "verified volunteer service with <Org>", so the
+// organization confirms before it ever reaches an admin. They're confirming
+// something they already caused — these are hours they credited — so this
+// is a check, not a fresh judgement.
+router.get('/api/my-org/certificate-applications', requireAuth, (req: AuthRequest, res: Response) => {
+  try {
+    const rows = db.prepare(
+      `SELECT c.*, v.username as volunteerName
+       FROM certificate_applications c
+       JOIN users v ON v.id = c.userId
+       WHERE c.hostId = ? AND c.status = 'pending_org'
+       ORDER BY c.createdAt ASC`
+    ).all(req.userId!) as any[];
+    return res.json(rows.map(r => ({
+      ...r,
+      currentHours: Math.round(hoursWithOrg(r.userId, r.hostId) * 100) / 100,
+    })));
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/api/my-org/certificate-applications/:id/approve', requireAuth, (req: AuthRequest, res: Response) => {
+  try {
+    const row = db.prepare('SELECT * FROM certificate_applications WHERE id = ?').get(req.params.id) as any;
+    if (!row) return res.status(404).json({ error: 'Application not found' });
+    if (row.hostId !== req.userId) return res.status(403).json({ error: 'This request is for a different organization' });
+    if (row.status !== 'pending_org') return res.status(400).json({ error: 'Already reviewed' });
+
+    const hours = hoursWithOrg(row.userId, row.hostId);
+    if (hours < row.tier) {
+      return res.status(409).json({ error: `${Math.round(hours * 10) / 10} verified hours now — ${row.tier} required.` });
+    }
+    db.prepare("UPDATE certificate_applications SET status = 'pending_admin' WHERE id = ?").run(row.id);
+    return res.json({ id: row.id, status: 'pending_admin' });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/api/my-org/certificate-applications/:id/decline', requireAuth, (req: AuthRequest, res: Response) => {
+  try {
+    const row = db.prepare('SELECT * FROM certificate_applications WHERE id = ?').get(req.params.id) as any;
+    if (!row) return res.status(404).json({ error: 'Application not found' });
+    if (row.hostId !== req.userId) return res.status(403).json({ error: 'This request is for a different organization' });
+    if (row.status !== 'pending_org') return res.status(400).json({ error: 'Already reviewed' });
+
+    const note = typeof (req.body || {}).note === 'string' ? String(req.body.note).slice(0, 300) : null;
+    const now = new Date().toISOString();
+    db.prepare(
+      "UPDATE certificate_applications SET status = 'declined', note = ?, decidedBy = ?, decidedAt = ? WHERE id = ?"
+    ).run(note, req.userId, now, row.id);
+    db.prepare('INSERT INTO notifications (id, userId, type, message, read, createdAt) VALUES (?, ?, ?, ?, 0, ?)').run(
+      randomUUID(), row.userId, 'certificate_declined',
+      `Your ${row.tier}-hour certificate request wasn't approved by the organization${note ? `: ${note}` : ''}`, now
+    );
+    return res.json({ id: row.id, status: 'declined' });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // ===== CERTIFICATE REVIEW (admin) =====
 // currentHours is recomputed at read time rather than trusting the snapshot
 // taken when the volunteer applied, so an admin is always deciding on the
@@ -1250,7 +1355,7 @@ router.get('/api/admin/certificate-applications', requireAdmin, (_req: Request, 
        FROM certificate_applications c
        JOIN users v ON v.id = c.userId
        JOIN users o ON o.id = c.hostId
-       WHERE c.status = 'pending'
+       WHERE c.status = 'pending_admin'
        ORDER BY c.createdAt ASC`
     ).all() as any[];
     return res.json(rows.map(r => ({
@@ -1266,7 +1371,11 @@ router.post('/api/admin/certificate-applications/:id/issue', requireAdmin, (req:
   try {
     const row = db.prepare('SELECT * FROM certificate_applications WHERE id = ?').get(req.params.id) as any;
     if (!row) return res.status(404).json({ error: 'Application not found' });
-    if (row.status !== 'pending') return res.status(400).json({ error: 'Already reviewed' });
+    if (row.status !== 'pending_admin') {
+      return res.status(400).json({
+        error: row.status === 'pending_org' ? 'Still waiting on the organization' : 'Already reviewed',
+      });
+    }
 
     // Re-check at the moment of issuing. Hours can be revoked between
     // applying and reviewing, and a certificate must never outlive the
@@ -1298,7 +1407,11 @@ router.post('/api/admin/certificate-applications/:id/decline', requireAdmin, (re
   try {
     const row = db.prepare('SELECT * FROM certificate_applications WHERE id = ?').get(req.params.id) as any;
     if (!row) return res.status(404).json({ error: 'Application not found' });
-    if (row.status !== 'pending') return res.status(400).json({ error: 'Already reviewed' });
+    if (row.status !== 'pending_admin') {
+      return res.status(400).json({
+        error: row.status === 'pending_org' ? 'Still waiting on the organization' : 'Already reviewed',
+      });
+    }
 
     const note = typeof (req.body || {}).note === 'string' ? String(req.body.note).slice(0, 300) : null;
     const now = new Date().toISOString();
@@ -1932,6 +2045,8 @@ function syncAttendance(oppId: string, userId: string, occurrenceDate: string, s
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'credited', ?)`
     ).run(randomUUID(), oppId, userId, occurrenceDate, segments[0].checkInAt, segments[segments.length - 1].checkOutAt, hours, hours, now);
   }
+  const opp = db.prepare('SELECT hostId FROM opportunities WHERE id = ?').get(oppId) as any;
+  if (opp?.hostId) notifyMilestones(userId, opp.hostId);
   return db.prepare('SELECT * FROM attendance WHERE opportunityId = ? AND userId = ? AND occurrenceDate = ?').get(oppId, userId, occurrenceDate);
 }
 
@@ -2461,6 +2576,7 @@ router.put('/api/attendance/:id', requireAuth, (req: AuthRequest, res: Response)
       );
     }
 
+    if (status === 'credited') notifyMilestones(row.userId, row.hostId);
     const updated = db.prepare('SELECT * FROM attendance WHERE id = ?').get(row.id);
     return res.json(updated);
   } catch (err: any) {
@@ -2503,6 +2619,7 @@ router.post('/api/opportunities/:id/attendance/mark-present', requireAuth, (req:
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'credited', ?, ?, ?)`
       ).run(randomUUID(), oppId, userId, occurrenceDate, now, now, finalHours, finalHours, req.userId, now, now);
     }
+    notifyMilestones(userId, opp.hostId);
     const row = db.prepare('SELECT * FROM attendance WHERE opportunityId = ? AND userId = ? AND occurrenceDate = ?').get(oppId, userId, occurrenceDate);
     return res.json(row);
   } catch (err: any) {
@@ -2677,10 +2794,51 @@ function hoursWithOrg(userId: string, hostId: string): number {
   return row.total as number;
 }
 
+/** A certificate is only live while the hours behind it still stand. Rather
+ * than storing that, it's checked whenever one is read: an organization
+ * revoking hours after issue silently retires the certificate instead of
+ * leaving a claim the record itself contradicts. */
+function certificateIsLive(app: { userId: string; hostId: string; tier: number; status: string }): boolean {
+  if (app.status !== 'issued') return false;
+  return hoursWithOrg(app.userId, app.hostId) >= app.tier;
+}
+
 function certificatesFor(userId: string) {
-  return db.prepare(
-    'SELECT id, hostId, tier, status, note, decidedAt FROM certificate_applications WHERE userId = ?'
+  const rows = db.prepare(
+    'SELECT id, userId, hostId, tier, status, note, decidedAt FROM certificate_applications WHERE userId = ?'
   ).all(userId) as any[];
+  return rows.map(r => ({
+    ...r,
+    // 'revoked' is derived, never written — restoring the hours brings the
+    // certificate back rather than needing anyone to re-issue it.
+    status: r.status === 'issued' && !certificateIsLive(r) ? 'revoked' : r.status,
+  }));
+}
+
+/** Notify a volunteer the moment credited hours push them past a tier.
+ *
+ * The notification id is derived from user + organization + tier, so INSERT
+ * OR IGNORE makes this safe to call after every credit — the same milestone
+ * can never announce itself twice, and no extra table is needed to remember
+ * that it fired. */
+function notifyMilestones(userId: string, hostId: string) {
+  try {
+    const hours = hoursWithOrg(userId, hostId);
+    const reached = MILESTONE_TIERS.filter(t => hours >= t);
+    if (!reached.length) return;
+    const org = db.prepare('SELECT username FROM users WHERE id = ?').get(hostId) as any;
+    const now = new Date().toISOString();
+    const stmt = db.prepare(
+      'INSERT OR IGNORE INTO notifications (id, userId, type, message, read, createdAt) VALUES (?, ?, ?, ?, 0, ?)'
+    );
+    for (const tier of reached) {
+      stmt.run(
+        `ms-${userId}-${hostId}-${tier}`, userId, 'milestone_reached',
+        `You've reached ${tier} verified hours with ${org?.username ?? 'an organization'} — you can apply for a certificate`,
+        now
+      );
+    }
+  } catch { /* a missed notification must never fail the credit that caused it */ }
 }
 
 router.get('/api/me/record', requireAuth, (req: AuthRequest, res: Response) => {
@@ -2691,12 +2849,35 @@ router.get('/api/me/record', requireAuth, (req: AuthRequest, res: Response) => {
     const apps = certificatesFor(req.userId!);
     // Attach per-organization application state so the profile can show
     // "apply" / "pending" / "issued" without a second request.
-    const orgs = record.orgs.map(o => ({
+    const orgs: any[] = record.orgs.map(o => ({
       ...o,
       certificates: apps
         .filter(a => a.hostId === o.hostId)
         .map(a => ({ id: a.id, tier: a.tier, status: a.status, note: a.note })),
     }));
+
+    // An organization only appears above if it currently has credited hours.
+    // If every hour there was revoked, the organization — and any
+    // certificate attached to it — would silently disappear from the
+    // volunteer's profile, which is the one place they'd look to find out
+    // why. Keep those rows, showing zero hours and the retired certificate.
+    const shownHosts = new Set(orgs.map(o => o.hostId));
+    for (const a of apps) {
+      if (shownHosts.has(a.hostId)) continue;
+      const org = db.prepare('SELECT username FROM users WHERE id = ?').get(a.hostId) as any;
+      orgs.push({
+        hostId: a.hostId,
+        hostName: org?.username ?? 'Unknown organization',
+        hours: 0,
+        events: 0,
+        milestones: [],
+        certificates: apps
+          .filter(x => x.hostId === a.hostId)
+          .map(x => ({ id: x.id, tier: x.tier, status: x.status, note: x.note })),
+      });
+      shownHosts.add(a.hostId);
+    }
+
     return res.json({ ...record, orgs, shareToken: user?.profileShareToken ?? null });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
@@ -2728,22 +2909,38 @@ router.post('/api/certificates/apply', requireAuth, (req: AuthRequest, res: Resp
       'SELECT id, status FROM certificate_applications WHERE userId = ? AND hostId = ? AND tier = ?'
     ).get(req.userId!, hostId, tier) as any;
     if (existing) {
-      return res.status(409).json({
-        error: existing.status === 'issued'
-          ? 'This certificate has already been issued.'
-          : existing.status === 'pending'
-            ? 'This application is already waiting on review.'
-            : 'This application was already reviewed.',
-      });
+      if (existing.status === 'issued') {
+        return res.status(409).json({ error: 'This certificate has already been issued.' });
+      }
+      if (existing.status === 'declined') {
+        // A decline is usually "not yet" — confirm with the organizer, sort
+        // out a disputed session. Blocking forever would strand anyone who
+        // then did exactly what was asked, so the old row is cleared and
+        // they may apply again.
+        db.prepare('DELETE FROM certificate_applications WHERE id = ?').run(existing.id);
+      } else {
+        return res.status(409).json({ error: 'This application is already waiting on review.' });
+      }
     }
 
     const now = new Date().toISOString();
     const id = randomUUID();
+    // Goes to the ORGANIZATION first — the certificate carries their name,
+    // so they confirm before it reaches an admin to be issued.
     db.prepare(
       `INSERT INTO certificate_applications (id, userId, hostId, tier, hoursAtApply, status, createdAt)
-       VALUES (?, ?, ?, ?, ?, 'pending', ?)`
+       VALUES (?, ?, ?, ?, ?, 'pending_org', ?)`
     ).run(id, req.userId!, hostId, tier, Math.round(hours * 100) / 100, now);
-    return res.json({ id, tier, status: 'pending' });
+
+    const host = db.prepare('SELECT id, notifyOnInterest FROM users WHERE id = ?').get(hostId) as any;
+    if (host?.notifyOnInterest) {
+      const volunteer = db.prepare('SELECT username FROM users WHERE id = ?').get(req.userId!) as any;
+      db.prepare('INSERT INTO notifications (id, userId, type, message, read, createdAt) VALUES (?, ?, ?, ?, 0, ?)').run(
+        randomUUID(), hostId, 'certificate_requested',
+        `${volunteer?.username || 'A volunteer'} is requesting a ${tier}-hour certificate with your organization`, now
+      );
+    }
+    return res.json({ id, tier, status: 'pending_org' });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
@@ -2755,7 +2952,7 @@ router.post('/api/certificates/apply', requireAuth, (req: AuthRequest, res: Resp
 router.get('/api/certificates/:id', (req: Request, res: Response) => {
   try {
     const row = db.prepare(
-      `SELECT c.id, c.tier, c.status, c.decidedAt, c.hoursAtApply,
+      `SELECT c.id, c.userId, c.hostId, c.tier, c.status, c.decidedAt, c.hoursAtApply,
               v.username as volunteerName, o.username as orgName
        FROM certificate_applications c
        JOIN users v ON v.id = c.userId
@@ -2765,7 +2962,19 @@ router.get('/api/certificates/:id', (req: Request, res: Response) => {
     if (!row || row.status !== 'issued') {
       return res.status(404).json({ error: 'No issued certificate here' });
     }
-    return res.json(row);
+    // Re-checked on every read: if the organization has since revoked hours
+    // that took this volunteer below the tier, the certificate no longer
+    // stands. 410 rather than 404 so the page can say what happened instead
+    // of pretending the link was never real.
+    if (!certificateIsLive(row)) {
+      return res.status(410).json({
+        error: 'This certificate is no longer valid — the hours behind it were adjusted by the organization.',
+      });
+    }
+    // userId/hostId were selected only for the liveness check above — this
+    // response is public, so it carries names and nothing identifying.
+    const { userId, hostId, ...publicCert } = row;
+    return res.json(publicCert);
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }

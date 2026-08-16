@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils';
 export interface CertificateState {
   id: string;
   tier: number;
-  status: 'pending' | 'issued' | 'declined';
+  status: 'pending_org' | 'pending_admin' | 'issued' | 'declined' | 'revoked';
   note?: string | null;
 }
 
@@ -114,18 +114,41 @@ export function OrgBreakdown({
                       </div>
                     );
                   }
-                  if (cert?.status === 'pending') {
+                  if (cert?.status === 'pending_org') {
                     return (
                       <p key={tier} className="text-xs text-muted-foreground">
-                        {tier}-hour certificate — waiting on review
+                        {tier}-hour certificate — waiting on {o.hostName}
+                      </p>
+                    );
+                  }
+                  if (cert?.status === 'pending_admin') {
+                    return (
+                      <p key={tier} className="text-xs text-muted-foreground">
+                        {tier}-hour certificate — approved by {o.hostName}, waiting to be issued
+                      </p>
+                    );
+                  }
+                  if (cert?.status === 'revoked') {
+                    return (
+                      <p key={tier} className="text-xs text-amber-600 dark:text-amber-400">
+                        {tier}-hour certificate is no longer valid — the hours behind it were adjusted
                       </p>
                     );
                   }
                   if (cert?.status === 'declined') {
                     return (
-                      <p key={tier} className="text-xs text-muted-foreground">
-                        {tier}-hour certificate wasn’t approved{cert.note ? ` — ${cert.note}` : ''}
+                      <div key={tier} className="space-y-1">
+                      <p className="text-xs text-muted-foreground">
+                        {tier}-hour certificate wasn’t approved{cert.note ? ` — ${cert.note}` : ''}. You can apply again.
                       </p>
+                      <button
+                        onClick={() => onApply(o.hostId!, tier)}
+                        disabled={applyingKey === key}
+                        className="text-xs font-semibold text-primary hover:underline disabled:opacity-60"
+                      >
+                        {applyingKey === key ? 'Sending…' : 'Apply again'}
+                      </button>
+                      </div>
                     );
                   }
                   return (

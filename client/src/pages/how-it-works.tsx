@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/lib/store';
 import {
-  Search, Check, QrCode, Award, Plus, Users, Play, Download,
+  Search, Check, QrCode, Award, Plus, Users, Play, Download, Trophy,
   HelpCircle, Clock, Pause, ShieldCheck,
 } from 'lucide-react';
 
@@ -26,6 +26,8 @@ const VOLUNTEER_STEPS: Step[] = [
     body: 'The organization will have a QR code on a screen or printed out. Point your phone camera at it to start your hours, and scan the same code again on your way out to stop them.' },
   { n: 4, Icon: Award, title: 'Your hours land on your profile',
     body: 'Verified by the organization, counted automatically. Check the Hours Verified tile on your Profile any time.' },
+  { n: 5, Icon: Trophy, title: 'Ask for a certificate at 10, 25, 50 and 100 hours',
+    body: 'When your hours with one organization pass a milestone we\u2019ll tell you, and an Apply link appears on your profile. The organization confirms it, then LocalLink issues it \u2014 you get a printable certificate with their name on it.' },
 ];
 
 const ORG_STEPS: Step[] = [
@@ -39,6 +41,8 @@ const ORG_STEPS: Step[] = [
     body: 'Print it, or pull it up on a phone or laptop at the door. Volunteers scan it to check in and out. That’s the only thing you have to do during the event.' },
   { n: 5, Icon: Download, title: 'Download the spreadsheet',
     body: 'When the event ends, everyone’s hours are already recorded. Fix anything that’s wrong, then export the list as a spreadsheet.' },
+  { n: 6, Icon: Trophy, title: 'Confirm certificate requests',
+    body: 'Volunteers who pass 10, 25, 50 or 100 hours with you can request a certificate. It carries your organization’s name, so you confirm it in My Events before LocalLink issues it.' },
 ];
 
 const VOLUNTEER_FAQ = [
@@ -47,6 +51,8 @@ const VOLUNTEER_FAQ = [
   { q: 'I have to leave and come back.', a: 'Scan out when you go and scan in again when you return. Your hours add up across both, and any time the organization pauses the event isn’t counted.' },
   { q: 'I forgot to scan out.', a: 'Nothing breaks. Your hours close automatically when the organization ends the event. If you actually stayed longer, ask them to adjust it.' },
   { q: 'Can I enter my own hours?', a: 'No — and that’s the point. Every hour on your profile was confirmed by the organization you did it with, which is what makes them worth showing to a school.' },
+  { q: 'My certificate request was declined.', a: 'You can apply again once whatever the organization asked about is sorted out — a decline isn’t permanent. The reason they gave shows on your profile.' },
+  { q: 'My certificate stopped working.', a: 'A certificate is only valid while the hours behind it stand. If the organization later adjusts those hours below the milestone, it retires itself — and comes back on its own if the hours are restored.' },
 ];
 
 const ORG_FAQ = [
@@ -56,6 +62,8 @@ const ORG_FAQ = [
   { q: 'Someone stayed longer than the event was listed for.', a: 'The list flags them. Press “Set hours” on their row and type the real number — that sticks and won’t be recalculated.' },
   { q: 'We have volunteers who don’t come from LocalLink.', a: 'The list only covers people who found you here. It’s meant to sit alongside however you already track everyone else, not replace it.' },
   { q: 'What if there’s no signal at our venue?', a: 'Nothing has to happen live. Start the event, and if scanning doesn’t work, mark people present from your own device afterward — hours can be entered and corrected any time.' },
+  { q: 'Why am I being asked to confirm a certificate?', a: 'Because it will say the volunteer served with your organization. You already verified the hours — this is a last check before LocalLink issues something carrying your name.' },
+  { q: 'Can I delete an old event?', a: 'Only if nobody earned hours at it. Once volunteers have hours from an event, those are on their profiles and possibly behind a certificate, so close it instead — that stops sign-ups and keeps the record intact.' },
 ];
 
 /** Plain instructions for the attendance tracker, split by who's reading.

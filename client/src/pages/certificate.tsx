@@ -23,11 +23,18 @@ export default function CertificatePage() {
   const params = useParams<{ id: string }>();
   const [cert, setCert] = useState<Certificate | null>(null);
   const [loading, setLoading] = useState(true);
+  // 410 means it was genuinely issued and has since been retired, which is a
+  // different thing to say than "this link was never real".
+  const [retired, setRetired] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     fetch(`/api/certificates/${params.id}`)
-      .then(r => (r.ok ? r.json() : Promise.reject()))
+      .then(async r => {
+        if (r.ok) return r.json();
+        if (r.status === 410 && !cancelled) setRetired(true);
+        return Promise.reject();
+      })
       .then(d => { if (!cancelled) { setCert(d); setLoading(false); } })
       .catch(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
@@ -44,10 +51,14 @@ export default function CertificatePage() {
   if (!cert) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center px-4 text-center">
-        <div>
-          <p className="font-heading font-bold text-xl text-foreground mb-2">No certificate here</p>
+        <div className="max-w-sm">
+          <p className="font-heading font-bold text-xl text-foreground mb-2">
+            {retired ? 'This certificate is no longer valid' : 'No certificate here'}
+          </p>
           <p className="text-muted-foreground text-sm">
-            This certificate hasn't been issued, or the link is wrong.
+            {retired
+              ? 'It was issued, but the organization has since adjusted the hours behind it. Contact the organization if you think that\u2019s a mistake.'
+              : "This certificate hasn't been issued, or the link is wrong."}
           </p>
         </div>
       </div>
