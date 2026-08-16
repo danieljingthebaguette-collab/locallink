@@ -42,6 +42,7 @@ export default function Profile() {
   const [sharing, setSharing] = useState(false);
   const [shareCopied, setShareCopied] = useState(false);
   const [showAllEvents, setShowAllEvents] = useState(false);
+  const [applyingCert, setApplyingCert] = useState<string | null>(null);
 
   const handleUpgradeToOrg = async () => {
     setShowUpgradeConfirm(false);
@@ -101,6 +102,29 @@ export default function Profile() {
       }
     } finally {
       setSharing(false);
+    }
+  };
+
+  const applyForCertificate = async (hostId: string, tier: number) => {
+    const token = localStorage.getItem('locallink_token');
+    if (!token) return;
+    setApplyingCert(`${hostId}-${tier}`);
+    try {
+      const res = await fetch('/api/certificates/apply', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ hostId, tier }),
+      });
+      const d = await res.json();
+      if (res.ok) {
+        toast({ title: 'Application sent', description: 'An admin will review it and issue your certificate.' });
+        const r = await fetch('/api/me/record', { headers: { Authorization: `Bearer ${token}` } });
+        if (r.ok) setRecord(await r.json());
+      } else {
+        toast({ title: d.error || 'Could not apply', variant: 'destructive' });
+      }
+    } finally {
+      setApplyingCert(null);
     }
   };
 
@@ -564,7 +588,12 @@ export default function Profile() {
         {record && record.orgs.length > 0 && (
           <div className="mb-6">
             <h3 className="font-heading font-bold text-lg text-foreground mb-3">Organizations you've volunteered with</h3>
-            <OrgBreakdown orgs={record.orgs} onOrgClick={(id) => navigate(`/org/${id}`)} />
+            <OrgBreakdown
+              orgs={record.orgs}
+              onOrgClick={(id) => navigate(`/org/${id}`)}
+              onApply={applyForCertificate}
+              applyingKey={applyingCert}
+            />
           </div>
         )}
 

@@ -1239,6 +1239,83 @@ router.post('/api/admin/opportunities/:id/deny', requireAdmin, async (req: Reque
   }
 });
 
+// ===== CERTIFICATE REVIEW (admin) =====
+// currentHours is recomputed at read time rather than trusting the snapshot
+// taken when the volunteer applied, so an admin is always deciding on the
+// hours that exist right now — a credit revoked since then shows up here.
+router.get('/api/admin/certificate-applications', requireAdmin, (_req: Request, res: Response) => {
+  try {
+    const rows = db.prepare(
+      `SELECT c.*, v.username as volunteerName, v.email as volunteerEmail, o.username as orgName
+       FROM certificate_applications c
+       JOIN users v ON v.id = c.userId
+       JOIN users o ON o.id = c.hostId
+       WHERE c.status = 'pending'
+       ORDER BY c.createdAt ASC`
+    ).all() as any[];
+    return res.json(rows.map(r => ({
+      ...r,
+      currentHours: Math.round(hoursWithOrg(r.userId, r.hostId) * 100) / 100,
+    })));
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/api/admin/certificate-applications/:id/issue', requireAdmin, (req: AuthRequest, res: Response) => {
+  try {
+    const row = db.prepare('SELECT * FROM certificate_applications WHERE id = ?').get(req.params.id) as any;
+    if (!row) return res.status(404).json({ error: 'Application not found' });
+    if (row.status !== 'pending') return res.status(400).json({ error: 'Already reviewed' });
+
+    // Re-check at the moment of issuing. Hours can be revoked between
+    // applying and reviewing, and a certificate must never outlive the
+    // attendance it was based on.
+    const hours = hoursWithOrg(row.userId, row.hostId);
+    if (hours < row.tier) {
+      return res.status(409).json({
+        error: `No longer eligible — ${Math.round(hours * 10) / 10} verified hours now, ${row.tier} required.`,
+      });
+    }
+
+    const now = new Date().toISOString();
+    db.prepare(
+      "UPDATE certificate_applications SET status = 'issued', decidedBy = ?, decidedAt = ? WHERE id = ?"
+    ).run(req.userId, now, row.id);
+
+    const org = db.prepare('SELECT username FROM users WHERE id = ?').get(row.hostId) as any;
+    db.prepare('INSERT INTO notifications (id, userId, type, message, read, createdAt) VALUES (?, ?, ?, ?, 0, ?)').run(
+      randomUUID(), row.userId, 'certificate_issued',
+      `Your ${row.tier}-hour certificate with ${org?.username ?? 'an organization'} has been issued`, now
+    );
+    return res.json({ id: row.id, status: 'issued' });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/api/admin/certificate-applications/:id/decline', requireAdmin, (req: AuthRequest, res: Response) => {
+  try {
+    const row = db.prepare('SELECT * FROM certificate_applications WHERE id = ?').get(req.params.id) as any;
+    if (!row) return res.status(404).json({ error: 'Application not found' });
+    if (row.status !== 'pending') return res.status(400).json({ error: 'Already reviewed' });
+
+    const note = typeof (req.body || {}).note === 'string' ? String(req.body.note).slice(0, 300) : null;
+    const now = new Date().toISOString();
+    db.prepare(
+      "UPDATE certificate_applications SET status = 'declined', note = ?, decidedBy = ?, decidedAt = ? WHERE id = ?"
+    ).run(note, req.userId, now, row.id);
+
+    db.prepare('INSERT INTO notifications (id, userId, type, message, read, createdAt) VALUES (?, ?, ?, ?, 0, ?)').run(
+      randomUUID(), row.userId, 'certificate_declined',
+      `Your ${row.tier}-hour certificate application wasn't approved${note ? `: ${note}` : ''}`, now
+    );
+    return res.json({ id: row.id, status: 'declined' });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/api/admin/analytics', requireAdmin, (req: Request, res: Response) => {
   try {
     const ALLOWED_DAYS = [7, 14, 30, 365];
@@ -2587,11 +2664,108 @@ function buildRecord(userId: string) {
   };
 }
 
+/** Verified hours this volunteer has with one organization. The single
+ * source of truth for whether a certificate is deserved — recomputed from
+ * credited attendance every time rather than read from anything the client
+ * sent, so an application can't claim a tier that wasn't earned. */
+function hoursWithOrg(userId: string, hostId: string): number {
+  const row = db.prepare(
+    `SELECT COALESCE(SUM(a.hoursVerified), 0) as total
+     FROM attendance a JOIN opportunities o ON o.id = a.opportunityId
+     WHERE a.userId = ? AND o.hostId = ? AND a.status = 'credited'`
+  ).get(userId, hostId) as any;
+  return row.total as number;
+}
+
+function certificatesFor(userId: string) {
+  return db.prepare(
+    'SELECT id, hostId, tier, status, note, decidedAt FROM certificate_applications WHERE userId = ?'
+  ).all(userId) as any[];
+}
+
 router.get('/api/me/record', requireAuth, (req: AuthRequest, res: Response) => {
   try {
     reconcileUserSegments(req.userId!);
     const user = db.prepare('SELECT profileShareToken FROM users WHERE id = ?').get(req.userId!) as any;
-    return res.json({ ...buildRecord(req.userId!), shareToken: user?.profileShareToken ?? null });
+    const record = buildRecord(req.userId!);
+    const apps = certificatesFor(req.userId!);
+    // Attach per-organization application state so the profile can show
+    // "apply" / "pending" / "issued" without a second request.
+    const orgs = record.orgs.map(o => ({
+      ...o,
+      certificates: apps
+        .filter(a => a.hostId === o.hostId)
+        .map(a => ({ id: a.id, tier: a.tier, status: a.status, note: a.note })),
+    }));
+    return res.json({ ...record, orgs, shareToken: user?.profileShareToken ?? null });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+/** Apply for a milestone certificate.
+ *
+ * Eligibility is recomputed here from credited attendance — the request
+ * body only names which organization and tier, never how many hours. A
+ * client claiming 100 hours it doesn't have gets refused by the same query
+ * that drew the badge. */
+router.post('/api/certificates/apply', requireAuth, (req: AuthRequest, res: Response) => {
+  try {
+    const { hostId, tier } = req.body || {};
+    if (typeof hostId !== 'string' || !hostId) return res.status(400).json({ error: 'hostId is required' });
+    if (!MILESTONE_TIERS.includes(tier)) {
+      return res.status(400).json({ error: `tier must be one of: ${MILESTONE_TIERS.join(', ')}` });
+    }
+    const org = db.prepare('SELECT id, username FROM users WHERE id = ?').get(hostId) as any;
+    if (!org) return res.status(404).json({ error: 'Organization not found' });
+
+    const hours = hoursWithOrg(req.userId!, hostId);
+    if (hours < tier) {
+      return res.status(403).json({ error: `You have ${Math.round(hours * 10) / 10} verified hours with ${org.username} — ${tier} are needed.` });
+    }
+
+    const existing = db.prepare(
+      'SELECT id, status FROM certificate_applications WHERE userId = ? AND hostId = ? AND tier = ?'
+    ).get(req.userId!, hostId, tier) as any;
+    if (existing) {
+      return res.status(409).json({
+        error: existing.status === 'issued'
+          ? 'This certificate has already been issued.'
+          : existing.status === 'pending'
+            ? 'This application is already waiting on review.'
+            : 'This application was already reviewed.',
+      });
+    }
+
+    const now = new Date().toISOString();
+    const id = randomUUID();
+    db.prepare(
+      `INSERT INTO certificate_applications (id, userId, hostId, tier, hoursAtApply, status, createdAt)
+       VALUES (?, ?, ?, ?, ?, 'pending', ?)`
+    ).run(id, req.userId!, hostId, tier, Math.round(hours * 100) / 100, now);
+    return res.json({ id, tier, status: 'pending' });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+/** The issued certificate itself. Readable without an account so it can be
+ * attached to an application, but it carries only what a certificate needs
+ * — name, organization, tier, date — and nothing else about the person. */
+router.get('/api/certificates/:id', (req: Request, res: Response) => {
+  try {
+    const row = db.prepare(
+      `SELECT c.id, c.tier, c.status, c.decidedAt, c.hoursAtApply,
+              v.username as volunteerName, o.username as orgName
+       FROM certificate_applications c
+       JOIN users v ON v.id = c.userId
+       JOIN users o ON o.id = c.hostId
+       WHERE c.id = ?`
+    ).get(req.params.id) as any;
+    if (!row || row.status !== 'issued') {
+      return res.status(404).json({ error: 'No issued certificate here' });
+    }
+    return res.json(row);
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }

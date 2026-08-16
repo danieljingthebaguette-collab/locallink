@@ -1,5 +1,12 @@
-import { Award, Building2, Calendar } from 'lucide-react';
+import { Award, Building2, Calendar, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
+
+export interface CertificateState {
+  id: string;
+  tier: number;
+  status: 'pending' | 'issued' | 'declined';
+  note?: string | null;
+}
 
 export interface RecordOrg {
   hostId?: string;
@@ -7,6 +14,7 @@ export interface RecordOrg {
   hours: number;
   events: number;
   milestones: number[];
+  certificates?: CertificateState[];
 }
 
 export interface RecordEvent {
@@ -49,7 +57,16 @@ export function MilestoneBadge({ tier, compact }: { tier: number; compact?: bool
 /** Hours grouped by organization, with whatever tiers that org's hours have
  * reached. Shared by the volunteer's own profile and the link they hand to
  * a school, so the two can never drift apart. */
-export function OrgBreakdown({ orgs, onOrgClick }: { orgs: RecordOrg[]; onOrgClick?: (id: string) => void }) {
+export function OrgBreakdown({
+  orgs, onOrgClick, onApply, applyingKey,
+}: {
+  orgs: RecordOrg[];
+  onOrgClick?: (id: string) => void;
+  /** Present only on the volunteer's own profile — the shared record is
+   *  read-only, so it simply omits this and no apply controls render. */
+  onApply?: (hostId: string, tier: number) => void;
+  applyingKey?: string | null;
+}) {
   if (!orgs.length) return null;
   return (
     <ul className="rounded-2xl border border-border divide-y divide-border overflow-hidden">
@@ -79,6 +96,52 @@ export function OrgBreakdown({ orgs, onOrgClick }: { orgs: RecordOrg[]; onOrgCli
                 </div>
               )}
             </div>
+            {/* Certificates. Reaching a tier is automatic; asking for it to
+                be issued as a certificate is a separate, deliberate step
+                that an admin reviews — so each earned tier shows exactly one
+                of: apply, waiting, issued, or declined with the reason. */}
+            {onApply && o.hostId && o.milestones.length > 0 && (
+              <div className="mt-3 space-y-1.5">
+                {o.milestones.map(tier => {
+                  const cert = o.certificates?.find(c => c.tier === tier);
+                  const key = `${o.hostId}-${tier}`;
+                  if (cert?.status === 'issued') {
+                    return (
+                      <div key={tier} className="flex items-center gap-2 text-xs">
+                        <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
+                        <span className="text-muted-foreground">{tier}-hour certificate issued</span>
+                        <a href={`/certificate/${cert.id}`} className="font-semibold text-primary hover:underline">View</a>
+                      </div>
+                    );
+                  }
+                  if (cert?.status === 'pending') {
+                    return (
+                      <p key={tier} className="text-xs text-muted-foreground">
+                        {tier}-hour certificate — waiting on review
+                      </p>
+                    );
+                  }
+                  if (cert?.status === 'declined') {
+                    return (
+                      <p key={tier} className="text-xs text-muted-foreground">
+                        {tier}-hour certificate wasn’t approved{cert.note ? ` — ${cert.note}` : ''}
+                      </p>
+                    );
+                  }
+                  return (
+                    <button
+                      key={tier}
+                      onClick={() => onApply(o.hostId!, tier)}
+                      disabled={applyingKey === key}
+                      className="text-xs font-semibold text-primary hover:underline disabled:opacity-60"
+                    >
+                      {applyingKey === key ? 'Sending…' : `Apply for a ${tier}-hour certificate`}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
             {/* Progress toward the next tier — the point of a milestone is
                 knowing how far off the next one is. */}
             {(() => {

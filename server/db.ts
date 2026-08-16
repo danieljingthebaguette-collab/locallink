@@ -191,6 +191,30 @@ db.exec(`
   -- they like while the org's session runs, and their hours are the sum of
   -- the segments. The attendance row above stays the single summary
   -- everything else reads (roster, CSV export, profile total).
+  -- A volunteer asking for a milestone to be issued as a formal certificate.
+  -- Reaching a tier is automatic and already shows on their profile; this is
+  -- the separate step of asking for something with LocalLink's name on it,
+  -- which an admin reviews.
+  --
+  -- UNIQUE(userId, hostId, tier) is doing real work: one application per
+  -- milestone per organization, so the queue can't be spammed and the same
+  -- certificate can't be issued twice.
+  CREATE TABLE IF NOT EXISTS certificate_applications (
+    id TEXT PRIMARY KEY,
+    userId TEXT NOT NULL,
+    hostId TEXT NOT NULL,
+    tier INTEGER NOT NULL,
+    hoursAtApply REAL NOT NULL,
+    status TEXT DEFAULT 'pending',
+    note TEXT DEFAULT NULL,
+    decidedBy TEXT DEFAULT NULL,
+    decidedAt TEXT DEFAULT NULL,
+    createdAt TEXT NOT NULL,
+    FOREIGN KEY (userId) REFERENCES users(id),
+    FOREIGN KEY (hostId) REFERENCES users(id),
+    UNIQUE(userId, hostId, tier)
+  );
+
   CREATE TABLE IF NOT EXISTS attendance_segments (
     id TEXT PRIMARY KEY,
     opportunityId TEXT NOT NULL,
