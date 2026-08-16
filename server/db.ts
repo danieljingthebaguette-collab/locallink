@@ -269,6 +269,34 @@ try {
 // Idempotent, safe on every boot.
 db.exec("UPDATE certificate_applications SET status = 'pending_org' WHERE status = 'pending'");
 
+// Migrate: birth year, for working out whether a volunteer is a minor.
+//
+// INTERNAL ONLY — no endpoint returns it. What leaves the server is the
+// derived "under 18 / 18+", and only to organizations the volunteer has
+// committed to, who have a real need: consent forms, supervision, tasks a
+// minor legally can't do.
+//
+// The year rather than a bracket fixed at signup, because a bracket never
+// updates — someone who joins at 17 would be labelled a minor at 25, which
+// is precisely wrong for the safety purpose this exists to serve. A year is
+// 365x less precise than a date of birth and never appears in a response.
+//
+// NULL for everyone who registered before this, and for organizations,
+// which are not people.
+try {
+  db.prepare('SELECT birthYear FROM users LIMIT 1').get();
+} catch {
+  db.exec('ALTER TABLE users ADD COLUMN birthYear INTEGER DEFAULT NULL');
+}
+
+// Migrate: events an organization marks as 18+, for work a minor legally or
+// practically can't do — power tools, late shifts, some client-facing roles.
+try {
+  db.prepare('SELECT adultsOnly FROM opportunities LIMIT 1').get();
+} catch {
+  db.exec('ALTER TABLE opportunities ADD COLUMN adultsOnly INTEGER DEFAULT 0');
+}
+
 // Migrate: opt-in share link for a volunteer's verified record. NULL means
 // the profile is private, which is the default and stays the default —
 // this user base skews young, and a browsable directory of who volunteers

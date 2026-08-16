@@ -21,6 +21,9 @@ export default function Account() {
 
   const [isLoginMode, setIsLoginMode] = useState(!joinPrefill); // open register tab if coming from join link
   const [accountType, setAccountType] = useState<'volunteer' | 'organization'>(joinPrefill ? 'organization' : 'volunteer');
+  // Year only, never a full date of birth. Organizations aren't people, so
+  // they're never asked.
+  const [birthYear, setBirthYear] = useState('');
   const [formError, setFormError] = useState('');
   const [fieldErrors, setFieldErrors] = useState<{ username?: string; email?: string; password?: string }>({});
   const [formData, setFormData] = useState({ username: joinPrefill?.orgName || '', email: '', password: '' });
@@ -96,7 +99,7 @@ export default function Account() {
         setFormError(result.error || 'Login failed');
       }
     } else {
-      const result = await register(formData.username, formData.email, formData.password, accountType, joinPrefill?.slug);
+      const result = await register(formData.username, formData.email, formData.password, accountType, joinPrefill?.slug, birthYear ? Number(birthYear) : undefined);
       if (result.success) {
         sessionStorage.removeItem('locallink_join');
         if (result.needsVerification) {
@@ -360,6 +363,34 @@ export default function Account() {
                         : 'Organization accounts cannot be switched back to volunteer.'}
                     </p>
                   )}
+                </div>
+              )}
+
+              {/* Birth year — volunteers only, since organizations aren't
+                  people. The year alone, never a full date of birth, and it
+                  exists so an organization hosting a minor knows to sort out
+                  consent and supervision. */}
+              {!isLoginMode && accountType === 'volunteer' && (
+                <div className="space-y-2">
+                  <label htmlFor="account-birth-year" className="block text-sm font-semibold text-foreground">
+                    Year you were born
+                  </label>
+                  <select
+                    id="account-birth-year"
+                    value={birthYear}
+                    onChange={(e) => setBirthYear(e.target.value)}
+                    className="w-full rounded-2xl border border-border bg-background px-4 h-12 text-foreground"
+                  >
+                    <option value="">Select a year</option>
+                    {Array.from({ length: 88 }, (_, i) => new Date().getFullYear() - 13 - i).map(y => (
+                      <option key={y} value={y}>{y}</option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-muted-foreground">
+                    Organizations you commit to can see whether you're under 18, so they can sort
+                    out consent forms and supervision. Nobody else sees it, and it never appears on
+                    a record you share. You need to be 13 or older to use LocalLink.
+                  </p>
                 </div>
               )}
 

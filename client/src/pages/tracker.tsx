@@ -21,6 +21,7 @@ interface RosterRow {
   hoursNow: number;
   cutShort: boolean;
   overListed: boolean;
+  isMinor: boolean | null;
   status: RowStatus;
 }
 
@@ -501,7 +502,16 @@ export default function Tracker() {
                 return (
                   <li key={r.userId} className="flex items-center gap-3 px-4 py-3">
                     <div className="min-w-0 flex-1">
-                      <p className="font-medium text-foreground truncate">{r.username}</p>
+                      <p className="font-medium text-foreground truncate flex items-center gap-1.5">
+                        {r.username}
+                        {/* Only shown to organizations this volunteer committed
+                            to, and never on anything they share outward. */}
+                        {r.isMinor === true && (
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 flex-shrink-0">
+                            Under 18
+                          </span>
+                        )}
+                      </p>
                       <p className="text-xs text-muted-foreground">
                         {r.status === 'here' && `${r.hoursNow} hrs so far · in at ${fmtTime(r.checkInAt)}`}
                         {r.status === 'left' && `${r.hoursVerified ?? r.hoursClaimed ?? 0} hrs · ${fmtTime(r.checkInAt)}–${fmtTime(r.checkOutAt)}`}

@@ -155,7 +155,7 @@ function optionalAuth(req: AuthRequest, _res: Response, next: NextFunction) {
 
 router.post('/api/auth/register', async (req: Request, res: Response) => {
   try {
-    const { username, email, password, accountType, joinSlug } = req.body;
+    const { username, email, password, accountType, joinSlug, birthYear } = req.body;
     if (!username || !email || !password) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
@@ -169,6 +169,27 @@ router.post('/api/auth/register', async (req: Request, res: Response) => {
     }
     const validAccountTypes = ['volunteer', 'organization'];
     const resolvedAccountType = validAccountTypes.includes(accountType) ? accountType : 'volunteer';
+
+    // Volunteers give a birth year; organizations aren't people. Thirteen is
+    // the floor because under-13 accounts bring verifiable-parental-consent
+    // duties that a site this size cannot realistically meet — refusing at
+    // the door means never holding data that carries obligations we can't
+    // honour. Only the year is taken, and no response ever returns it.
+    let resolvedBirthYear: number | null = null;
+    if (resolvedAccountType === 'volunteer') {
+      const year = Number(birthYear);
+      const thisYear = new Date().getFullYear();
+      if (!Number.isInteger(year) || year < thisYear - 120 || year > thisYear) {
+        return res.status(400).json({ error: 'Please choose the year you were born' });
+      }
+      // Compares years only, so someone whose birthday hasn't landed yet is
+      // treated as the older age. Erring toward "old enough" on a boundary
+      // is the wrong direction for a floor, so subtract a year of slack.
+      if (thisYear - year < 13) {
+        return res.status(403).json({ error: 'You need to be at least 13 to use LocalLink.' });
+      }
+      resolvedBirthYear = year;
+    }
 
     // Validate join link if provided
     let joinLink: any = null;
@@ -193,8 +214,8 @@ router.post('/api/auth/register', async (req: Request, res: Response) => {
     const unsubToken = randomUUID();
 
     db.prepare(
-      'INSERT INTO users (id, username, email, password, isAdmin, emailVerified, accountType, hasSeenWelcome, unsubToken, verified, notifyOnInterest, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)'
-    ).run(id, username, email, hashedPassword, isAdmin, emailVerified, resolvedAccountType, 0, unsubToken, verified, createdAt);
+      'INSERT INTO users (id, username, email, password, isAdmin, emailVerified, accountType, hasSeenWelcome, unsubToken, verified, notifyOnInterest, birthYear, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)'
+    ).run(id, username, email, hashedPassword, isAdmin, emailVerified, resolvedAccountType, 0, unsubToken, verified, resolvedBirthYear, createdAt);
 
     // If registered via join link, claim it
     if (joinLink) {
@@ -265,7 +286,10 @@ router.post('/api/auth/login', async (req: Request, res: Response) => {
 
     const token = jwt.sign({ userId: user.id, isAdmin: !!user.isAdmin }, JWT_SECRET, { expiresIn: '30d' });
     // Never send the hashed password to the client
-    const { password: _pwd, ...safeUser } = user;
+    // birthYear is stripped alongside the password: it exists only to
+    // derive "under 18" for organizations, and this payload gets persisted
+    // to localStorage by the client.
+    const { password: _pwd, birthYear: _by, ...safeUser } = user;
     return res.json({ ...safeUser, isAdmin: !!user.isAdmin, emailVerified: true, notifyOnInterest: !!user.notifyOnInterest, notifyOnReopen: user.notifyOnReopen !== 0, profileImage: user.profileImage || null, emailReminders: !!user.emailReminders, hasSeenWelcome: !!user.hasSeenWelcome, verified: !!user.verified, token });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
@@ -293,7 +317,10 @@ router.get('/api/auth/verify-email', (req: Request, res: Response) => {
     // Issue a JWT so the client can log the user in automatically
     const user = db.prepare('SELECT * FROM users WHERE id = ?').get(record.userId) as any;
     const jwtToken = jwt.sign({ userId: user.id, isAdmin: !!user.isAdmin }, JWT_SECRET, { expiresIn: '30d' });
-    const { password: _pwd, ...safeUser } = user;
+    // birthYear is stripped alongside the password: it exists only to
+    // derive "under 18" for organizations, and this payload gets persisted
+    // to localStorage by the client.
+    const { password: _pwd, birthYear: _by, ...safeUser } = user;
 
     return res.json({
       success: true,
@@ -619,9 +646,9 @@ router.post('/api/opportunities', requireAuth, (req: AuthRequest, res: Response)
     const status = req.isAdmin ? 'approved' : 'pending';
 
     db.prepare(
-      `INSERT INTO opportunities (id, title, description, category, location, town, date, duration, spots, spotsRemaining, spotsType, image, hostId, hostName, popularity, tags, steps, createdAt, isRecurring, recurringDay, recurringTime, status, externalSignupUrl)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(id, title, description, category, location, town, date, duration, resolvedSpots, resolvedSpots, resolvedSpotsType, image || null, hostId, hostUser?.username || 'Unknown', tagsJson, stepsJson, createdAt, isRecurring ? 1 : 0, recurringDay ?? null, recurringTime ?? null, status, trimmedSignupUrl || null);
+      `INSERT INTO opportunities (id, title, description, category, location, town, date, duration, spots, spotsRemaining, spotsType, image, hostId, hostName, popularity, tags, steps, createdAt, isRecurring, recurringDay, recurringTime, status, externalSignupUrl, adultsOnly)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(id, title, description, category, location, town, date, duration, resolvedSpots, resolvedSpots, resolvedSpotsType, image || null, hostId, hostUser?.username || 'Unknown', tagsJson, stepsJson, createdAt, isRecurring ? 1 : 0, recurringDay ?? null, recurringTime ?? null, status, trimmedSignupUrl || null, req.body.adultsOnly ? 1 : 0);
 
     const opp = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(id) as any;
     return res.status(201).json(withTags(opp, []));
@@ -690,6 +717,18 @@ router.post('/api/opportunities/:id/signup/commit', requireAuth, (req: AuthReque
     const userId = req.userId!;
     const opp = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(oppId) as any;
     if (!opp) return res.status(404).json({ error: 'Opportunity not found' });
+
+    // 18+ events. Checked at commit rather than at interest, because this is
+    // the point the volunteer is telling the organization to expect them.
+    // Unknown age is NOT treated as adult — accounts predating the birth-year
+    // field are let through rather than blocked on a guess, and the roster
+    // shows the organization that the age is unknown.
+    if (opp.adultsOnly) {
+      const me = db.prepare('SELECT birthYear FROM users WHERE id = ?').get(userId) as any;
+      if (isMinor(me?.birthYear) === true) {
+        return res.status(403).json({ error: 'This event is marked 18+ by the organization.' });
+      }
+    }
 
     const now = new Date().toISOString();
     const existing = db.prepare('SELECT * FROM signups WHERE opportunityId = ? AND userId = ?').get(oppId, userId) as any;
@@ -855,6 +894,7 @@ router.put('/api/opportunities/:id', requireAuth, (req: AuthRequest, res: Respon
       if (spotsType   !== undefined) db.prepare('UPDATE opportunities SET spotsType = ? WHERE id = ?').run(spotsType, oppId);
       if (spots       !== undefined) db.prepare('UPDATE opportunities SET spots = ?, spotsRemaining = ? WHERE id = ?').run(spots, spots, oppId);
       if (isAvailable !== undefined) db.prepare('UPDATE opportunities SET isAvailable = ? WHERE id = ?').run(isAvailable ? 1 : 0, oppId);
+      if (req.body.adultsOnly !== undefined) db.prepare('UPDATE opportunities SET adultsOnly = ? WHERE id = ?').run(req.body.adultsOnly ? 1 : 0, oppId);
       if (isRecurring !== undefined) db.prepare('UPDATE opportunities SET isRecurring = ? WHERE id = ?').run(isRecurring ? 1 : 0, oppId);
       if (recurringDay   !== undefined) db.prepare('UPDATE opportunities SET recurringDay = ? WHERE id = ?').run(Number(recurringDay), oppId);
       if (recurringTime  !== undefined) db.prepare('UPDATE opportunities SET recurringTime = ? WHERE id = ?').run(recurringTime, oppId);
@@ -1943,6 +1983,21 @@ function occurrenceWindow(opp: { date: string; duration: number; isRecurring?: n
 // inflate a profile on its own.
 const VALID_ATTENDANCE_DECISIONS = ['credited', 'rejected'] as const;
 
+/** Whether a volunteer is under 18, derived from the stored year every time
+ * rather than frozen at signup — a flag written once would still call
+ * someone a minor years after they stopped being one.
+ *
+ * Year-only comparison, so it flips on 1 January of the year they turn 18
+ * rather than on the birthday itself. Deliberate: for age GATES this is the
+ * cautious direction only if we treat the unknown-birthday window as still
+ * a minor, which `birthYear` alone cannot distinguish. Returns null when
+ * unknown (organizations, and anyone who registered before this existed),
+ * and callers must not read null as "adult". */
+function isMinor(birthYear: number | null | undefined): boolean | null {
+  if (!birthYear) return null;
+  return new Date().getFullYear() - birthYear < 18;
+}
+
 type SessionStatus = 'none' | 'scheduled' | 'running' | 'paused' | 'stopped';
 
 /** The org's live session for one occurrence, plus its pause intervals. */
@@ -2122,7 +2177,7 @@ function getMergedRoster(oppId: string, occurrenceDate: string, session: any, li
   // was credited, and only the organizer can know.
   const endedAtIso = session && sessionRanAndEnded ? new Date(sessionEndedAt(session)).toISOString() : null;
   const rows = db.prepare(
-    `SELECT u.id as userId, u.username, u.email, s.committedAt,
+    `SELECT u.id as userId, u.username, u.email, u.birthYear, s.committedAt,
             a.id as attendanceId, a.checkInAt, a.checkOutAt, a.hoursClaimed, a.hoursVerified, a.status as attStatus, a.note, a.hoursLocked
      FROM signups s
      JOIN users u ON u.id = s.userId
@@ -2133,10 +2188,13 @@ function getMergedRoster(oppId: string, occurrenceDate: string, session: any, li
 
   const live = status === 'running' || status === 'paused';
   const roster = rows.map(r => {
-    if (r.attStatus === 'rejected') return { ...r, status: 'rejected' as const, hoursNow: 0, cutShort: false, overListed: false };
+    const minor = isMinor(r.birthYear);
+    const base = { ...r, isMinor: minor };
+    delete (base as any).birthYear;
+    if (r.attStatus === 'rejected') return { ...base, status: 'rejected' as const, hoursNow: 0, cutShort: false, overListed: false };
     // Claimed attendance awaiting a decision. Sorted to the top below,
     // because it's the only row type that needs the organizer to act.
-    if (r.attStatus === 'requested') return { ...r, status: 'requested' as const, hoursNow: 0, cutShort: false, overListed: false };
+    if (r.attStatus === 'requested') return { ...base, status: 'requested' as const, hoursNow: 0, cutShort: false, overListed: false };
     const openSegment = r.attendanceId && !r.checkOutAt && r.checkInAt;
     let derived: 'coming' | 'here' | 'left' | 'no_show';
     if (openSegment) derived = 'here';
@@ -2157,7 +2215,11 @@ function getMergedRoster(oppId: string, occurrenceDate: string, session: any, li
     // past what the event was advertised as.
     const cutShort = !!endedAtIso && r.checkOutAt === endedAtIso && !r.hoursLocked;
     const overListed = listedDuration > 0 && hoursNow > listedDuration + 0.01;
-    return { ...r, status: derived, hoursNow, cutShort, overListed };
+    // Organizations hosting someone need to know if they're a minor —
+    // consent forms, supervision, tasks a minor can't legally do. birthYear
+    // itself is dropped here so only the derived answer ever leaves.
+    const { birthYear, ...row } = r;
+    return { ...row, status: derived, hoursNow, cutShort, overListed, isMinor: isMinor(birthYear) };
   });
   // Anything waiting on the organizer floats to the top — it's the only
   // part of this list that's a task rather than a record.

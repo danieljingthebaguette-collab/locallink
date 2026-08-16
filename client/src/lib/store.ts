@@ -43,7 +43,7 @@ interface AuthState {
   currentUser: AppUser | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string; needsVerification?: boolean; suspended?: boolean; email?: string }>;
-  register: (username: string, email: string, password: string, accountType?: string, joinSlug?: string) => Promise<{ success: boolean; error?: string; needsVerification?: boolean; email?: string }>;
+  register: (username: string, email: string, password: string, accountType?: string, joinSlug?: string, birthYear?: number) => Promise<{ success: boolean; error?: string; needsVerification?: boolean; email?: string }>;
   resendVerification: (email: string) => Promise<{ success: boolean; error?: string }>;
   forgotPassword: (email: string) => Promise<{ success: boolean; error?: string }>;
   resetPassword: (token: string, password: string) => Promise<{ success: boolean; error?: string }>;
@@ -94,13 +94,13 @@ export const useAuthStore = create<AuthState>((set) => {
       }
     },
 
-    register: async (username, email, password, accountType = 'volunteer', joinSlug?: string) => {
+    register: async (username, email, password, accountType = 'volunteer', joinSlug?: string, birthYear?: number) => {
       set({ loading: true });
       try {
         const res = await fetch(`${API}/auth/register`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username, email, password, accountType, ...(joinSlug ? { joinSlug } : {}) }),
+          body: JSON.stringify({ username, email, password, accountType, ...(joinSlug ? { joinSlug } : {}), ...(birthYear ? { birthYear } : {}) }),
         });
         const data = await res.json();
         if (!res.ok) {

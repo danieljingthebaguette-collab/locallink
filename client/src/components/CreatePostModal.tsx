@@ -183,6 +183,7 @@ export default function CreatePostModal({ open, onClose }: Props) {
   const [creating, setCreating] = useState(false);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [spotsType, setSpotsType] = useState<SpotsType>('limited');
+  const [adultsOnly, setAdultsOnly] = useState(false);
   const [isRecurring, setIsRecurring] = useState(false);
   const [recurringDay, setRecurringDay] = useState(1);   // default: Monday
   const [recurringTime, setRecurringTime] = useState('12:00');
@@ -395,6 +396,7 @@ export default function CreatePostModal({ open, onClose }: Props) {
       spots,
       spotsRemaining: spots,
       spotsType,
+      adultsOnly,
       image: imageUrl,
       tags: selectedTags,
       steps: steps.filter(s => s.trim()),
@@ -766,6 +768,12 @@ export default function CreatePostModal({ open, onClose }: Props) {
                           className="rounded-xl bg-white/80 text-foreground border-0 text-sm h-9" />
                       </div>
                       <div className="bg-white/15 backdrop-blur-md rounded-2xl p-4 border border-white/20 space-y-2">
+                        <label className="flex items-start gap-2.5 mb-3 cursor-pointer">
+                          <input type="checkbox" checked={adultsOnly} onChange={e => setAdultsOnly(e.target.checked)} className="mt-0.5" />
+                          <span className="text-xs opacity-90">
+                            <span className="font-bold">Adults only (18+)</span> — for work a minor can’t do, like power tools or late shifts. Volunteers under 18 won’t be able to commit.
+                          </span>
+                        </label>
                         <span id="post-spots-label" className="text-xs font-bold tracking-widest uppercase opacity-75 block">Spots</span>
                         <div role="group" aria-labelledby="post-spots-label" className="flex gap-1.5 mb-2 flex-wrap">
                           {(['limited', 'unlimited', 'none'] as SpotsType[]).map(st => (

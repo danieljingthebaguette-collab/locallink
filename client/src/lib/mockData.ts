@@ -37,6 +37,7 @@ export interface Opportunity {
   tags: string[];
   createdAt: string;
   isAvailable?: boolean;  // true (default) = accepting sign-ups; false = closed by host
+  adultsOnly?: boolean;   // organization marked this 18+; blocks committing for known minors
   isRecurring?: boolean;  // true = repeats every week on recurringDay at recurringTime
   recurringDay?: number;  // 0 = Sunday … 6 = Saturday
   recurringTime?: string; // "HH:MM" (24-hour), e.g. "12:00"
