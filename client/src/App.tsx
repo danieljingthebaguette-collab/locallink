@@ -22,7 +22,6 @@ import ResetPassword from "@/pages/reset-password";
 import Terms from "@/pages/terms";
 import Privacy from "@/pages/privacy";
 import NotFound from "@/pages/not-found";
-import Leaderboard from "@/pages/leaderboard";
 import OrgProfilePage from "@/pages/org-profile";
 import JoinPage from "@/pages/join";
 import Tracker from "@/pages/tracker";
@@ -67,7 +66,6 @@ function Router() {
       <Route path="/profile" component={Profile} />
       <Route path="/account" component={Account} />
       <Route path="/admin" component={Admin} />
-      <Route path="/leaderboard" component={Leaderboard} />
       <Route path="/verify-email" component={VerifyEmail} />
       <Route path="/forgot-password" component={ForgotPassword} />
       <Route path="/reset-password" component={ResetPassword} />

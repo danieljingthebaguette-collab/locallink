@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams } from 'wouter';
+import { useParams, useLocation } from 'wouter';
 import { Loader2, ShieldCheck, Printer } from 'lucide-react';
 import Logo from '@/components/Logo';
 import { Button } from '@/components/ui/button';
@@ -26,6 +26,7 @@ interface SharedRecord {
  * the organizations that granted them, but the ledger is the substance. */
 export default function SharedRecord() {
   const params = useParams<{ token: string }>();
+  const [, navigate] = useLocation();
   const [data, setData] = useState<SharedRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
@@ -50,11 +51,16 @@ export default function SharedRecord() {
   if (notFound || !data) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center px-4 text-center">
-        <div>
+        <div className="max-w-sm">
           <p className="font-heading font-bold text-xl text-foreground mb-2">This link isn't active</p>
-          <p className="text-muted-foreground text-sm">
+          <p className="text-muted-foreground text-sm mb-6">
             The volunteer may have turned it off. Ask them for a new one.
           </p>
+          {/* Someone who followed a dead link has nowhere to go otherwise —
+              this page renders without site navigation. */}
+          <Button onClick={() => navigate('/about')} variant="outline" className="rounded-full px-6">
+            What is LocalLink?
+          </Button>
         </div>
       </div>
     );
@@ -65,13 +71,17 @@ export default function SharedRecord() {
       <main className="container mx-auto max-w-2xl">
         {/* Masthead — on paper this is what says where the record came from */}
         <div className="flex items-center justify-between gap-4 mb-8">
-          <div className="flex items-center gap-2.5">
+          <a
+            href="/about"
+            onClick={(e) => { e.preventDefault(); navigate('/about'); }}
+            className="flex items-center gap-2.5 rounded-xl -m-1 p-1 hover:bg-secondary/50 transition-colors print:hover:bg-transparent"
+          >
             <Logo size={34} />
-            <div>
+            <div className="text-left">
               <p className="font-heading font-bold text-foreground leading-none">LocalLink</p>
               <p className="text-[11px] text-muted-foreground mt-1">Verified volunteer record</p>
             </div>
-          </div>
+          </a>
           <Button
             onClick={() => window.print()}
             variant="outline" size="sm"

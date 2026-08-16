@@ -174,7 +174,18 @@ export default function Tracker() {
   if (!opp || !data) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center px-4 text-center">
-        <p className="text-muted-foreground">Could not load this event's list.</p>
+        <div className="max-w-sm">
+          <p className="font-heading font-bold text-xl text-foreground mb-2">Could not load this list</p>
+          <p className="text-muted-foreground text-sm mb-6">
+            The event may have been removed, or the connection dropped.
+          </p>
+          <div className="flex flex-wrap gap-2 justify-center">
+            <Button onClick={() => window.location.reload()} className="rounded-full px-6">Try again</Button>
+            <Button onClick={() => navigate('/my-events')} variant="outline" className="rounded-full px-6">
+              Back to My Events
+            </Button>
+          </div>
+        </div>
       </div>
     );
   }

@@ -146,8 +146,17 @@ export default function CheckIn() {
 
   if (error && !opp) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center px-4">
-        <p className="text-muted-foreground">This check-in link isn't valid.</p>
+      <div className="min-h-screen bg-background flex items-center justify-center px-4 text-center">
+        <div className="max-w-sm">
+          <p className="font-heading font-bold text-xl text-foreground mb-2">This check-in link isn't valid</p>
+          <p className="text-muted-foreground text-sm mb-6">
+            The event may have been removed, or the code may be out of date. Ask the organizer
+            for the current one.
+          </p>
+          <Button onClick={() => navigate('/')} variant="outline" className="rounded-full px-6">
+            Browse opportunities
+          </Button>
+        </div>
       </div>
     );
   }
@@ -325,7 +334,12 @@ export default function CheckIn() {
         {status.attendance?.status === 'rejected' && (
           <div className="text-center py-6">
             <p className="font-heading font-bold text-foreground">Not credited</p>
-            <p className="text-sm text-muted-foreground mt-1">Check your Profile for details, or contact {opp.hostName}.</p>
+            <p className="text-sm text-muted-foreground mt-1 mb-4">
+              {opp.hostName} removed these hours. Contact them if you think that's a mistake.
+            </p>
+            <Button onClick={() => navigate('/profile')} variant="outline" className="rounded-full px-6">
+              Go to my profile
+            </Button>
           </div>
         )}
       </div>
