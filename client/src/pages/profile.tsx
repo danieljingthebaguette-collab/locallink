@@ -5,9 +5,10 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { useAuthStore, useOpportunitiesStore, useFavoritesStore } from '@/lib/store';
-import { User, Mail, Award, Calendar, Clock, LogOut, Loader2, Edit3, Lock, Save, X, Heart, Building2, Handshake, Bell, Camera } from 'lucide-react';
+import { User, Mail, Award, Calendar, Clock, LogOut, Loader2, Edit3, Lock, Save, X, Heart, Building2, Handshake, Bell, Camera, Link as LinkIcon, Copy, Check } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import ConfirmBubble from '@/components/ConfirmBubble';
+import { OrgBreakdown, EventHistory, type RecordOrg, type RecordEvent } from '@/components/VolunteerRecord';
 
 export default function Profile() {
   const [, navigate] = useLocation();
@@ -33,6 +34,14 @@ export default function Profile() {
   const [showUpgradeConfirm, setShowUpgradeConfirm] = useState(false);
   const [upgrading, setUpgrading] = useState(false);
   const [hours, setHours] = useState<number | null>(null);
+  const [record, setRecord] = useState<{
+    totalHours: number; totalEvents: number;
+    orgs: RecordOrg[]; events: RecordEvent[];
+  } | null>(null);
+  const [shareToken, setShareToken] = useState<string | null>(null);
+  const [sharing, setSharing] = useState(false);
+  const [shareCopied, setShareCopied] = useState(false);
+  const [showAllEvents, setShowAllEvents] = useState(false);
 
   const handleUpgradeToOrg = async () => {
     setShowUpgradeConfirm(false);
@@ -57,16 +66,54 @@ export default function Profile() {
     if (isLoggedIn) fetchFavorites();
   }, [isLoggedIn, fetchFavorites]);
 
+  // One request covers the hours tile and everything below it — the record
+  // endpoint already returns the total, so there's no reason to also hit
+  // /api/me/hours here.
   useEffect(() => {
     const token = localStorage.getItem('locallink_token');
     if (!isLoggedIn || !token) return;
     let cancelled = false;
-    fetch('/api/me/hours', { headers: { Authorization: `Bearer ${token}` } })
+    fetch('/api/me/record', { headers: { Authorization: `Bearer ${token}` } })
       .then(r => (r.ok ? r.json() : null))
-      .then(d => { if (!cancelled && d) setHours(d.total); })
+      .then(d => {
+        if (cancelled || !d) return;
+        setHours(d.totalHours);
+        setRecord(d);
+        setShareToken(d.shareToken ?? null);
+      })
       .catch(() => {});
     return () => { cancelled = true; };
   }, [isLoggedIn]);
+
+  const toggleShare = async () => {
+    const token = localStorage.getItem('locallink_token');
+    if (!token) return;
+    setSharing(true);
+    try {
+      const res = await fetch('/api/me/share', {
+        method: shareToken ? 'DELETE' : 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const d = await res.json();
+        setShareToken(d.shareToken ?? null);
+        toast({ title: d.shareToken ? 'Share link created' : 'Share link turned off' });
+      }
+    } finally {
+      setSharing(false);
+    }
+  };
+
+  const copyShareLink = async () => {
+    if (!shareToken) return;
+    try {
+      await navigator.clipboard.writeText(`${window.location.origin}/v/${shareToken}`);
+      setShareCopied(true);
+      setTimeout(() => setShareCopied(false), 2000);
+    } catch {
+      toast({ title: 'Could not copy — select the link and copy it manually', variant: 'destructive' });
+    }
+  };
 
   useEffect(() => {
     if (currentUser) {
@@ -510,28 +557,115 @@ export default function Profile() {
           ))}
         </div>
 
-        {/* Activity Summary */}
-        <div className="rounded-2xl border border-border bg-card p-6 mb-6">
-          <h3 className="font-heading font-bold text-lg text-foreground mb-4">Activity Summary</h3>
-          {opLoading && !loaded ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="w-6 h-6 animate-spin text-primary" />
+        {/* Where the hours came from. A single number is worth very little
+            to the person who earned it — this is the part that shows the
+            work: which organizations, how much with each, how close the
+            next milestone is. */}
+        {record && record.orgs.length > 0 && (
+          <div className="mb-6">
+            <h3 className="font-heading font-bold text-lg text-foreground mb-3">Organizations you've volunteered with</h3>
+            <OrgBreakdown orgs={record.orgs} onOrgClick={(id) => navigate(`/org/${id}`)} />
+          </div>
+        )}
+
+        {record && record.events.length > 0 && (
+          <div className="mb-6">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-heading font-bold text-lg text-foreground">
+                Events you've completed ({record.totalEvents})
+              </h3>
+              {record.events.length > 5 && (
+                <button
+                  onClick={() => setShowAllEvents(v => !v)}
+                  className="text-xs font-semibold text-primary hover:underline"
+                >
+                  {showAllEvents ? 'Show less' : `Show all ${record.events.length}`}
+                </button>
+              )}
             </div>
-          ) : (
-            <div className="space-y-3">
-              <div className={cn("flex items-center justify-between py-2", currentUser.accountType === 'organization' && "border-b border-border")}>
-                <span className="text-muted-foreground">Events Interested In</span>
-                <span className="font-bold text-foreground">{signedUp.length}</span>
+            <EventHistory events={record.events} limit={showAllEvents ? undefined : 5} />
+          </div>
+        )}
+
+        {/* Nothing to show yet — say what would put something here. */}
+        {record && record.events.length === 0 && currentUser.accountType === 'volunteer' && (
+          <div className="rounded-2xl border-2 border-dashed border-border p-8 text-center mb-6">
+            <Award className="w-10 h-10 text-muted-foreground mx-auto opacity-40 mb-3" />
+            <p className="text-muted-foreground font-medium">No verified hours yet</p>
+            <p className="text-sm text-muted-foreground mt-1 mb-4">
+              Commit to an event, then scan the organization's code when you get there.
+            </p>
+            <Button onClick={() => navigate('/how-it-works')} variant="outline" className="rounded-full">
+              How it works
+            </Button>
+          </div>
+        )}
+
+        {/* The share link. Off until they ask for it, and revocable — this
+            is a record of a young person's movements, so browsing is not a
+            feature and the default is no link at all. */}
+        {currentUser.accountType === 'volunteer' && (
+          <div className="rounded-2xl border border-border bg-card p-6 mb-6">
+            <h3 className="font-heading font-bold text-lg text-foreground mb-1 flex items-center gap-2">
+              <LinkIcon className="w-5 h-5 text-primary" />
+              Share your record
+            </h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              Creates a private link to your verified hours that anyone can open without an
+              account — for a school counselor or an application. Your profile stays hidden
+              otherwise, and turning the link off makes it stop working immediately.
+            </p>
+            {shareToken ? (
+              <div className="space-y-3">
+                <div className="rounded-xl border border-border bg-background px-3 py-2 text-xs text-muted-foreground break-all font-mono">
+                  {window.location.origin}/v/{shareToken}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button onClick={copyShareLink} size="sm" variant="outline" className="rounded-full text-xs">
+                    {shareCopied ? <Check className="w-3.5 h-3.5 mr-1.5" /> : <Copy className="w-3.5 h-3.5 mr-1.5" />}
+                    {shareCopied ? 'Copied' : 'Copy link'}
+                  </Button>
+                  <Button onClick={() => navigate(`/v/${shareToken}`)} size="sm" variant="outline" className="rounded-full text-xs">
+                    Preview
+                  </Button>
+                  <Button onClick={toggleShare} disabled={sharing} size="sm" variant="outline"
+                          className="rounded-full text-xs text-red-500 hover:text-red-500">
+                    {sharing && <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />}
+                    Turn off
+                  </Button>
+                </div>
               </div>
-              {currentUser.accountType === 'organization' && (
+            ) : (
+              <Button onClick={toggleShare} disabled={sharing} size="sm" className="rounded-full text-xs">
+                {sharing && <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />}
+                Create share link
+              </Button>
+            )}
+          </div>
+        )}
+
+        {/* Hosting summary stays for organizations only. */}
+        {currentUser.accountType === 'organization' && (
+          <div className="rounded-2xl border border-border bg-card p-6 mb-6">
+            <h3 className="font-heading font-bold text-lg text-foreground mb-4">Activity Summary</h3>
+            {opLoading && !loaded ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-6 h-6 animate-spin text-primary" />
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between py-2 border-b border-border">
+                  <span className="text-muted-foreground">Events Interested In</span>
+                  <span className="font-bold text-foreground">{signedUp.length}</span>
+                </div>
                 <div className="flex items-center justify-between py-2">
                   <span className="text-muted-foreground">Events Hosted</span>
                   <span className="font-bold text-foreground">{hosted.length}</span>
                 </div>
-              )}
-            </div>
-          )}
-        </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Notification Settings — shown to all logged-in users */}
         <div className="rounded-2xl border border-border bg-card p-6 mb-6">

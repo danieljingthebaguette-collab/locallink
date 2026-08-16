@@ -10,6 +10,7 @@ import Home from "@/pages/home";
 import MyEvents from "@/pages/my-events";
 import About from "@/pages/about";
 import HowItWorks from '@/pages/how-it-works';
+import SharedRecord from '@/pages/shared-record';
 import Profile from "@/pages/profile";
 import Account from "@/pages/account";
 import Admin from "@/pages/admin";
@@ -46,6 +47,7 @@ function Router() {
       <Route path="/my-events" component={MyEvents} />
       <Route path="/about" component={About} />
       <Route path="/how-it-works" component={HowItWorks} />
+      <Route path="/v/:token" component={SharedRecord} />
       <Route path="/profile" component={Profile} />
       <Route path="/account" component={Account} />
       <Route path="/admin" component={Admin} />
@@ -65,6 +67,23 @@ function Router() {
 }
 
 function App() {
+  const [location] = useLocation();
+
+  // The shared record is a document handed to someone outside the site —
+  // usually a school counselor who was sent a link. Site navigation would
+  // invite them to browse a product they have no account for, and frame a
+  // verification record as a web page rather than a record.
+  const isSharedRecord = location.startsWith('/v/');
+
+  // The floating feedback bubble is pinned bottom-right, which is exactly
+  // where the roster's row actions sit on a narrow screen — it covered
+  // "Mark as came" on a phone, and the organizer's phone is the device
+  // they're holding at the door. Hidden anywhere the page is a task being
+  // performed rather than something being browsed.
+  const hideFeedback = isSharedRecord
+    || location.startsWith('/tracker/')
+    || location.startsWith('/checkin/');
+
   return (
     <QueryClientProvider client={queryClient}>
       {/* "user" defers to the OS reduced-motion setting for every framer-motion
@@ -72,9 +91,9 @@ function App() {
       <MotionConfig reducedMotion="user">
         <ScrollToTop />
         <Toaster />
-        <Navigation />
+        {!isSharedRecord && <Navigation />}
         <Router />
-        <FeedbackButton />
+        {!hideFeedback && <FeedbackButton />}
       </MotionConfig>
     </QueryClientProvider>
   );

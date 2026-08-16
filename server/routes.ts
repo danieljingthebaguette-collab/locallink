@@ -2536,6 +2536,118 @@ router.post('/api/opportunities/:id/request-hours', requireAuth, (req: AuthReque
   }
 });
 
+// ===== VOLUNTEER RECORD =====
+// Standard everywhere, awarded automatically. Fixed tiers are the whole
+// point: a "50 Hours" certificate is only worth showing a school if it
+// means the same thing at every organization, and if no organization can
+// hand one out for an afternoon.
+const MILESTONE_TIERS = [10, 25, 50, 100] as const;
+
+/** A volunteer's verified record: what they did, who with, and when.
+ *
+ * Only 'credited' rows count, so nothing here is self-asserted — the same
+ * rule the hours total already follows. Milestones are computed on read
+ * rather than stored, because they're a pure function of hours per
+ * organization and there's nothing to keep in sync. */
+function buildRecord(userId: string) {
+  const rows = db.prepare(
+    `SELECT o.hostId, o.hostName, o.title, o.category, o.location,
+            a.occurrenceDate, a.hoursVerified
+     FROM attendance a
+     JOIN opportunities o ON o.id = a.opportunityId
+     WHERE a.userId = ? AND a.status = 'credited' AND a.hoursVerified > 0
+     ORDER BY a.occurrenceDate DESC`
+  ).all(userId) as any[];
+
+  const byOrg = new Map<string, { hostId: string; hostName: string; hours: number; events: number }>();
+  for (const r of rows) {
+    const cur = byOrg.get(r.hostId) || { hostId: r.hostId, hostName: r.hostName, hours: 0, events: 0 };
+    cur.hours += r.hoursVerified;
+    cur.events += 1;
+    byOrg.set(r.hostId, cur);
+  }
+
+  const orgs = [...byOrg.values()]
+    .map(o => ({
+      ...o,
+      hours: Math.round(o.hours * 100) / 100,
+      milestones: MILESTONE_TIERS.filter(t => o.hours >= t),
+    }))
+    .sort((a, b) => b.hours - a.hours);
+
+  return {
+    totalHours: Math.round(rows.reduce((s, r) => s + r.hoursVerified, 0) * 100) / 100,
+    totalEvents: rows.length,
+    orgs,
+    events: rows.map(r => ({
+      title: r.title, hostName: r.hostName, hostId: r.hostId,
+      category: r.category, location: r.location,
+      date: r.occurrenceDate, hours: r.hoursVerified,
+    })),
+  };
+}
+
+router.get('/api/me/record', requireAuth, (req: AuthRequest, res: Response) => {
+  try {
+    reconcileUserSegments(req.userId!);
+    const user = db.prepare('SELECT profileShareToken FROM users WHERE id = ?').get(req.userId!) as any;
+    return res.json({ ...buildRecord(req.userId!), shareToken: user?.profileShareToken ?? null });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+/** Mint (or reuse) the share link. Deliberately an explicit action — the
+ * profile is private until the person decides otherwise. */
+router.post('/api/me/share', requireAuth, (req: AuthRequest, res: Response) => {
+  try {
+    const user = db.prepare('SELECT profileShareToken FROM users WHERE id = ?').get(req.userId!) as any;
+    if (user?.profileShareToken) return res.json({ shareToken: user.profileShareToken });
+    const token = randomUUID();
+    db.prepare('UPDATE users SET profileShareToken = ? WHERE id = ?').run(token, req.userId!);
+    return res.json({ shareToken: token });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+/** Revoking clears the token outright, so every copy of the old link stops
+ * working rather than quietly staying live somewhere. */
+router.delete('/api/me/share', requireAuth, (req: AuthRequest, res: Response) => {
+  try {
+    db.prepare('UPDATE users SET profileShareToken = NULL WHERE id = ?').run(req.userId!);
+    return res.json({ shareToken: null });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+/** The link a counselor opens. Unauthenticated by design, so a school
+ * doesn't need an account — but it exposes only what a volunteer record
+ * needs: display name, hours, organizations, events. No email, no user id,
+ * no upcoming events, so it can't be used to work out where someone will
+ * be. Unguessable and revocable. */
+router.get('/api/profile/shared/:token', (req: Request, res: Response) => {
+  try {
+    const user = db.prepare(
+      'SELECT id, username, createdAt FROM users WHERE profileShareToken = ?'
+    ).get(req.params.token) as any;
+    if (!user) return res.status(404).json({ error: 'This link is no longer active' });
+    reconcileUserSegments(user.id);
+    const record = buildRecord(user.id);
+    return res.json({
+      username: user.username,
+      memberSince: user.createdAt,
+      totalHours: record.totalHours,
+      totalEvents: record.totalEvents,
+      orgs: record.orgs.map(o => ({ hostName: o.hostName, hours: o.hours, events: o.events, milestones: o.milestones })),
+      events: record.events.map(e => ({ title: e.title, hostName: e.hostName, date: e.date, hours: e.hours })),
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/api/me/hours', requireAuth, (req: AuthRequest, res: Response) => {
   try {
     // A volunteer who scanned in and never scanned out has no finalized

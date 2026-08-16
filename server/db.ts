@@ -237,6 +237,18 @@ try {
   db.exec('ALTER TABLE event_sessions ADD COLUMN checkinPin TEXT DEFAULT NULL');
 }
 
+// Migrate: opt-in share link for a volunteer's verified record. NULL means
+// the profile is private, which is the default and stays the default —
+// this user base skews young, and a browsable directory of who volunteers
+// where, on which recurring day, is a safety problem rather than a feature.
+// A token exists only once someone deliberately creates one, and revoking
+// clears it so any copied link dies with it.
+try {
+  db.prepare('SELECT profileShareToken FROM users LIMIT 1').get();
+} catch {
+  db.exec('ALTER TABLE users ADD COLUMN profileShareToken TEXT DEFAULT NULL');
+}
+
 // Migrate: add isAdmin column if it doesn't exist yet
 try {
   db.prepare('SELECT isAdmin FROM users LIMIT 1').get();
