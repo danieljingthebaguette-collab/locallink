@@ -227,11 +227,13 @@ interface OpportunitiesState {
   getFiltered: () => Opportunity[];
   fetchOpportunities: () => Promise<void>;
   fetchMyPosts: () => Promise<void>;
-  addOpportunity: (opp: Omit<Opportunity, 'id' | 'createdAt' | 'signups' | 'popularity'>) => Promise<Opportunity | null>;
-  updateOpportunity: (oppId: string, data: Partial<Omit<Opportunity, 'id' | 'createdAt' | 'signups' | 'popularity' | 'hostId' | 'hostName'>>) => Promise<boolean>;
+  addOpportunity: (opp: Omit<Opportunity, 'id' | 'createdAt' | 'signups' | 'committed' | 'popularity'>) => Promise<Opportunity | null>;
+  updateOpportunity: (oppId: string, data: Partial<Omit<Opportunity, 'id' | 'createdAt' | 'signups' | 'committed' | 'popularity' | 'hostId' | 'hostName'>>) => Promise<boolean>;
   deleteOwnOpportunity: (oppId: string) => Promise<boolean>;
   signup: (oppId: string, userId: string) => Promise<boolean>;
   cancelSignup: (oppId: string, userId: string) => Promise<boolean>;
+  commit: (oppId: string) => Promise<boolean>;
+  cancelCommit: (oppId: string) => Promise<boolean>;
   getSignedUpEvents: (userId: string) => Opportunity[];
   getHostedEvents: (userId: string) => Opportunity[];
 }
@@ -435,6 +437,47 @@ export const useOpportunitiesStore = create<OpportunitiesState>((set, get) => ({
       if (res.ok) {
         const updated = await res.json();
         set((s) => ({ opportunities: s.opportunities.map(o => o.id === oppId ? updated : o) }));
+        return true;
+      }
+      if (res.status === 401) useAuthStore.getState().logout();
+      return false;
+    } catch { return false; }
+  },
+
+  // The step beyond Interested — this is what puts someone on the org's
+  // Tracker roster. Mirrors signup/cancelSignup exactly; the server creates
+  // the underlying Interested signup too if one doesn't exist yet.
+  commit: async (oppId) => {
+    try {
+      const res = await fetch(`${API}/opportunities/${oppId}/signup/commit`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+      });
+      if (res.ok) {
+        const oppRes = await fetch(`${API}/opportunities/${oppId}`, { headers: getAuthHeaders() });
+        if (oppRes.ok) {
+          const updated = await oppRes.json();
+          set((s) => ({ opportunities: s.opportunities.map(o => o.id === oppId ? updated : o) }));
+        }
+        return true;
+      }
+      if (res.status === 401) useAuthStore.getState().logout();
+      return false;
+    } catch { return false; }
+  },
+
+  cancelCommit: async (oppId) => {
+    try {
+      const res = await fetch(`${API}/opportunities/${oppId}/signup/commit`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+      });
+      if (res.ok) {
+        const oppRes = await fetch(`${API}/opportunities/${oppId}`, { headers: getAuthHeaders() });
+        if (oppRes.ok) {
+          const updated = await oppRes.json();
+          set((s) => ({ opportunities: s.opportunities.map(o => o.id === oppId ? updated : o) }));
+        }
         return true;
       }
       if (res.status === 401) useAuthStore.getState().logout();

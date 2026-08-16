@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'wouter';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { cn, getLocationError, getExternalSignupUrlError } from '@/lib/utils';
-import { Plus, MapPin, Users, Clock, Search, Loader2, Heart, Flag, X, Share2, Edit3, Save, ChevronDown, Star, Trash2, Repeat } from 'lucide-react';
+import { Plus, MapPin, Users, Clock, Search, Loader2, Heart, Flag, X, Share2, Edit3, Save, ChevronDown, Star, Trash2, Repeat, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -98,7 +98,7 @@ export default function Home() {
   const {
     setSearchQuery, setCategory, setSortBy, setTown, getFiltered,
     currentCategory, searchQuery, sortBy, currentTown,
-    signup, cancelSignup, fetchOpportunities, updateOpportunity,
+    signup, cancelSignup, commit, cancelCommit, fetchOpportunities, updateOpportunity,
     loading, loaded, opportunities,
   } = useOpportunitiesStore();
   // Destructure `favorites` array directly so React re-renders when it changes
@@ -245,6 +245,7 @@ export default function Home() {
   const formatDate = (d: string) => new Date(d).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
   const formatTime = (d: string) => new Date(d).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
   const isInterested = (opp: Opportunity) => currentUser ? opp.signups.includes(currentUser.id) : false;
+  const isCommitted = (opp: Opportunity) => currentUser ? opp.committed.includes(currentUser.id) : false;
 
   const DAY_FULL  = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   const DAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -327,6 +328,28 @@ export default function Home() {
     setSigningUp(true);
     try {
       await cancelSignup(oppId, currentUser.id);
+      const fresh = useOpportunitiesStore.getState().opportunities.find(o => o.id === oppId);
+      if (fresh) setSelectedCard(fresh); else setSelectedCard(null);
+    } finally { setSigningUp(false); }
+  };
+
+  // ── Commit / uncommit — the step beyond Interested that puts a volunteer
+  // on the org's Tracker roster ───────────────────────────────────────
+  const handleCommit = async (oppId: string) => {
+    setSigningUp(true);
+    try {
+      const success = await commit(oppId);
+      if (success) toast({ title: "You're committed ✓", description: "You're on the organizer's list for this event." });
+      else toast({ title: 'Could not commit', description: 'Try again in a moment.' });
+      const fresh = useOpportunitiesStore.getState().opportunities.find(o => o.id === oppId);
+      if (fresh) setSelectedCard(fresh); else setSelectedCard(null);
+    } finally { setSigningUp(false); }
+  };
+
+  const handleCancelCommit = async (oppId: string) => {
+    setSigningUp(true);
+    try {
+      await cancelCommit(oppId);
       const fresh = useOpportunitiesStore.getState().opportunities.find(o => o.id === oppId);
       if (fresh) setSelectedCard(fresh); else setSelectedCard(null);
     } finally { setSigningUp(false); }
@@ -1403,6 +1426,28 @@ export default function Home() {
                                 the state change above still happens regardless. */}
                             {showInterestBurst && <InterestBurst />}
                           </div>
+
+                          {/* The step beyond Interested. This is what puts a
+                              volunteer on the organizer's Tracker roster — Interested
+                              alone never does, on purpose, so browsing stays low-pressure. */}
+                          {isCommitted(selectedCard) ? (
+                            <div className="rounded-2xl py-2.5 px-3 bg-white/10 border border-white/20 flex items-center justify-between gap-2">
+                              <span className="text-white text-sm font-semibold flex items-center gap-1.5">
+                                <Check className="w-4 h-4 text-emerald-300" /> Committed — you're on their list
+                              </span>
+                              <button onClick={() => handleCancelCommit(selectedCard.id)} disabled={signingUp}
+                                className="text-white/60 hover:text-white/80 text-xs font-medium flex-shrink-0 transition-colors">
+                                Undo
+                              </button>
+                            </div>
+                          ) : (
+                            <button onClick={() => handleCommit(selectedCard.id)} disabled={signingUp}
+                              className="w-full rounded-2xl py-2.5 font-semibold bg-white text-primary hover:bg-white/90 text-sm transition-colors flex items-center justify-center gap-2 disabled:opacity-70">
+                              {signingUp && <Loader2 className="w-4 h-4 animate-spin" />}
+                              I'm Committing — put me on the list
+                            </button>
+                          )}
+
                           {/* Viral loop: the moment someone commits is the moment
                               they're most likely to bring a friend along */}
                           <button onClick={() => handleShare(selectedCard.id)}

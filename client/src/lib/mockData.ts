@@ -32,6 +32,7 @@ export interface Opportunity {
   hostId: string;
   hostName: string;
   signups: string[];
+  committed: string[]; // subset of signups who took the extra step beyond Interested — this is what the org's Tracker roster shows
   popularity: number;
   tags: string[];
   createdAt: string;
@@ -86,6 +87,7 @@ export const SAMPLE_OPPORTUNITIES: Opportunity[] = [
     hostId: '1',
     hostName: 'EcoWarriors',
     signups: [],
+    committed: [],
     popularity: 38,
     spotsType: 'limited',
     tags: [],
@@ -105,6 +107,7 @@ export const SAMPLE_OPPORTUNITIES: Opportunity[] = [
     hostId: '2',
     hostName: 'MathGenius',
     signups: [],
+    committed: [],
     popularity: 5,
     spotsType: 'limited',
     tags: [],
@@ -124,6 +127,7 @@ export const SAMPLE_OPPORTUNITIES: Opportunity[] = [
     hostId: '3',
     hostName: 'SportsClub',
     signups: [],
+    committed: [],
     popularity: 22,
     spotsType: 'limited',
     tags: [],
@@ -143,6 +147,7 @@ export const SAMPLE_OPPORTUNITIES: Opportunity[] = [
     hostId: '4',
     hostName: 'FoodForAll',
     signups: [],
+    committed: [],
     popularity: 25,
     spotsType: 'limited',
     tags: [],
@@ -162,6 +167,7 @@ export const SAMPLE_OPPORTUNITIES: Opportunity[] = [
     hostId: '5',
     hostName: 'GreenFuture',
     signups: [],
+    committed: [],
     popularity: 18,
     spotsType: 'limited',
     tags: [],
@@ -181,6 +187,7 @@ export const SAMPLE_OPPORTUNITIES: Opportunity[] = [
     hostId: '6',
     hostName: 'GreenThumb',
     signups: [],
+    committed: [],
     popularity: 15,
     spotsType: 'limited',
     tags: [],

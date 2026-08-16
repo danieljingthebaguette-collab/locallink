@@ -2,18 +2,24 @@ import { useEffect, useState } from 'react';
 import { useParams, useLocation } from 'wouter';
 import { Button } from '@/components/ui/button';
 import { useAuthStore } from '@/lib/store';
-import { Loader2, MapPin, CheckCircle2, Lock } from 'lucide-react';
+import { Loader2, MapPin, CheckCircle2, Clock, PauseCircle } from 'lucide-react';
 
-interface Attendance {
-  hoursVerified: number | null;
-  status: 'credited' | 'rejected';
-}
+type SessionStatus = 'none' | 'scheduled' | 'running' | 'paused' | 'stopped';
 
 interface StatusResponse {
-  gateOpensAt: string;
-  gateEndsAt: string;
+  sessionStatus: SessionStatus;
+  autoStopAt: string | null;
+  autoStartAt: string | null;
+  startedAt: string | null;
+  pinRequired: boolean;
+  checkedIn: boolean;
+  openSince: string | null;
+  segments: number;
+  hoursSoFar: number;
+  hoursLocked: boolean;
   signedUp: boolean;
-  attendance: Attendance | null;
+  committed: boolean;
+  attendance: { hoursVerified: number | null; status: 'credited' | 'rejected' } | null;
 }
 
 interface OppSummary {
@@ -29,11 +35,22 @@ function authHeaders(): Record<string, string> {
   return { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) };
 }
 
-/** What a volunteer lands on after scanning the event's QR/link, or tapping
- * it from the pre-event email. No nav entry — reached only via that link,
- * same as /org/:id. One tap credits the full listed duration immediately;
- * there's nothing to edit afterward, so the number a volunteer sees here is
- * exactly what lands on their profile. */
+/** Reads "1h 24m" from a millisecond span. Minutes only under an hour —
+ * seconds tick too fast to be anything but noise on a volunteer's screen. */
+function formatElapsed(ms: number): string {
+  const mins = Math.max(0, Math.floor(ms / 60_000));
+  const h = Math.floor(mins / 60);
+  return h ? `${h}h ${mins % 60}m` : `${mins}m`;
+}
+
+/** What a volunteer lands on after scanning the event's code, or tapping it
+ * from a pre-event email. No nav entry — reached only via that link, same as
+ * /org/:id.
+ *
+ * The same code does both scans: pointing a camera at it checks you in, and
+ * pointing at it again checks you out. Leaving and coming back is allowed
+ * for as long as the organization's session is running, so the page is a
+ * toggle, not a one-shot. */
 export default function CheckIn() {
   const params = useParams<{ opportunityId: string }>();
   const [, navigate] = useLocation();
@@ -44,7 +61,23 @@ export default function CheckIn() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [acting, setActing] = useState(false);
-  const [now] = useState(Date.now());
+  const [now, setNow] = useState(Date.now());
+  // When the displayed hoursSoFar was measured. The clock below counts up
+  // from that instant rather than from check-in, because hoursSoFar already
+  // has paused time subtracted and raw elapsed does not — counting from
+  // check-in would quietly promise a volunteer time they won't be credited.
+  const [fetchedAt, setFetchedAt] = useState(Date.now());
+  const [pin, setPin] = useState('');
+
+  const loadStatus = async (): Promise<StatusResponse | null> => {
+    const res = await fetch(`/api/checkin/${params.opportunityId}/status`, { headers: authHeaders() });
+    if (!res.ok) return null;
+    const json: StatusResponse = await res.json();
+    setStatus(json);
+    setFetchedAt(Date.now());
+    setNow(Date.now());
+    return json;
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -53,27 +86,36 @@ export default function CheckIn() {
       if (cancelled) return;
       if (!oppRes.ok) { setError('Event not found'); setLoading(false); return; }
       setOpp(await oppRes.json());
-      if (isLoggedIn) {
-        const statusRes = await fetch(`/api/checkin/${params.opportunityId}/status`, { headers: authHeaders() });
-        if (!cancelled && statusRes.ok) setStatus(await statusRes.json());
-      }
+      if (isLoggedIn && !cancelled) await loadStatus();
       if (!cancelled) setLoading(false);
     })();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.opportunityId, isLoggedIn]);
 
-  const handleCheckIn = async () => {
+  // Tick the local clock while running, and re-sync with the server
+  // periodically so a pause or stop by the organizer shows up here without
+  // the volunteer having to reload the page.
+  useEffect(() => {
+    if (!status?.checkedIn || status.sessionStatus !== 'running') return;
+    const tick = setInterval(() => setNow(Date.now()), 30_000);
+    const resync = setInterval(() => { loadStatus(); }, 60_000);
+    setNow(Date.now());
+    return () => { clearInterval(tick); clearInterval(resync); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status?.checkedIn, status?.sessionStatus]);
+
+  const scan = async () => {
     setActing(true);
+    setError(null);
     try {
-      const res = await fetch(`/api/checkin/${params.opportunityId}`, { method: 'POST', headers: authHeaders() });
+      const res = await fetch(`/api/checkin/${params.opportunityId}`, {
+        method: 'POST', headers: authHeaders(), body: JSON.stringify({ pin }),
+      });
       const data = await res.json();
-      if (res.ok) {
-        const statusRes = await fetch(`/api/checkin/${params.opportunityId}/status`, { headers: authHeaders() });
-        if (statusRes.ok) setStatus(await statusRes.json());
-      } else {
-        setError(data.error || 'Could not check in');
-      }
+      if (!res.ok) setError(data.error || 'Could not check in');
+      else setPin('');
+      await loadStatus();
     } finally {
       setActing(false);
     }
@@ -116,8 +158,12 @@ export default function CheckIn() {
     );
   }
 
-  const gateNotYetOpen = now < new Date(status.gateOpensAt).getTime() && !status.attendance;
-  const gateClosed = now > new Date(status.gateEndsAt).getTime() && !status.attendance;
+  // Server-measured hours (already net of any pauses) plus whatever has
+  // elapsed since that measurement. Never raw check-in-to-now, which would
+  // count paused time the volunteer will not actually be credited for.
+  const liveMs = status.hoursSoFar * 3_600_000
+    + (status.sessionStatus === 'running' && status.checkedIn ? Math.max(0, now - fetchedAt) : 0);
+  const finished = status.sessionStatus === 'stopped';
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-4 py-10">
@@ -130,49 +176,108 @@ export default function CheckIn() {
           </p>
         </div>
 
-        {gateNotYetOpen && (
-          <div className="text-center py-6">
-            <div className="w-12 h-12 rounded-full bg-secondary flex items-center justify-center mx-auto mb-3">
-              <Lock className="w-5 h-5 text-muted-foreground" />
+        {/* No session at all yet — scanning still works, the first scan opens
+            one, so this is information, not a wall. */}
+        {status.sessionStatus === 'none' && !status.checkedIn && (
+          <p className="text-sm text-muted-foreground text-center mb-3">
+            {opp.hostName} hasn't started this event yet. Checking in will start your hours.
+          </p>
+        )}
+
+        {/* The org scheduled a specific start time — unlike 'none', scanning
+            early does NOT open it. The organizer controls exactly when
+            volunteers' hours can start; this is a wall, not a hint. */}
+        {status.sessionStatus === 'scheduled' && !status.checkedIn && (
+          <p className="text-sm text-muted-foreground text-center mb-3">
+            {opp.hostName} has this scheduled to start
+            {status.autoStartAt && ` at ${new Date(status.autoStartAt).toLocaleString(undefined, { hour: 'numeric', minute: '2-digit', month: 'short', day: 'numeric' })}`}.
+          </p>
+        )}
+
+        {status.sessionStatus === 'paused' && (
+          <div className="rounded-2xl border border-border bg-secondary/40 px-4 py-3 mb-4 flex items-start gap-3">
+            <PauseCircle className="w-5 h-5 text-muted-foreground flex-shrink-0 mt-0.5" />
+            <p className="text-sm text-muted-foreground">
+              {opp.hostName} paused the event. Your hours are on hold and will pick back up when they resume.
+            </p>
+          </div>
+        )}
+
+        {/* Checked in and the clock is live. When the organizer has already
+            set this person's hours by hand, the clock is replaced by that
+            fixed figure — running a timer against a number that can no
+            longer change would promise time they'll never be credited. */}
+        {status.checkedIn && !finished && (
+          <div className="text-center py-5 mb-2">
+            <div className="w-12 h-12 rounded-full bg-emerald-500/15 flex items-center justify-center mx-auto mb-3">
+              <Clock className="w-6 h-6 text-emerald-500" />
             </div>
-            <p className="font-heading font-bold text-foreground">Check-in isn't open yet</p>
+            <p className="font-heading font-bold text-2xl text-foreground tabular-nums">
+              {status.hoursLocked ? `${status.hoursSoFar} hrs` : formatElapsed(liveMs)}
+            </p>
             <p className="text-sm text-muted-foreground mt-1">
-              Opens at {new Date(status.gateOpensAt).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}.
+              {status.hoursLocked
+                ? `Set by ${opp.hostName}`
+                : status.sessionStatus === 'paused' ? 'Paused' : "You're checked in"}
             </p>
           </div>
         )}
 
-        {gateClosed && (
-          <div className="text-center py-6">
-            <p className="font-heading font-bold text-foreground">This session has ended</p>
-            <p className="text-sm text-muted-foreground mt-1">Check-in is only open during the event.</p>
+        {/* Checked out mid-event — they can come back. */}
+        {!status.checkedIn && status.segments > 0 && !finished && (
+          <div className="text-center py-5 mb-2">
+            <p className="font-heading font-bold text-2xl text-foreground tabular-nums">{status.hoursSoFar} hrs</p>
+            <p className="text-sm text-muted-foreground mt-1">Checked out — scan again if you come back.</p>
           </div>
         )}
 
-        {!gateNotYetOpen && !gateClosed && !status.attendance && (
-          <>
-            <p className="text-sm text-muted-foreground text-center mb-2">
-              {status.signedUp
-                ? `Check in and ${opp.duration} hrs go straight to your profile.`
-                : "You're not signed up yet — checking in adds you to the list and credits your hours together."}
-            </p>
-            {error && <p className="text-sm text-red-500 text-center mb-3">{error}</p>}
-            <Button onClick={handleCheckIn} disabled={acting} className="w-full rounded-full h-12 font-semibold">
-              {acting && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
-              {status.signedUp ? 'Check In' : 'Join & Check In'}
-            </Button>
-          </>
+        {/* Only on the way in, and only when the organizer turned it on. The
+            code lives on their screen at the event, so having it is what
+            stands in for being there. */}
+        {status.pinRequired && !finished && (
+          <div className="mb-3">
+            <label htmlFor="checkin-pin" className="block text-sm text-muted-foreground text-center mb-2">
+              Enter the code {opp.hostName} is showing
+            </label>
+            <input
+              id="checkin-pin"
+              value={pin}
+              onChange={e => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              placeholder="4-digit code"
+              className="w-full rounded-2xl border border-border bg-background px-4 h-12 text-center text-xl tracking-[0.4em] tabular-nums text-foreground"
+            />
+          </div>
         )}
 
-        {status.attendance?.status === 'credited' && (
+        {error && <p className="text-sm text-red-500 text-center mb-3">{error}</p>}
+
+        {!finished && (
+          <Button onClick={scan}
+                  disabled={acting || status.sessionStatus === 'paused' || (status.pinRequired && pin.length < 4)}
+                  className="w-full rounded-full h-12 font-semibold">
+            {acting && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+            {status.checkedIn ? 'Check Out' : status.segments > 0 ? 'Check Back In' : 'Check In'}
+          </Button>
+        )}
+
+        {finished && status.attendance?.status === 'credited' && (
           <div className="text-center py-6">
             <div className="w-12 h-12 rounded-full bg-emerald-500/15 flex items-center justify-center mx-auto mb-3">
               <CheckCircle2 className="w-6 h-6 text-emerald-500" />
             </div>
-            <p className="font-heading font-bold text-foreground">Checked in</p>
+            <p className="font-heading font-bold text-foreground">All done</p>
             <p className="text-sm text-muted-foreground mt-1 tabular-nums">
               {status.attendance.hoursVerified} hrs credited — verified by {opp.hostName}.
             </p>
+          </div>
+        )}
+
+        {finished && !status.attendance && (
+          <div className="text-center py-6">
+            <p className="font-heading font-bold text-foreground">This event has ended</p>
+            <p className="text-sm text-muted-foreground mt-1">You weren't checked in, so no hours were recorded.</p>
           </div>
         )}
 

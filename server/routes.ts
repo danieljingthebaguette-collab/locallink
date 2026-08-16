@@ -57,8 +57,8 @@ function safeJsonParse<T>(raw: string | null | undefined, fallback: T): T {
 }
 
 /** Attach validated tags JSON to an opportunity row */
-function withTags(opp: any, signups: string[] = []) {
-  return { ...opp, tags: safeJsonParse<string[]>(opp.tags, []), steps: safeJsonParse<string[]>(opp.steps, []), signups, hostVerified: !!opp.hostVerified };
+function withTags(opp: any, signups: string[] = [], committed: string[] = []) {
+  return { ...opp, tags: safeJsonParse<string[]>(opp.tags, []), steps: safeJsonParse<string[]>(opp.steps, []), signups, committed, hostVerified: !!opp.hostVerified };
 }
 
 // Optional external signup URL on a post — validated only when non-blank.
@@ -511,9 +511,10 @@ router.get('/api/org/:id', (req: Request, res: Response) => {
     const posts = db.prepare(
       "SELECT * FROM opportunities WHERE hostId = ? AND status = 'approved' ORDER BY createdAt DESC"
     ).all(req.params.id) as any[];
-    const getSignups = db.prepare('SELECT userId FROM signups WHERE opportunityId = ?');
+    const getSignups = db.prepare('SELECT userId, committedAt FROM signups WHERE opportunityId = ?');
     const postsWithData = posts.map(opp =>
-      withTags(opp, (getSignups.all(opp.id) as any[]).map((s: any) => s.userId))
+      withTags(opp, (getSignups.all(opp.id) as any[]).map((s: any) => s.userId),
+        (getSignups.all(opp.id) as any[]).filter((s: any) => s.committedAt).map((s: any) => s.userId))
     );
 
     return res.json({
@@ -535,9 +536,10 @@ router.get('/api/opportunities', (_req: Request, res: Response) => {
     const opportunities = db.prepare(
       "SELECT o.*, u.verified as hostVerified FROM opportunities o LEFT JOIN users u ON o.hostId = u.id WHERE o.status = 'approved' ORDER BY o.createdAt DESC"
     ).all() as any[];
-    const getSignups = db.prepare('SELECT userId FROM signups WHERE opportunityId = ?');
+    const getSignups = db.prepare('SELECT userId, committedAt FROM signups WHERE opportunityId = ?');
     const result = opportunities.map(opp =>
-      withTags(opp, (getSignups.all(opp.id) as any[]).map(s => s.userId))
+      withTags(opp, (getSignups.all(opp.id) as any[]).map(s => s.userId),
+        (getSignups.all(opp.id) as any[]).filter((s: any) => s.committedAt).map((s: any) => s.userId))
     );
     return res.json(result);
   } catch (err: any) {
@@ -552,8 +554,10 @@ router.get('/api/opportunities/:id', (req: Request, res: Response) => {
       'SELECT o.*, u.verified as hostVerified FROM opportunities o LEFT JOIN users u ON o.hostId = u.id WHERE o.id = ?'
     ).get(req.params.id) as any;
     if (!opp) return res.status(404).json({ error: 'Opportunity not found' });
-    const signups = (db.prepare('SELECT userId FROM signups WHERE opportunityId = ?').all(opp.id) as any[]).map(s => s.userId);
-    return res.json(withTags(opp, signups));
+    const signupRows = db.prepare('SELECT userId, committedAt FROM signups WHERE opportunityId = ?').all(opp.id) as any[];
+    const signups = signupRows.map(s => s.userId);
+    const committed = signupRows.filter(s => s.committedAt).map(s => s.userId);
+    return res.json(withTags(opp, signups, committed));
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
@@ -565,9 +569,10 @@ router.get('/api/my-posts', requireAuth, (req: AuthRequest, res: Response) => {
     const posts = db.prepare(
       'SELECT * FROM opportunities WHERE hostId = ? ORDER BY createdAt DESC'
     ).all(req.userId!) as any[];
-    const getSignups = db.prepare('SELECT userId FROM signups WHERE opportunityId = ?');
+    const getSignups = db.prepare('SELECT userId, committedAt FROM signups WHERE opportunityId = ?');
     const result = posts.map(opp =>
-      withTags(opp, (getSignups.all(opp.id) as any[]).map((s: any) => s.userId))
+      withTags(opp, (getSignups.all(opp.id) as any[]).map((s: any) => s.userId),
+        (getSignups.all(opp.id) as any[]).filter((s: any) => s.committedAt).map((s: any) => s.userId))
     );
     return res.json(result);
   } catch (err: any) {
@@ -665,8 +670,60 @@ router.post('/api/opportunities/:id/signup', requireAuth, async (req: AuthReques
     } catch { /* email errors are non-fatal */ }
 
     const updated = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(oppId) as any;
-    const signups = (db.prepare('SELECT userId FROM signups WHERE opportunityId = ?').all(oppId) as any[]).map(s => s.userId);
-    return res.json(withTags(updated, signups));
+    const signupRows = db.prepare('SELECT userId, committedAt FROM signups WHERE opportunityId = ?').all(oppId) as any[];
+    const signups = signupRows.map(s => s.userId);
+    const committed = signupRows.filter(s => s.committedAt).map(s => s.userId);
+    return res.json(withTags(updated, signups, committed));
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+/** The step beyond Interested. Interested is a low-pressure bookmark and
+ * stays exactly as it works today; Committed is what puts someone on the
+ * organization's tracker roster — nothing else reads committedAt. A
+ * volunteer can commit without ever having tapped Interested first (the
+ * button creates the signup), same as scanning in cold at the door does. */
+router.post('/api/opportunities/:id/signup/commit', requireAuth, (req: AuthRequest, res: Response) => {
+  try {
+    const oppId = req.params.id;
+    const userId = req.userId!;
+    const opp = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(oppId) as any;
+    if (!opp) return res.status(404).json({ error: 'Opportunity not found' });
+
+    const now = new Date().toISOString();
+    const existing = db.prepare('SELECT * FROM signups WHERE opportunityId = ? AND userId = ?').get(oppId, userId) as any;
+    if (existing) {
+      if (!existing.committedAt) db.prepare('UPDATE signups SET committedAt = ? WHERE id = ?').run(now, existing.id);
+    } else {
+      db.prepare('INSERT INTO signups (opportunityId, userId, committedAt, createdAt) VALUES (?, ?, ?, ?)').run(oppId, userId, now, now);
+      db.prepare('UPDATE opportunities SET popularity = popularity + 1 WHERE id = ?').run(oppId);
+    }
+
+    if (opp.hostId !== userId) {
+      const host = db.prepare('SELECT id, notifyOnInterest FROM users WHERE id = ?').get(opp.hostId) as any;
+      if (host?.notifyOnInterest) {
+        const volunteer = db.prepare('SELECT username FROM users WHERE id = ?').get(userId) as any;
+        db.prepare('INSERT INTO notifications (id, userId, type, message, postId, read, createdAt) VALUES (?, ?, ?, ?, ?, 0, ?)').run(
+          randomUUID(), opp.hostId, 'interest', `${volunteer?.username || 'Someone'} committed to "${opp.title}"`, oppId, now
+        );
+      }
+    }
+
+    return res.json({ committed: true });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+/** Anytime, no cutoff — the org just sees the roster change. Doesn't touch
+ * the underlying Interested signup, only the commitment layered on top. */
+router.delete('/api/opportunities/:id/signup/commit', requireAuth, (req: AuthRequest, res: Response) => {
+  try {
+    const oppId = req.params.id;
+    const userId = req.userId!;
+    db.prepare('UPDATE signups SET committedAt = NULL WHERE opportunityId = ? AND userId = ?').run(oppId, userId);
+    return res.json({ committed: false });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
@@ -698,8 +755,10 @@ router.delete('/api/opportunities/:id/signup', requireAuth, (req: AuthRequest, r
     // Do NOT restore spotsRemaining — spots are informational only
 
     const updated = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(oppId) as any;
-    const signups = (db.prepare('SELECT userId FROM signups WHERE opportunityId = ?').all(oppId) as any[]).map(s => s.userId);
-    return res.json(withTags(updated, signups));
+    const signupRows = db.prepare('SELECT userId, committedAt FROM signups WHERE opportunityId = ?').all(oppId) as any[];
+    const signups = signupRows.map(s => s.userId);
+    const committed = signupRows.filter(s => s.committedAt).map(s => s.userId);
+    return res.json(withTags(updated, signups, committed));
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
@@ -805,8 +864,10 @@ router.put('/api/opportunities/:id', requireAuth, (req: AuthRequest, res: Respon
     })();
 
     const updated = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(oppId) as any;
-    const signups = (db.prepare('SELECT userId FROM signups WHERE opportunityId = ?').all(oppId) as any[]).map(s => s.userId);
-    return res.json(withTags(updated, signups));
+    const signupRows = db.prepare('SELECT userId, committedAt FROM signups WHERE opportunityId = ?').all(oppId) as any[];
+    const signups = signupRows.map(s => s.userId);
+    const committed = signupRows.filter(s => s.committedAt).map(s => s.userId);
+    return res.json(withTags(updated, signups, committed));
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
@@ -1025,8 +1086,10 @@ router.put('/api/admin/opportunities/:id', requireAdmin, (req: Request, res: Res
     }
 
     const updated = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(oppId) as any;
-    const signups = (db.prepare('SELECT userId FROM signups WHERE opportunityId = ?').all(oppId) as any[]).map(s => s.userId);
-    return res.json(withTags(updated, signups));
+    const signupRows = db.prepare('SELECT userId, committedAt FROM signups WHERE opportunityId = ?').all(oppId) as any[];
+    const signups = signupRows.map(s => s.userId);
+    const committed = signupRows.filter(s => s.committedAt).map(s => s.userId);
+    return res.json(withTags(updated, signups, committed));
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
@@ -1095,9 +1158,10 @@ router.get('/api/admin/pending-opportunities', requireAdmin, (_req: Request, res
     const pending = db.prepare(
       "SELECT * FROM opportunities WHERE status = 'pending' ORDER BY createdAt ASC"
     ).all();
-    const getSignups = db.prepare('SELECT userId FROM signups WHERE opportunityId = ?');
+    const getSignups = db.prepare('SELECT userId, committedAt FROM signups WHERE opportunityId = ?');
     const result = (pending as any[]).map(opp =>
-      withTags(opp, (getSignups.all(opp.id) as any[]).map((s: any) => s.userId))
+      withTags(opp, (getSignups.all(opp.id) as any[]).map((s: any) => s.userId),
+        (getSignups.all(opp.id) as any[]).filter((s: any) => s.committedAt).map((s: any) => s.userId))
     );
     return res.json(result);
   } catch (err: any) {
@@ -1133,8 +1197,10 @@ router.post('/api/admin/opportunities/:id/approve', requireAdmin, async (req: Re
     }
 
     const updated = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(oppId) as any;
-    const signups = (db.prepare('SELECT userId FROM signups WHERE opportunityId = ?').all(oppId) as any[]).map((s: any) => s.userId);
-    return res.json(withTags(updated, signups));
+    const signupRows = db.prepare('SELECT userId, committedAt FROM signups WHERE opportunityId = ?').all(oppId) as any[];
+    const signups = signupRows.map((s: any) => s.userId);
+    const committed = signupRows.filter((s: any) => s.committedAt).map((s: any) => s.userId);
+    return res.json(withTags(updated, signups, committed));
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
@@ -1436,9 +1502,10 @@ router.get('/api/featured-posts', (_req: Request, res: Response) => {
         "SELECT * FROM opportunities WHERE status = 'approved' ORDER BY popularity DESC LIMIT 6"
       ).all() as any[];
     }
-    const getSignups = db.prepare('SELECT userId FROM signups WHERE opportunityId = ?');
+    const getSignups = db.prepare('SELECT userId, committedAt FROM signups WHERE opportunityId = ?');
     const result = posts.map(opp =>
-      withTags(opp, (getSignups.all(opp.id) as any[]).map((s: any) => s.userId))
+      withTags(opp, (getSignups.all(opp.id) as any[]).map((s: any) => s.userId),
+        (getSignups.all(opp.id) as any[]).filter((s: any) => s.committedAt).map((s: any) => s.userId))
     );
     return res.json(result);
   } catch (err: any) {
@@ -1638,7 +1705,32 @@ function currentOccurrenceDate(opp: { date: string; isRecurring?: number | boole
   const diff = (now.getDay() - opp.recurringDay + 7) % 7;
   const occ = new Date(now);
   occ.setDate(now.getDate() - diff);
-  return occ.toISOString().slice(0, 10);
+  return localDateString(occ);
+}
+
+/** YYYY-MM-DD in the server's own timezone. toISOString().slice(0,10) gives
+ * the UTC date, which past early evening in the Americas is already
+ * tomorrow — enough to file an evening event's roster under the wrong day. */
+function localDateString(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/** Which occurrence a live action belongs to.
+ *
+ * A recurring event normally snaps to its most recent recurring weekday. But
+ * an organizer running an extra session on some other day would otherwise
+ * write straight into last week's roster — same key, same unique constraint.
+ * So if a session already exists for today, today is the occurrence. */
+function activeOccurrenceDate(opp: any): string {
+  const snapped = currentOccurrenceDate(opp);
+  if (!opp.isRecurring) return snapped;
+  const today = localDateString(new Date());
+  if (today === snapped) return snapped;
+  const todaySession = db.prepare(
+    'SELECT 1 FROM event_sessions WHERE opportunityId = ? AND occurrenceDate = ?'
+  ).get(opp.id, today);
+  return todaySession ? today : snapped;
 }
 
 /** Start/end instants for one occurrence — the only thing check-in gating
@@ -1656,50 +1748,270 @@ function occurrenceWindow(opp: { date: string; duration: number; isRecurring?: n
   return { start, end: new Date(start.getTime() + opp.duration * 3_600_000) };
 }
 
-const CHECKIN_GRACE_BEFORE_MS = 30 * 60_000;   // gate opens 30 min before listed start
-
 const VALID_ATTENDANCE_DECISIONS = ['credited', 'rejected'] as const;
 
-/** The merged roster for one occurrence: every signup, left-joined to that
- * occurrence's attendance row if one exists. No row at all becomes Pending
- * or No-show depending on whether the session's already over — both
- * derived, neither stored. */
-function getMergedRoster(oppId: string, opp: any, occurrenceDate: string) {
-  const { end } = occurrenceWindow(opp, occurrenceDate);
-  const eventEnded = Date.now() > end.getTime();
+type SessionStatus = 'none' | 'scheduled' | 'running' | 'paused' | 'stopped';
+
+/** The org's live session for one occurrence, plus its pause intervals. */
+function getSession(oppId: string, occurrenceDate: string) {
+  const session = db.prepare(
+    'SELECT * FROM event_sessions WHERE opportunityId = ? AND occurrenceDate = ?'
+  ).get(oppId, occurrenceDate) as any;
+  if (!session) return null;
+  const pauses = db.prepare(
+    'SELECT * FROM session_pauses WHERE sessionId = ? ORDER BY pausedAt ASC'
+  ).all(session.id) as any[];
+  return { ...session, pauses };
+}
+
+/** Status is computed on every read rather than written by a background job.
+ * A scheduled autoStartAt that's now in the past reads as running; an
+ * autoStopAt in the past reads as stopped. That's the whole of auto-start
+ * and auto-stop — no cron, nothing to miss if the process restarts. */
+function sessionStatus(session: any, now = Date.now()): SessionStatus {
+  if (!session) return 'none';
+  if (session.stoppedAt) return 'stopped';
+  if (new Date(session.autoStopAt).getTime() <= now) return 'stopped';
+  if (!session.startedAt) {
+    if (!session.autoStartAt || new Date(session.autoStartAt).getTime() > now) return 'scheduled';
+  }
+  return session.pauses.some((p: any) => !p.resumedAt) ? 'paused' : 'running';
+}
+
+/** When the session actually ended, for closing open segments: whichever
+ * came first, the org pressing Stop or autoStopAt passing. An open segment
+ * is never credited past that instant. */
+function sessionEndedAt(session: any): number {
+  const auto = new Date(session.autoStopAt).getTime();
+  return session.stoppedAt ? Math.min(new Date(session.stoppedAt).getTime(), auto) : auto;
+}
+
+/** Hours for one volunteer across all their segments in an occurrence.
+ *
+ * Pauses are subtracted per segment by overlap, not as a flat total — that
+ * distinction is the whole reason pauses are stored as intervals. Someone
+ * who arrives after the lunch break loses nothing to it; someone who was
+ * present through it loses exactly its length.
+ *
+ * An open segment (scanned in, never out) is measured to `openUntil`, which
+ * the caller sets to now for a live session or to the session's end once
+ * it's over — so forgetting to scan out costs nothing beyond the event.
+ */
+function segmentHours(segments: any[], pauses: any[], openUntil: number): number {
+  let ms = 0;
+  for (const s of segments) {
+    const start = new Date(s.checkInAt).getTime();
+    const end = s.checkOutAt ? new Date(s.checkOutAt).getTime() : openUntil;
+    let span = end - start;
+    for (const p of pauses) {
+      const pStart = new Date(p.pausedAt).getTime();
+      const pEnd = p.resumedAt ? new Date(p.resumedAt).getTime() : openUntil;
+      const overlap = Math.min(end, pEnd) - Math.max(start, pStart);
+      if (overlap > 0) span -= overlap;
+    }
+    ms += Math.max(0, span);
+  }
+  return ms / 3_600_000;
+}
+
+/** Segments for one person in one occurrence, oldest first. */
+function getSegments(oppId: string, userId: string, occurrenceDate: string) {
+  return db.prepare(
+    'SELECT * FROM attendance_segments WHERE opportunityId = ? AND userId = ? AND occurrenceDate = ? ORDER BY checkInAt ASC'
+  ).all(oppId, userId, occurrenceDate) as any[];
+}
+
+/** Recompute the attendance summary row from the raw segments. Every other
+ * reader — roster, CSV export, the profile hours total — goes through
+ * attendance, so this is the one place segments turn into credited hours. */
+function syncAttendance(oppId: string, userId: string, occurrenceDate: string, session: any) {
+  const segments = getSegments(oppId, userId, occurrenceDate);
+  if (!segments.length) return null;
+  const live = sessionStatus(session) === 'running' || sessionStatus(session) === 'paused';
+  const openUntil = live ? Date.now() : sessionEndedAt(session);
+  const hours = Math.round(segmentHours(segments, session.pauses, openUntil) * 100) / 100;
+
+  const existing = db.prepare(
+    'SELECT * FROM attendance WHERE opportunityId = ? AND userId = ? AND occurrenceDate = ?'
+  ).get(oppId, userId, occurrenceDate) as any;
+  const now = new Date().toISOString();
+
+  // A deliberate host decision sticks: an explicit hour figure or a revoked
+  // credit must not be silently overwritten by later scan activity. This is
+  // keyed on hoursLocked rather than verifiedBy on purpose — "mark as came"
+  // also stamps verifiedBy, and locking on that would mean someone marked
+  // present by hand could never have their real scanned hours land.
+  if (existing?.hoursLocked) return existing;
+
+  if (existing) {
+    db.prepare('UPDATE attendance SET checkInAt = ?, checkOutAt = ?, hoursClaimed = ?, hoursVerified = ? WHERE id = ?')
+      .run(segments[0].checkInAt, segments[segments.length - 1].checkOutAt, hours, hours, existing.id);
+  } else {
+    db.prepare(
+      `INSERT INTO attendance (id, opportunityId, userId, occurrenceDate, checkInAt, checkOutAt, hoursClaimed, hoursVerified, status, createdAt)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'credited', ?)`
+    ).run(randomUUID(), oppId, userId, occurrenceDate, segments[0].checkInAt, segments[segments.length - 1].checkOutAt, hours, hours, now);
+  }
+  return db.prepare('SELECT * FROM attendance WHERE opportunityId = ? AND userId = ? AND occurrenceDate = ?').get(oppId, userId, occurrenceDate);
+}
+
+/** Finalize a session that has ended.
+ *
+ * Auto-stop is derived, not scheduled — nothing fires when autoStopAt
+ * passes — so without this, a volunteer who scanned in and never scanned
+ * out kept the hours written at scan-in, which is zero. They attended the
+ * whole event and their profile said 0. This is the repair, run lazily on
+ * the first read after the session ends.
+ *
+ * Open segments close at whichever came first, the org pressing Stop or
+ * autoStopAt passing, so an organizer who forgets to stop until the next
+ * morning doesn't hand everyone an extra twelve hours.
+ *
+ * Idempotent, and cheap to call repeatedly: it bails immediately once
+ * there's nothing left open, which matters because the tracker polls.
+ */
+function reconcileSession(oppId: string, occurrenceDate: string, session: any) {
+  if (!session || sessionStatus(session) !== 'stopped') return;
+
+  const openSegments = (db.prepare(
+    'SELECT COUNT(*) as c FROM attendance_segments WHERE opportunityId = ? AND occurrenceDate = ? AND checkOutAt IS NULL'
+  ).get(oppId, occurrenceDate) as any).c;
+  const openPause = session.pauses.find((p: any) => !p.resumedAt);
+  if (!openSegments && !openPause) return; // already reconciled
+
+  const endedAt = new Date(sessionEndedAt(session)).toISOString();
+  if (openPause) {
+    db.prepare('UPDATE session_pauses SET resumedAt = ? WHERE id = ?').run(endedAt, openPause.id);
+  }
+  if (openSegments) {
+    db.prepare(
+      'UPDATE attendance_segments SET checkOutAt = ? WHERE opportunityId = ? AND occurrenceDate = ? AND checkOutAt IS NULL'
+    ).run(endedAt, oppId, occurrenceDate);
+  }
+
+  const fresh = getSession(oppId, occurrenceDate);
+  const attendees = db.prepare(
+    'SELECT DISTINCT userId FROM attendance_segments WHERE opportunityId = ? AND occurrenceDate = ?'
+  ).all(oppId, occurrenceDate) as any[];
+  for (const a of attendees) syncAttendance(oppId, a.userId, occurrenceDate, fresh);
+}
+
+/** Close out any of this volunteer's own open segments whose session has
+ * already ended. The profile total reads the attendance table, so without
+ * this a forgotten scan-out shows as zero hours on their own page until
+ * some organizer happens to open the roster. Bounded — only touches rows
+ * that are actually still open. */
+function reconcileUserSegments(userId: string) {
+  const open = db.prepare(
+    'SELECT DISTINCT opportunityId, occurrenceDate FROM attendance_segments WHERE userId = ? AND checkOutAt IS NULL'
+  ).all(userId) as any[];
+  for (const o of open) {
+    reconcileSession(o.opportunityId, o.occurrenceDate, getSession(o.opportunityId, o.occurrenceDate));
+  }
+}
+
+/** The tracker roster for one occurrence: every COMMITTED signup — Interested
+ * alone doesn't appear here, that's the whole point of the extra step — left-
+ * joined to an attendance summary row if one exists.
+ *
+ * "Didn't come" requires a session to have actually run and ended. A
+ * committed volunteer at an event nobody ever started is simply undecided,
+ * not absent — the earlier version of this derived no-show purely from the
+ * posted end time passing, which meant an org that hadn't opened the
+ * Tracker yet saw its own volunteers marked absent. */
+function getMergedRoster(oppId: string, occurrenceDate: string, session: any, listedDuration = 0) {
+  const status = sessionStatus(session);
+  const sessionRanAndEnded = status === 'stopped';
+  // Anyone whose segment closed exactly when the session ended was still on
+  // site when the clock ran out — their real hours may be higher than what
+  // was credited, and only the organizer can know.
+  const endedAtIso = session && sessionRanAndEnded ? new Date(sessionEndedAt(session)).toISOString() : null;
   const rows = db.prepare(
-    `SELECT u.id as userId, u.username, u.email, s.createdAt as signedUpAt,
-            a.id as attendanceId, a.checkInAt, a.checkOutAt, a.hoursClaimed, a.hoursVerified, a.status, a.note
+    `SELECT u.id as userId, u.username, u.email, s.committedAt,
+            a.id as attendanceId, a.checkInAt, a.checkOutAt, a.hoursClaimed, a.hoursVerified, a.status as attStatus, a.note, a.hoursLocked
      FROM signups s
      JOIN users u ON u.id = s.userId
      LEFT JOIN attendance a ON a.opportunityId = s.opportunityId AND a.userId = s.userId AND a.occurrenceDate = ?
-     WHERE s.opportunityId = ?
-     ORDER BY s.createdAt ASC`
+     WHERE s.opportunityId = ? AND s.committedAt IS NOT NULL
+     ORDER BY s.committedAt ASC`
   ).all(occurrenceDate, oppId) as any[];
-  return { eventEnded, roster: rows.map(r => ({ ...r, status: r.status || (eventEnded ? 'no_show' : 'pending') })) };
+
+  const live = status === 'running' || status === 'paused';
+  const roster = rows.map(r => {
+    if (r.attStatus === 'rejected') return { ...r, status: 'rejected' as const, hoursNow: 0 };
+    const openSegment = r.attendanceId && !r.checkOutAt && r.checkInAt;
+    let derived: 'coming' | 'here' | 'left' | 'no_show';
+    if (openSegment) derived = 'here';
+    else if (r.attendanceId) derived = 'left';
+    else derived = sessionRanAndEnded ? 'no_show' : 'coming';
+
+    // While the event is running, the stored total is only as fresh as that
+    // person's last scan — someone still on site has been accruing time
+    // since. Recomputed for display so the organizer sees what's true right
+    // now, without writing on every roster poll.
+    let hoursNow = r.hoursVerified ?? r.hoursClaimed ?? 0;
+    if (live && derived === 'here') {
+      const segs = getSegments(oppId, r.userId, occurrenceDate);
+      hoursNow = Math.round(segmentHours(segs, session.pauses, Date.now()) * 100) / 100;
+    }
+    // Two things worth an organizer's eye: hours cut short because the
+    // session ended while they were still checked in, and hours that ran
+    // past what the event was advertised as.
+    const cutShort = !!endedAtIso && r.checkOutAt === endedAtIso && !r.hoursLocked;
+    const overListed = listedDuration > 0 && hoursNow > listedDuration + 0.01;
+    return { ...r, status: derived, hoursNow, cutShort, overListed };
+  });
+  return { sessionStatus: status, roster };
 }
 
-// What the check-in page reads on load, before anyone taps anything — lets
-// it show "check-in opens at 8:45" or an already-credited result immediately,
-// rather than only surfacing that after a failed tap.
+// What the check-in page reads on load, before anyone taps anything — so it
+// can show "the organizer hasn't started this yet", a running clock, or an
+// already-finished total immediately rather than only after a failed tap.
 router.get('/api/checkin/:opportunityId/status', requireAuth, (req: AuthRequest, res: Response) => {
   try {
     const oppId = req.params.opportunityId;
     const opp = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(oppId) as any;
     if (!opp) return res.status(404).json({ error: 'Opportunity not found' });
 
-    const occurrenceDate = currentOccurrenceDate(opp);
-    const { start, end } = occurrenceWindow(opp, occurrenceDate);
+    const occurrenceDate = activeOccurrenceDate(opp);
+    // If the session ended while this volunteer was still checked in, this
+    // is where their hours actually get finalized — they're often the first
+    // person to look after an event.
+    reconcileSession(oppId, occurrenceDate, getSession(oppId, occurrenceDate));
+
+    const session = getSession(oppId, occurrenceDate);
+    const status = sessionStatus(session);
+    const segments = getSegments(oppId, req.userId!, occurrenceDate);
+    const openSegment = segments.find(s => !s.checkOutAt) || null;
     const attendance = db.prepare(
       'SELECT * FROM attendance WHERE opportunityId = ? AND userId = ? AND occurrenceDate = ?'
-    ).get(oppId, req.userId, occurrenceDate) || null;
-    const signedUp = !!db.prepare('SELECT 1 FROM signups WHERE opportunityId = ? AND userId = ?').get(oppId, req.userId);
+    ).get(oppId, req.userId, occurrenceDate) as any || null;
+    const signup = db.prepare('SELECT * FROM signups WHERE opportunityId = ? AND userId = ?').get(oppId, req.userId) as any;
+
+    const live = status === 'running' || status === 'paused';
+    const openUntil = session ? (live ? Date.now() : sessionEndedAt(session)) : Date.now();
+    const rawHours = session ? segmentHours(segments, session.pauses, openUntil) : 0;
+    // Once a host has set a figure by hand, that's the number the volunteer
+    // is actually getting — showing them the raw scan math instead would be
+    // a different number from the one on their profile.
+    const hoursSoFar = attendance?.hoursLocked ? (attendance.hoursVerified ?? 0) : rawHours;
 
     return res.json({
       occurrenceDate,
-      gateOpensAt: new Date(start.getTime() - CHECKIN_GRACE_BEFORE_MS).toISOString(),
-      gateEndsAt: end.toISOString(),
-      signedUp,
+      sessionStatus: status,
+      autoStopAt: session?.autoStopAt ?? null,
+      autoStartAt: session?.autoStartAt ?? null,
+      startedAt: session?.startedAt ?? session?.autoStartAt ?? null,
+      // Whether a code is needed — never the code itself. Returning it here
+      // would hand it to exactly the remote scanner it exists to stop.
+      pinRequired: !!session?.checkinPin && !openSegment,
+      checkedIn: !!openSegment,
+      openSince: openSegment?.checkInAt ?? null,
+      segments: segments.length,
+      hoursSoFar: Math.round(hoursSoFar * 100) / 100,
+      hoursLocked: !!attendance?.hoursLocked,
+      signedUp: !!signup,
+      committed: !!signup?.committedAt,
       attendance,
     });
   } catch (err: any) {
@@ -1707,6 +2019,11 @@ router.get('/api/checkin/:opportunityId/status', requireAuth, (req: AuthRequest,
   }
 });
 
+/** One endpoint for both scans, because it's one physical action: the
+ * volunteer points their camera at the same code either way. An open
+ * segment closes; no open segment opens a new one. Leaving and coming back
+ * just makes more segments, and they're allowed for as long as the org's
+ * session runs. */
 router.post('/api/checkin/:opportunityId', requireAuth, (req: AuthRequest, res: Response) => {
   try {
     const oppId = req.params.opportunityId;
@@ -1714,63 +2031,243 @@ router.post('/api/checkin/:opportunityId', requireAuth, (req: AuthRequest, res: 
     const opp = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(oppId) as any;
     if (!opp) return res.status(404).json({ error: 'Opportunity not found' });
 
-    const occurrenceDate = currentOccurrenceDate(opp);
-    const { start, end } = occurrenceWindow(opp, occurrenceDate);
+    const occurrenceDate = activeOccurrenceDate(opp);
     const now = new Date();
-    // The gate is what makes a photographed poster worthless outside the
-    // event window — the QR/link carries no identity or secrecy of its own.
-    if (now.getTime() < start.getTime() - CHECKIN_GRACE_BEFORE_MS) {
-      return res.status(403).json({ error: `Check-in opens at ${start.toLocaleString('en-US', { hour: 'numeric', minute: '2-digit' })}.`, opensAt: start.toISOString() });
-    }
-    if (now.getTime() > end.getTime()) {
-      return res.status(403).json({ error: 'This session has ended.' });
+    let session = getSession(oppId, occurrenceDate);
+    let status = sessionStatus(session);
+
+    // The org never touched this event's session at all — nobody pressed
+    // Start, nobody scheduled one. Rather than lock everyone out over a
+    // forgotten button, the first scan opens it, auto-stop defaulting to
+    // the listed duration. The org keeps full pause/stop control from there.
+    //
+    // A 'scheduled' session is deliberately NOT included here: the org set
+    // a future start time on purpose, and an early scan must not be able to
+    // preempt it — the whole point of the org running the clock is that
+    // volunteers don't get to decide when their own hours start.
+    if (status === 'none') {
+      db.prepare(
+        `INSERT INTO event_sessions (id, opportunityId, occurrenceDate, startedAt, autoStopAt, createdAt)
+         VALUES (?, ?, ?, ?, ?, ?)`
+      ).run(randomUUID(), oppId, occurrenceDate, now.toISOString(),
+            new Date(now.getTime() + (opp.duration || 3) * 3_600_000).toISOString(), now.toISOString());
+      session = getSession(oppId, occurrenceDate);
+      status = sessionStatus(session);
     }
 
-    const existing = db.prepare(
-      'SELECT * FROM attendance WHERE opportunityId = ? AND userId = ? AND occurrenceDate = ?'
-    ).get(oppId, userId, occurrenceDate);
-    if (existing) return res.json(existing); // idempotent — a repeat scan doesn't double-credit
+    if (status === 'scheduled') {
+      return res.status(403).json({
+        error: `${opp.hostName} scheduled this to start at ${new Date(session.autoStartAt).toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', month: 'short', day: 'numeric' })}.`,
+        opensAt: session.autoStartAt,
+      });
+    }
+    if (status === 'stopped') {
+      return res.status(403).json({ error: 'The organizer has ended this session.' });
+    }
+    if (status === 'paused') {
+      return res.status(403).json({ error: 'The organizer paused this event — try again once it resumes.' });
+    }
 
-    // Walk-in: scanning in place of tapping Interested first. One action
-    // does both, mirroring what POST /signup does, so nobody has to work
-    // out which button to press standing at the door.
-    const signedUp = db.prepare('SELECT 1 FROM signups WHERE opportunityId = ? AND userId = ?').get(oppId, userId);
-    if (!signedUp) {
-      db.prepare('INSERT INTO signups (opportunityId, userId, createdAt) VALUES (?, ?, ?)').run(oppId, userId, now.toISOString());
-      db.prepare('UPDATE opportunities SET popularity = popularity + 1 WHERE id = ?').run(oppId);
+    // The code is only ever displayed on the organizer's screen, so needing
+    // it means being in the room. Checked on the way in only — someone
+    // already checked in can always scan out without hunting for it again.
+    const open = getSegments(oppId, userId, occurrenceDate).find(s => !s.checkOutAt);
+    if (session.checkinPin && !open) {
+      const supplied = String((req.body || {}).pin ?? '').trim();
+      if (supplied !== session.checkinPin) {
+        return res.status(403).json({
+          error: supplied ? "That code doesn't match." : 'Enter the code shown by the organizer.',
+          pinRequired: true,
+        });
+      }
+    }
+
+    if (open) {
+      db.prepare('UPDATE attendance_segments SET checkOutAt = ? WHERE id = ?').run(now.toISOString(), open.id);
+    } else {
+      // Walk-in: scanning in place of pressing Committed first. One action
+      // does both, so nobody has to work out which button to press standing
+      // at the door.
+      const signup = db.prepare('SELECT * FROM signups WHERE opportunityId = ? AND userId = ?').get(oppId, userId) as any;
+      if (!signup) {
+        db.prepare('INSERT INTO signups (opportunityId, userId, committedAt, createdAt) VALUES (?, ?, ?, ?)')
+          .run(oppId, userId, now.toISOString(), now.toISOString());
+        db.prepare('UPDATE opportunities SET popularity = popularity + 1 WHERE id = ?').run(oppId);
+      } else if (!signup.committedAt) {
+        db.prepare('UPDATE signups SET committedAt = ? WHERE id = ?').run(now.toISOString(), signup.id);
+      }
+      db.prepare(
+        `INSERT INTO attendance_segments (id, opportunityId, userId, occurrenceDate, checkInAt, createdAt)
+         VALUES (?, ?, ?, ?, ?, ?)`
+      ).run(randomUUID(), oppId, userId, occurrenceDate, now.toISOString(), now.toISOString());
+
+      // Bell only, no email — per-scan emails don't scale against the
+      // provider's daily cap. The bell is free, so no reason to withhold it.
       if (opp.hostId !== userId) {
         const host = db.prepare('SELECT id, notifyOnInterest FROM users WHERE id = ?').get(opp.hostId) as any;
         if (host?.notifyOnInterest) {
           const volunteer = db.prepare('SELECT username FROM users WHERE id = ?').get(userId) as any;
           db.prepare('INSERT INTO notifications (id, userId, type, message, postId, read, createdAt) VALUES (?, ?, ?, ?, ?, 0, ?)').run(
-            randomUUID(), opp.hostId, 'interest', `${volunteer?.username || 'Someone'} is interested in "${opp.title}"`, oppId, now.toISOString()
+            randomUUID(), opp.hostId, 'hours_credited', `${volunteer?.username || 'Someone'} checked in to "${opp.title}"`, oppId, now.toISOString()
           );
         }
       }
     }
 
-    // The scan credits the event's full listed duration right away.
-    const id = randomUUID();
-    db.prepare(
-      `INSERT INTO attendance (id, opportunityId, userId, occurrenceDate, checkInAt, hoursClaimed, hoursVerified, status, createdAt)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'credited', ?)`
-    ).run(id, oppId, userId, occurrenceDate, now.toISOString(), opp.duration, opp.duration, now.toISOString());
+    const attendance = syncAttendance(oppId, userId, occurrenceDate, getSession(oppId, occurrenceDate));
+    const segments = getSegments(oppId, userId, occurrenceDate);
+    return res.json({
+      checkedIn: !open,
+      hoursSoFar: attendance?.hoursVerified ?? 0,
+      segments: segments.length,
+      attendance,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
 
-    // Bell only, no email — per-scan emails don't scale against the
-    // provider's daily cap; the org gets a batched digest instead (not yet
-    // built). The bell is free, so there's no reason to withhold it too.
-    if (opp.hostId !== userId) {
-      const host = db.prepare('SELECT id, notifyOnInterest FROM users WHERE id = ?').get(opp.hostId) as any;
-      if (host?.notifyOnInterest) {
-        const volunteer = db.prepare('SELECT username FROM users WHERE id = ?').get(userId) as any;
-        db.prepare('INSERT INTO notifications (id, userId, type, message, postId, read, createdAt) VALUES (?, ?, ?, ?, ?, 0, ?)').run(
-          randomUUID(), opp.hostId, 'hours_credited', `${volunteer?.username || 'Someone'} checked in — ${opp.duration} hrs credited for "${opp.title}"`, oppId, now.toISOString()
-        );
-      }
+// ===== SESSION CONTROLS (organization side) =====
+// The org drives the clock. A posted end time is often a guess, so rather
+// than trusting it, these let the organizer start, pause, resume and stop
+// the real thing — and the volunteers' hours follow it exactly.
+
+function requireHost(oppId: string, req: AuthRequest) {
+  const opp = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(oppId) as any;
+  if (!opp) return { error: 'Opportunity not found', code: 404 as const, opp: null };
+  if (opp.hostId !== req.userId && !req.isAdmin) return { error: 'Only the host can run this event', code: 403 as const, opp: null };
+  return { error: null, code: 200 as const, opp };
+}
+
+router.get('/api/opportunities/:id/session', requireAuth, (req: AuthRequest, res: Response) => {
+  try {
+    const { error, code, opp } = requireHost(req.params.id, req);
+    if (error) return res.status(code).json({ error });
+    const occurrenceDate = activeOccurrenceDate(opp);
+    const session = getSession(opp.id, occurrenceDate);
+    return res.json({ occurrenceDate, status: sessionStatus(session), session });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+/** Start now, or schedule an automatic start. autoStopAt is required either
+ * way — that's the promise that no volunteer's clock runs forever if the
+ * organizer walks off at the end of the day. */
+router.post('/api/opportunities/:id/session/start', requireAuth, (req: AuthRequest, res: Response) => {
+  try {
+    const { error, code, opp } = requireHost(req.params.id, req);
+    if (error) return res.status(code).json({ error });
+    const { autoStopAt, autoStartAt } = req.body || {};
+    if (typeof autoStopAt !== 'string' || isNaN(Date.parse(autoStopAt))) {
+      return res.status(400).json({ error: 'autoStopAt is required' });
+    }
+    if (autoStartAt !== undefined && autoStartAt !== null && isNaN(Date.parse(autoStartAt))) {
+      return res.status(400).json({ error: 'autoStartAt must be a valid time' });
+    }
+    if (Date.parse(autoStopAt) <= Date.now()) {
+      return res.status(400).json({ error: 'The stop time is already in the past' });
+    }
+    if (autoStartAt && Date.parse(autoStopAt) <= Date.parse(autoStartAt)) {
+      return res.status(400).json({ error: 'The stop time must be after the start time' });
     }
 
-    const row = db.prepare('SELECT * FROM attendance WHERE id = ?').get(id);
-    return res.json(row);
+    // An optional short code, shown only on the organizer's own screen.
+    const { requirePin } = req.body || {};
+
+    // A recurring event running on an off-day files under TODAY rather than
+    // snapping back to its usual weekday — otherwise an extra Wednesday
+    // session would write straight into last Saturday's roster.
+    const occurrenceDate = opp.isRecurring ? localDateString(new Date()) : activeOccurrenceDate(opp);
+    const now = new Date().toISOString();
+    const existing = getSession(opp.id, occurrenceDate);
+    const pin = requirePin
+      ? (existing?.checkinPin || String(Math.floor(1000 + Math.random() * 9000)))
+      : null;
+    // Restarting a stopped session reopens it rather than making a second
+    // one — the unique constraint is per occurrence, and an event that ran
+    // long shouldn't fragment into two rosters. But this endpoint doubles as
+    // "just extend the stop time" on a session that's already running or
+    // paused, and that path must NOT stomp startedAt — resetting it would
+    // misreport when the event actually began even though it doesn't
+    // corrupt any volunteer's already-recorded segments. Only a genuine
+    // (re)start — currently stopped, or never started at all — gets a fresh
+    // startedAt.
+    if (existing) {
+      const genuineRestart = sessionStatus(existing) === 'stopped' || !existing.startedAt;
+      const newStartedAt = genuineRestart ? (autoStartAt ? null : now) : existing.startedAt;
+      db.prepare('UPDATE event_sessions SET autoStopAt = ?, autoStartAt = ?, startedAt = ?, stoppedAt = NULL, startedBy = ?, checkinPin = ? WHERE id = ?')
+        .run(autoStopAt, autoStartAt ?? null, newStartedAt, req.userId, pin, existing.id);
+    } else {
+      db.prepare(
+        `INSERT INTO event_sessions (id, opportunityId, occurrenceDate, autoStartAt, startedAt, autoStopAt, startedBy, checkinPin, createdAt)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ).run(randomUUID(), opp.id, occurrenceDate, autoStartAt ?? null, autoStartAt ? null : now, autoStopAt, req.userId, pin, now);
+    }
+    const session = getSession(opp.id, occurrenceDate);
+    return res.json({ occurrenceDate, status: sessionStatus(session), session });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/api/opportunities/:id/session/pause', requireAuth, (req: AuthRequest, res: Response) => {
+  try {
+    const { error, code, opp } = requireHost(req.params.id, req);
+    if (error) return res.status(code).json({ error });
+    const occurrenceDate = activeOccurrenceDate(opp);
+    const session = getSession(opp.id, occurrenceDate);
+    if (sessionStatus(session) !== 'running') return res.status(400).json({ error: 'This event is not running' });
+    db.prepare('INSERT INTO session_pauses (id, sessionId, pausedAt) VALUES (?, ?, ?)')
+      .run(randomUUID(), session.id, new Date().toISOString());
+    const updated = getSession(opp.id, occurrenceDate);
+    return res.json({ occurrenceDate, status: sessionStatus(updated), session: updated });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/api/opportunities/:id/session/resume', requireAuth, (req: AuthRequest, res: Response) => {
+  try {
+    const { error, code, opp } = requireHost(req.params.id, req);
+    if (error) return res.status(code).json({ error });
+    const occurrenceDate = activeOccurrenceDate(opp);
+    const session = getSession(opp.id, occurrenceDate);
+    if (sessionStatus(session) !== 'paused') return res.status(400).json({ error: 'This event is not paused' });
+    const open = session.pauses.find((p: any) => !p.resumedAt);
+    db.prepare('UPDATE session_pauses SET resumedAt = ? WHERE id = ?').run(new Date().toISOString(), open.id);
+    const updated = getSession(opp.id, occurrenceDate);
+    return res.json({ occurrenceDate, status: sessionStatus(updated), session: updated });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+/** Stop closes every still-open segment at this instant and writes the
+ * final hours. Nobody is penalised for not scanning out — the organizer
+ * ending the event is what ends everyone's clock. */
+router.post('/api/opportunities/:id/session/stop', requireAuth, (req: AuthRequest, res: Response) => {
+  try {
+    const { error, code, opp } = requireHost(req.params.id, req);
+    if (error) return res.status(code).json({ error });
+    const occurrenceDate = activeOccurrenceDate(opp);
+    const session = getSession(opp.id, occurrenceDate);
+    if (!session) return res.status(400).json({ error: 'This event has not been started' });
+
+    // Only the stop time is recorded here. Closing everyone's open segments
+    // and writing the final hours is left to reconcileSession, which caps
+    // them at autoStopAt — an organizer who forgets until the next morning
+    // must not hand every volunteer an extra twelve hours.
+    const now = new Date().toISOString();
+    db.prepare('UPDATE event_sessions SET stoppedAt = ? WHERE id = ?').run(now, session.id);
+    reconcileSession(opp.id, occurrenceDate, getSession(opp.id, occurrenceDate));
+
+    const stopped = getSession(opp.id, occurrenceDate);
+    const credited = (db.prepare(
+      'SELECT COUNT(DISTINCT userId) as c FROM attendance_segments WHERE opportunityId = ? AND occurrenceDate = ?'
+    ).get(opp.id, occurrenceDate) as any).c;
+
+    return res.json({ occurrenceDate, status: sessionStatus(stopped), session: stopped, credited });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
@@ -1786,28 +2283,32 @@ router.get('/api/opportunities/:id/attendance', requireAuth, (req: AuthRequest, 
     }
 
     const requestedDate = typeof req.query.date === 'string' ? req.query.date : null;
-    const occurrenceDate = requestedDate || currentOccurrenceDate(opp);
-    const { eventEnded, roster } = getMergedRoster(oppId, opp, occurrenceDate);
+    const occurrenceDate = requestedDate || activeOccurrenceDate(opp);
+    // Finalizes hours if the session ended without anyone pressing Stop.
+    reconcileSession(oppId, occurrenceDate, getSession(oppId, occurrenceDate));
+    const session = getSession(oppId, occurrenceDate);
+    const { roster } = getMergedRoster(oppId, occurrenceDate, session, opp.duration);
 
-    // Within-org reliability: of this volunteer's past events with THIS
-    // host (any of them, not just this one) that have already happened, how
-    // many did they no-show? Scoped to one org on purpose — a rough stretch
-    // at one place shouldn't follow anyone across the whole platform.
+    // Within-org reliability: of this volunteer's past COMMITTED events with
+    // THIS host, how many ran a session to completion that they never
+    // scanned into? Scoped to one org — a rough stretch at one place
+    // shouldn't follow anyone across the whole platform. A past event where
+    // the org never ran a session doesn't count either way — nothing to be
+    // reliable or unreliable about if check-in was never open.
     const reliability: Record<string, { noShows: number; total: number }> = {};
     for (const r of roster) {
       const pastWithHost = db.prepare(
-        `SELECT o.id, o.date, o.duration, o.isRecurring, o.recurringDay, o.recurringTime
-         FROM signups s JOIN opportunities o ON o.id = s.opportunityId
-         WHERE s.userId = ? AND o.hostId = ?`
+        `SELECT o.id, o.date, o.isRecurring, o.recurringDay FROM signups s JOIN opportunities o ON o.id = s.opportunityId
+         WHERE s.userId = ? AND o.hostId = ? AND s.committedAt IS NOT NULL`
       ).all(r.userId, opp.hostId) as any[];
       let noShows = 0, total = 0;
       for (const p of pastWithHost) {
         const occDate = p.id === oppId ? occurrenceDate : currentOccurrenceDate(p);
-        const { end: pEnd } = occurrenceWindow(p, occDate);
-        if (Date.now() <= pEnd.getTime()) continue; // hasn't happened yet — not countable either way
+        const pSession = getSession(p.id, occDate);
+        if (sessionStatus(pSession) !== 'stopped') continue; // never ran, or still running — not countable
         total++;
         const attended = db.prepare(
-          `SELECT 1 FROM attendance WHERE opportunityId = ? AND userId = ? AND occurrenceDate = ? AND status = 'credited'`
+          `SELECT 1 FROM attendance WHERE opportunityId = ? AND userId = ? AND occurrenceDate = ? AND status != 'rejected' AND checkInAt IS NOT NULL`
         ).get(p.id, r.userId, occDate);
         if (!attended) noShows++;
       }
@@ -1815,11 +2316,17 @@ router.get('/api/opportunities/:id/attendance', requireAuth, (req: AuthRequest, 
     }
 
     const pastDates = (db.prepare(
-      `SELECT DISTINCT occurrenceDate FROM attendance WHERE opportunityId = ? ORDER BY occurrenceDate DESC`
+      `SELECT DISTINCT occurrenceDate FROM event_sessions WHERE opportunityId = ? ORDER BY occurrenceDate DESC`
     ).all(oppId) as any[]).map(d => d.occurrenceDate);
-    const availableDates = Array.from(new Set([currentOccurrenceDate(opp), ...pastDates]));
+    const availableDates = Array.from(new Set([activeOccurrenceDate(opp), ...pastDates]));
 
-    return res.json({ occurrenceDate, eventEnded, roster, reliability, availableDates });
+    return res.json({
+      occurrenceDate, roster, reliability, availableDates,
+      // checkinPin is included here and only here — this endpoint is
+      // host-only, and the organizer's screen is the one place the code is
+      // meant to appear.
+      session: session ? { status: sessionStatus(session), autoStartAt: session.autoStartAt, startedAt: session.startedAt, autoStopAt: session.autoStopAt, stoppedAt: session.stoppedAt, checkinPin: session.checkinPin, pauses: session.pauses } : null,
+    });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
@@ -1849,8 +2356,10 @@ router.put('/api/attendance/:id', requireAuth, (req: AuthRequest, res: Response)
     // auto-closed guess, or revoking a credit entirely).
     const finalHours = status === 'rejected' ? 0 : (hoursVerified ?? row.hoursVerified ?? row.hoursClaimed ?? 0);
     const now = new Date().toISOString();
+    // This is the deliberate override, so it locks: later scan activity
+    // recalculates the raw segments but leaves this figure alone.
     db.prepare(
-      `UPDATE attendance SET status = ?, hoursVerified = ?, note = ?, verifiedBy = ?, verifiedAt = ? WHERE id = ?`
+      `UPDATE attendance SET status = ?, hoursVerified = ?, note = ?, verifiedBy = ?, verifiedAt = ?, hoursLocked = 1 WHERE id = ?`
     ).run(status, finalHours, note || null, req.userId, now, row.id);
 
     const volunteer = db.prepare('SELECT notifyOnInterest FROM users WHERE id = ?').get(row.userId) as any;
@@ -1885,12 +2394,16 @@ router.post('/api/opportunities/:id/attendance/mark-present', requireAuth, (req:
     const { userId, hours, occurrenceDate: reqDate } = req.body || {};
     if (typeof userId !== 'string' || !userId) return res.status(400).json({ error: 'userId is required' });
     const finalHours = typeof hours === 'number' && hours >= 0 ? hours : opp.duration;
-    const occurrenceDate = typeof reqDate === 'string' && reqDate ? reqDate : currentOccurrenceDate(opp);
+    const occurrenceDate = typeof reqDate === 'string' && reqDate ? reqDate : activeOccurrenceDate(opp);
 
-    const signedUp = db.prepare('SELECT 1 FROM signups WHERE opportunityId = ? AND userId = ?').get(oppId, userId);
-    if (!signedUp) db.prepare('INSERT INTO signups (opportunityId, userId, createdAt) VALUES (?, ?, ?)').run(oppId, userId, new Date().toISOString());
-
+    // Marking someone present puts them on the roster, so it commits them
+    // too — otherwise a host hand-entering a walk-in would credit hours to
+    // someone who then doesn't show up on their own committed list.
     const now = new Date().toISOString();
+    const signup = db.prepare('SELECT * FROM signups WHERE opportunityId = ? AND userId = ?').get(oppId, userId) as any;
+    if (!signup) db.prepare('INSERT INTO signups (opportunityId, userId, committedAt, createdAt) VALUES (?, ?, ?, ?)').run(oppId, userId, now, now);
+    else if (!signup.committedAt) db.prepare('UPDATE signups SET committedAt = ? WHERE id = ?').run(now, signup.id);
+
     const existing = db.prepare('SELECT id FROM attendance WHERE opportunityId = ? AND userId = ? AND occurrenceDate = ?').get(oppId, userId, occurrenceDate) as any;
     if (existing) {
       db.prepare(`UPDATE attendance SET checkInAt = ?, checkOutAt = ?, hoursClaimed = ?, hoursVerified = ?, status = 'credited', verifiedBy = ?, verifiedAt = ? WHERE id = ?`)
@@ -1918,14 +2431,30 @@ router.get('/api/opportunities/:id/attendance/export', requireAuth, (req: AuthRe
     }
 
     const requestedDate = typeof req.query.date === 'string' ? req.query.date : null;
-    const occurrenceDate = requestedDate || currentOccurrenceDate(opp);
-    const { roster } = getMergedRoster(oppId, opp, occurrenceDate);
+    const occurrenceDate = requestedDate || activeOccurrenceDate(opp);
+    // Finalizes hours if the session ended without anyone pressing Stop.
+    reconcileSession(oppId, occurrenceDate, getSession(oppId, occurrenceDate));
+    const session = getSession(oppId, occurrenceDate);
+    const { roster } = getMergedRoster(oppId, occurrenceDate, session, opp.duration);
 
-    // No "Check Out" column — there's no second scan anymore, so it would
-    // just be an empty column in every row.
+    // This lands in a spreadsheet a coordinator reads, so the columns carry
+    // plain words and local clock times rather than the internal status
+    // slugs and UTC stamps the API speaks in.
+    const CSV_STATUS: Record<string, string> = {
+      coming: 'Did not check in', here: 'Attended', left: 'Attended',
+      no_show: 'Did not attend', rejected: 'Hours removed',
+    };
+    const clock = (iso: string | null) => iso
+      ? new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+      : '';
     const esc = (v: any) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-    const header = 'Name,Email,Date,Checked In,Hours,Status';
-    const body = roster.map(r => [r.username, r.email, occurrenceDate, r.checkInAt, r.hoursVerified ?? r.hoursClaimed, r.status].map(esc).join(',')).join('\n');
+    const header = 'Name,Email,Date,Checked In,Checked Out,Hours,Status';
+    const body = roster.map(r => [
+      r.username, r.email, occurrenceDate,
+      clock(r.checkInAt), clock(r.checkOutAt),
+      r.hoursVerified ?? r.hoursClaimed ?? 0,
+      CSV_STATUS[r.status] ?? r.status,
+    ].map(esc).join(',')).join('\n');
     const csv = header + '\n' + body;
 
     const filename = `${opp.title.replace(/[^a-z0-9]+/gi, '_').toLowerCase()}_${occurrenceDate}_attendance.csv`;
@@ -1943,6 +2472,11 @@ router.get('/api/opportunities/:id/attendance/export', requireAuth, (req: AuthRe
  * organization signed off on — never self-reported. */
 router.get('/api/me/hours', requireAuth, (req: AuthRequest, res: Response) => {
   try {
+    // A volunteer who scanned in and never scanned out has no finalized
+    // hours until something closes them out. This is their own page, so it
+    // has to do that itself rather than wait for an organizer to open a
+    // roster — otherwise attending an event reads as zero hours.
+    reconcileUserSegments(req.userId!);
     const row = db.prepare(
       `SELECT COALESCE(SUM(hoursVerified), 0) as total
        FROM attendance WHERE userId = ? AND status = 'credited'`

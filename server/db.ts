@@ -152,7 +152,90 @@ db.exec(`
     claimedBy TEXT DEFAULT NULL
   );
 
+  -- One live session per event occurrence. This — not the posted date — is
+  -- what gates check-in, because a posted date is a naive local string and
+  -- the server's clock may be in another timezone entirely. startedAt and
+  -- autoStopAt are real instants, so the gate can't drift.
+  --
+  -- Status is derived, never stored: autoStartAt in the past means running
+  -- even if nobody pressed the button, autoStopAt in the past means stopped.
+  -- That's what lets auto-start and auto-stop work with no cron job.
+  CREATE TABLE IF NOT EXISTS event_sessions (
+    id TEXT PRIMARY KEY,
+    opportunityId TEXT NOT NULL,
+    occurrenceDate TEXT NOT NULL,
+    autoStartAt TEXT DEFAULT NULL,
+    startedAt TEXT DEFAULT NULL,
+    autoStopAt TEXT NOT NULL,
+    stoppedAt TEXT DEFAULT NULL,
+    startedBy TEXT DEFAULT NULL,
+    createdAt TEXT NOT NULL,
+    FOREIGN KEY (opportunityId) REFERENCES opportunities(id),
+    UNIQUE(opportunityId, occurrenceDate)
+  );
+
+  -- Each pause is an interval, not a running total, because a volunteer who
+  -- arrives after the break must not have that break deducted. Hours
+  -- subtract only the overlap between a pause and that person's own
+  -- checked-in window. resumedAt NULL means still paused.
+  CREATE TABLE IF NOT EXISTS session_pauses (
+    id TEXT PRIMARY KEY,
+    sessionId TEXT NOT NULL,
+    pausedAt TEXT NOT NULL,
+    resumedAt TEXT DEFAULT NULL,
+    FOREIGN KEY (sessionId) REFERENCES event_sessions(id)
+  );
+
+  -- One row per scan-in/scan-out pair. Deliberately NOT unique per person
+  -- per occurrence: a volunteer can leave and come back as many times as
+  -- they like while the org's session runs, and their hours are the sum of
+  -- the segments. The attendance row above stays the single summary
+  -- everything else reads (roster, CSV export, profile total).
+  CREATE TABLE IF NOT EXISTS attendance_segments (
+    id TEXT PRIMARY KEY,
+    opportunityId TEXT NOT NULL,
+    userId TEXT NOT NULL,
+    occurrenceDate TEXT NOT NULL,
+    checkInAt TEXT NOT NULL,
+    checkOutAt TEXT DEFAULT NULL,
+    createdAt TEXT NOT NULL,
+    FOREIGN KEY (opportunityId) REFERENCES opportunities(id),
+    FOREIGN KEY (userId) REFERENCES users(id)
+  );
+
 `);
+
+// Migrate: add committedAt to signups. NULL = interested only (the soft
+// bookmark that already existed), a timestamp = committed. The org's roster
+// reads committed rows only, so "Interested" keeps working exactly as it
+// did and nothing about the existing board changes.
+try {
+  db.prepare('SELECT committedAt FROM signups LIMIT 1').get();
+} catch {
+  db.exec('ALTER TABLE signups ADD COLUMN committedAt TEXT DEFAULT NULL');
+}
+
+// Migrate: add hoursLocked to attendance. Set only when a host deliberately
+// sets a number or revokes a credit — NOT by "mark as came", which is a
+// stand-in for someone who couldn't scan. Without the distinction, marking
+// someone present would permanently freeze their row, so if they later
+// actually scanned, their real hours could never land.
+try {
+  db.prepare('SELECT hoursLocked FROM attendance LIMIT 1').get();
+} catch {
+  db.exec('ALTER TABLE attendance ADD COLUMN hoursLocked INTEGER DEFAULT 0');
+}
+
+// Migrate: optional per-session check-in code. The QR encodes a plain URL
+// and carries no secret, so anyone sent the link can scan from anywhere
+// during the event. A short code shown only on the organizer's screen means
+// you have to actually be in the room — while a printed QR still works,
+// which a rotating code would have broken.
+try {
+  db.prepare('SELECT checkinPin FROM event_sessions LIMIT 1').get();
+} catch {
+  db.exec('ALTER TABLE event_sessions ADD COLUMN checkinPin TEXT DEFAULT NULL');
+}
 
 // Migrate: add isAdmin column if it doesn't exist yet
 try {

@@ -12,7 +12,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { MapPin, Clock, Users, Calendar, XCircle, Loader2, Edit3, Trash2, ChevronUp, X, Save, Upload, Plus, ClipboardList } from 'lucide-react';
+import { MapPin, Clock, Users, Calendar, XCircle, Loader2, Edit3, Trash2, ChevronUp, X, Save, Upload, Plus, ClipboardList, Check } from 'lucide-react';
 import CreatePostModal from '@/components/CreatePostModal';
 import CropEditor, {
   type ImageTransform,
@@ -64,9 +64,10 @@ export default function MyEvents() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const { isLoggedIn, currentUser } = useAuthStore();
-  const { getSignedUpEvents, cancelSignup, updateOpportunity, deleteOwnOpportunity, fetchOpportunities, fetchMyPosts, myPosts, loading } = useOpportunitiesStore();
+  const { getSignedUpEvents, cancelSignup, commit, cancelCommit, updateOpportunity, deleteOwnOpportunity, fetchOpportunities, fetchMyPosts, myPosts, loading } = useOpportunitiesStore();
 
   const [cancellingId, setCancellingId] = useState<string | null>(null);
+  const [committingId, setCommittingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmCancel, setConfirmCancel] = useState<Opportunity | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<Opportunity | null>(null);
@@ -149,6 +150,24 @@ export default function MyEvents() {
     } finally {
       setCancellingId(null);
       setConfirmCancel(null);
+    }
+  };
+
+  // The step beyond Interested — this is what puts a volunteer on the
+  // organization's Tracker roster. Toggled right from the same card,
+  // anytime, no confirmation dialog — the user's answer was "anytime, the
+  // org just sees the change," so there's nothing here worth a modal for.
+  const handleToggleCommit = async (opp: Opportunity, next: boolean) => {
+    setCommittingId(opp.id);
+    try {
+      const success = next ? await commit(opp.id) : await cancelCommit(opp.id);
+      if (success) {
+        toast({ title: next ? "You're committed" : 'Commitment removed', description: next ? "You're on the organizer's list for this event." : undefined });
+      } else {
+        toast({ title: 'Error', description: 'Something went wrong.', variant: 'destructive' });
+      }
+    } finally {
+      setCommittingId(null);
     }
   };
 
@@ -276,6 +295,9 @@ export default function MyEvents() {
                   type="signup"
                   cancellingId={cancellingId}
                   onRequestCancel={() => setConfirmCancel(opp)}
+                  isCommitted={opp.committed.includes(currentUser.id)}
+                  committing={committingId === opp.id}
+                  onToggleCommit={(next) => handleToggleCommit(opp, next)}
                 />
               ))}
             </div>
@@ -621,20 +643,32 @@ export default function MyEvents() {
 
 // ── Shared event card for signup/past rows ──
 function EventCard({
-  opp, type, cancellingId, onRequestCancel,
+  opp, type, cancellingId, onRequestCancel, isCommitted, committing, onToggleCommit,
 }: {
   opp: Opportunity;
   type: 'signup' | 'past';
   cancellingId: string | null;
   onRequestCancel: () => void;
+  isCommitted?: boolean;
+  committing?: boolean;
+  onToggleCommit?: (next: boolean) => void;
 }) {
   return (
     <div className="rounded-2xl border border-border bg-card p-5 hover:shadow-md transition-all">
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1 space-y-2">
-          <span className={cn('px-3 py-1 rounded-full text-xs font-bold text-white inline-block', CATEGORY_BG[opp.category] || 'bg-primary')}>
-            {getCategoryLabel(opp.category)}
-          </span>
+          <div className="flex flex-wrap gap-2 items-center">
+            <span className={cn('px-3 py-1 rounded-full text-xs font-bold text-white inline-block', CATEGORY_BG[opp.category] || 'bg-primary')}>
+              {getCategoryLabel(opp.category)}
+            </span>
+            {/* The step beyond Interested — this is what put them on the
+                organizer's Tracker roster, so it's worth its own badge here. */}
+            {type === 'signup' && isCommitted && (
+              <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 inline-flex items-center gap-1">
+                <Check className="w-3 h-3" /> Committed
+              </span>
+            )}
+          </div>
           <h3 className="font-heading font-bold text-lg text-foreground">{opp.title}</h3>
           <p className="text-muted-foreground text-sm line-clamp-2">{opp.description}</p>
           <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
@@ -642,6 +676,18 @@ function EventCard({
             <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" />{opp.duration}h</span>
             <span className="flex items-center gap-1"><Users className="w-3.5 h-3.5" />Host: {opp.hostName}</span>
           </div>
+          {type === 'signup' && onToggleCommit && (
+            <button
+              onClick={() => onToggleCommit(!isCommitted)}
+              disabled={committing}
+              className={cn(
+                "text-xs font-semibold transition-colors disabled:opacity-50",
+                isCommitted ? "text-muted-foreground hover:text-foreground" : "text-primary hover:underline"
+              )}
+            >
+              {committing ? 'Updating...' : isCommitted ? 'Remove commitment' : "Commit — put me on the organizer's list"}
+            </button>
+          )}
         </div>
         {type === 'signup' && (
           <button
