@@ -1,5 +1,5 @@
 import { useLocation, Link } from 'wouter';
-import { Heart, Users, MapPin, Star, Mail, Globe } from 'lucide-react';
+import { Heart, Users, MapPin, Star, Mail, Globe, Instagram } from 'lucide-react';
 import Logo from '@/components/Logo';
 
 const TEAM_VALUES = [
@@ -122,6 +122,18 @@ export default function About() {
             >
               <Mail className="w-4 h-4" />
               linklocal2@gmail.com
+            </a>
+            {/* External, so it opens in its own tab. noreferrer alongside
+                noopener because target="_blank" otherwise hands the new page
+                a reference back to this one. */}
+            <a
+              href="https://www.instagram.com/_locallink/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 border border-border rounded-full px-5 py-2.5 text-sm font-semibold text-foreground hover:bg-muted transition-colors"
+            >
+              <Instagram className="w-4 h-4" />
+              @_locallink
             </a>
             <button
               onClick={() => navigate('/')}
