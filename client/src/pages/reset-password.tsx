@@ -140,10 +140,10 @@ export default function ResetPassword() {
 
               {/* New Password */}
               <div className="space-y-2">
-                <label className="block text-sm font-semibold text-foreground">New Password</label>
+                <label htmlFor="reset-password-new-password" className="block text-sm font-semibold text-foreground">New Password</label>
                 <div className="relative">
                   <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                  <Input
+                  <Input id="reset-password-new-password"
                     type="password"
                     placeholder="Min. 8 characters"
                     value={newPassword}
@@ -164,10 +164,10 @@ export default function ResetPassword() {
 
               {/* Confirm Password */}
               <div className="space-y-2">
-                <label className="block text-sm font-semibold text-foreground">Confirm Password</label>
+                <label htmlFor="reset-password-confirm-password" className="block text-sm font-semibold text-foreground">Confirm Password</label>
                 <div className="relative">
                   <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                  <Input
+                  <Input id="reset-password-confirm-password"
                     type="password"
                     placeholder="Repeat your new password"
                     value={confirmPassword}

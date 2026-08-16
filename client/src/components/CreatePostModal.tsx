@@ -636,8 +636,8 @@ export default function CreatePostModal({ open, onClose }: Props) {
                   {/* Form fields */}
                   <div className="p-6 md:p-8 space-y-5 text-white">
                     <div>
-                      <label className="text-xs font-bold tracking-widest uppercase opacity-75 mb-2 block">Post Title *</label>
-                      <Input placeholder="Give your opportunity a name..."
+                      <label htmlFor="createpostmodal-post-title" className="text-xs font-bold tracking-widest uppercase opacity-75 mb-2 block">Post Title *</label>
+                      <Input id="createpostmodal-post-title" placeholder="Give your opportunity a name..."
                         value={formData.title}
                         onChange={e => { setFormData({ ...formData, title: e.target.value }); setFormErrors({ ...formErrors, title: '' }); }}
                         className={cn("rounded-2xl bg-white/90 text-foreground font-semibold border-0 h-12", formErrors.title && "ring-2 ring-red-400")} />
@@ -646,8 +646,8 @@ export default function CreatePostModal({ open, onClose }: Props) {
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="bg-white/15 backdrop-blur-md rounded-2xl p-4 border border-white/20 space-y-2">
-                        <label className="text-xs font-bold tracking-widest uppercase opacity-75 block">Description *</label>
-                        <Textarea placeholder="Describe this opportunity..."
+                        <label htmlFor="createpostmodal-description" className="text-xs font-bold tracking-widest uppercase opacity-75 block">Description *</label>
+                        <Textarea id="createpostmodal-description" placeholder="Describe this opportunity..."
                           value={formData.description}
                           onChange={e => { setFormData({ ...formData, description: e.target.value }); setFormErrors({ ...formErrors, description: '' }); }}
                           className={cn("rounded-xl bg-white/80 text-foreground border-0 text-sm resize-none min-h-[90px]", formErrors.description && "ring-2 ring-red-400")} />
@@ -656,8 +656,8 @@ export default function CreatePostModal({ open, onClose }: Props) {
 
                       <div className="bg-white/15 backdrop-blur-md rounded-2xl p-4 border border-white/20 space-y-3">
                         <div>
-                          <label className="text-xs font-bold tracking-widest uppercase opacity-75 block mb-1">Location *</label>
-                          <Input placeholder="Full address or place name — shown as a map link"
+                          <label htmlFor="createpostmodal-location" className="text-xs font-bold tracking-widest uppercase opacity-75 block mb-1">Location *</label>
+                          <Input id="createpostmodal-location" placeholder="Full address or place name — shown as a map link"
                             value={formData.location}
                             onChange={e => { setFormData({ ...formData, location: e.target.value }); setFormErrors({ ...formErrors, location: '' }); }}
                             className={cn("rounded-xl bg-white/80 text-foreground border-0 text-sm h-9", formErrors.location && "ring-2 ring-red-400")} />
@@ -680,8 +680,8 @@ export default function CreatePostModal({ open, onClose }: Props) {
                         </div>
 
                         <div>
-                          <label className="text-xs font-bold tracking-widest uppercase opacity-75 block mb-1">Town *</label>
-                          <select
+                          <label htmlFor="createpostmodal-town" className="text-xs font-bold tracking-widest uppercase opacity-75 block mb-1">Town *</label>
+                          <select id="createpostmodal-town"
                             value={formData.town}
                             onChange={e => { setFormData({ ...formData, town: e.target.value }); setFormErrors({ ...formErrors, town: '' }); }}
                             className={cn("w-full rounded-xl bg-white/80 text-foreground border-0 text-sm h-9 px-3", formErrors.town && "ring-2 ring-red-400")}>
@@ -693,8 +693,8 @@ export default function CreatePostModal({ open, onClose }: Props) {
 
                         {/* ── Schedule type toggle ── */}
                         <div>
-                          <label className="text-xs font-bold tracking-widest uppercase opacity-75 block mb-1.5">Schedule</label>
-                          <div className="flex gap-2 mb-2">
+                          <span id="post-schedule-label" className="text-xs font-bold tracking-widest uppercase opacity-75 block mb-1.5">Schedule</span>
+                          <div role="group" aria-labelledby="post-schedule-label" className="flex gap-2 mb-2">
                             <button type="button"
                               onClick={() => setIsRecurring(false)}
                               className={cn(
@@ -759,15 +759,15 @@ export default function CreatePostModal({ open, onClose }: Props) {
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div className="bg-white/15 backdrop-blur-md rounded-2xl p-4 border border-white/20 space-y-2">
-                        <label className="text-xs font-bold tracking-widest uppercase opacity-75 block">Duration (hours)</label>
-                        <Input type="number" min={0.5} max={24} step={0.5}
+                        <label htmlFor="createpostmodal-duration-hours" className="text-xs font-bold tracking-widest uppercase opacity-75 block">Duration (hours)</label>
+                        <Input id="createpostmodal-duration-hours" type="number" min={0.5} max={24} step={0.5}
                           value={formData.duration}
                           onChange={e => setFormData({ ...formData, duration: parseFloat(e.target.value) })}
                           className="rounded-xl bg-white/80 text-foreground border-0 text-sm h-9" />
                       </div>
                       <div className="bg-white/15 backdrop-blur-md rounded-2xl p-4 border border-white/20 space-y-2">
-                        <label className="text-xs font-bold tracking-widest uppercase opacity-75 block">Spots</label>
-                        <div className="flex gap-1.5 mb-2 flex-wrap">
+                        <span id="post-spots-label" className="text-xs font-bold tracking-widest uppercase opacity-75 block">Spots</span>
+                        <div role="group" aria-labelledby="post-spots-label" className="flex gap-1.5 mb-2 flex-wrap">
                           {(['limited', 'unlimited', 'none'] as SpotsType[]).map(st => (
                             <button key={st} type="button"
                               onClick={() => setSpotsType(st)}
@@ -804,7 +804,7 @@ export default function CreatePostModal({ open, onClose }: Props) {
                     {/* Volunteer Steps */}
                     <div className="bg-white/15 backdrop-blur-md rounded-2xl p-4 border border-white/20 space-y-3">
                       <div className="flex items-center justify-between">
-                        <label className="text-xs font-bold tracking-widest uppercase opacity-75">How to Participate *</label>
+                        <span className="text-xs font-bold tracking-widest uppercase opacity-75">How to Participate *</span>
                         <button
                           type="button"
                           onClick={() => setSteps(s => [...s, ''])}
@@ -845,11 +845,11 @@ export default function CreatePostModal({ open, onClose }: Props) {
 
                     {/* External signup — org's own registration page, if they use one */}
                     <div className="bg-white/15 backdrop-blur-md rounded-2xl p-4 border border-white/20 space-y-2">
-                      <label className="text-xs font-bold tracking-widest uppercase opacity-75 block">
+                      <label htmlFor="createpostmodal-field" className="text-xs font-bold tracking-widest uppercase opacity-75 block">
                         Signup page (optional)
                       </label>
                       <p className="text-white/60 text-xs">If volunteers need to register on your own site.</p>
-                      <Input placeholder="https://your-site.org/signup"
+                      <Input id="createpostmodal-field" placeholder="https://your-site.org/signup"
                         value={formData.externalSignupUrl}
                         onChange={e => { setFormData({ ...formData, externalSignupUrl: e.target.value }); setFormErrors({ ...formErrors, externalSignupUrl: '' }); }}
                         className={cn("rounded-xl bg-white/80 text-foreground border-0 text-sm h-9", formErrors.externalSignupUrl && "ring-2 ring-red-400")} />

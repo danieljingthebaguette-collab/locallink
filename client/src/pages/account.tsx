@@ -305,7 +305,7 @@ export default function Account() {
               {/* Account Type toggle (signup only) */}
               {!isLoginMode && (
                 <div className="space-y-2">
-                  <label className="block text-sm font-semibold text-foreground">I am a...</label>
+                  <span id="account-role-label" className="block text-sm font-semibold text-foreground">I am a...</span>
                   {joinPrefill ? (
                     /* Locked to Organization when arriving from a join link */
                     <div className="flex items-center gap-3 p-4 rounded-2xl border-2 border-primary bg-primary/5">
@@ -366,10 +366,10 @@ export default function Account() {
               {/* Username (signup only) */}
               {!isLoginMode && (
                 <div className="space-y-2">
-                  <label className="block text-sm font-semibold text-foreground">Username</label>
+                  <label htmlFor="account-username" className="block text-sm font-semibold text-foreground">Username</label>
                   <div className="relative">
                     <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                    <Input
+                    <Input id="account-username"
                       type="text"
                       placeholder="Your username"
                       value={formData.username}
@@ -391,10 +391,10 @@ export default function Account() {
 
               {/* Email */}
               <div className="space-y-2">
-                <label className="block text-sm font-semibold text-foreground">Email Address</label>
+                <label htmlFor="account-email-address" className="block text-sm font-semibold text-foreground">Email Address</label>
                 <div className="relative">
                   <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                  <Input
+                  <Input id="account-email-address"
                     type="email"
                     placeholder="you@example.com"
                     value={formData.email}
@@ -416,10 +416,10 @@ export default function Account() {
 
               {/* Password */}
               <div className="space-y-2">
-                <label className="block text-sm font-semibold text-foreground">Password</label>
+                <label htmlFor="account-password" className="block text-sm font-semibold text-foreground">Password</label>
                 <div className="relative">
                   <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                  <Input
+                  <Input id="account-password"
                     type="password"
                     placeholder={isLoginMode ? 'Enter your password' : 'Create a password (min. 8 characters)'}
                     value={formData.password}

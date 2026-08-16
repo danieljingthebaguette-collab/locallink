@@ -6,7 +6,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuthStore } from '@/lib/store';
 import { ClipboardList, Loader2, Download, ArrowLeft, Copy, Check, Play, Pause, Square, X } from 'lucide-react';
 
-type RowStatus = 'coming' | 'here' | 'left' | 'no_show' | 'rejected';
+type RowStatus = 'coming' | 'here' | 'left' | 'no_show' | 'rejected' | 'requested';
 type SessionStatus = 'none' | 'scheduled' | 'running' | 'paused' | 'stopped';
 
 interface RosterRow {
@@ -75,6 +75,7 @@ const STATUS_META: Record<RowStatus, { label: string; cls: string }> = {
   left:     { label: 'Left',        cls: 'bg-blue-500/10 text-blue-600 dark:text-blue-400' },
   no_show:  { label: "Didn't come", cls: 'bg-secondary text-muted-foreground' },
   rejected: { label: 'Removed',     cls: 'bg-red-500/10 text-red-500' },
+  requested:{ label: 'Says they came', cls: 'bg-amber-500/15 text-amber-600 dark:text-amber-400' },
 };
 
 const SESSION_META: Record<SessionStatus, { label: string; cls: string }> = {
@@ -365,9 +366,19 @@ export default function Tracker() {
               <p className="text-xs text-muted-foreground mb-4">
                 Start it when you're ready, or schedule it to start on its own — a volunteer's first scan will also start it automatically if you forget.
               </p>
-              <Button onClick={openStartForm} size="sm" className="rounded-full text-xs">
-                <Play className="w-3.5 h-3.5 mr-1.5" /> Start Event
-              </Button>
+              <div className="flex flex-wrap items-center gap-3">
+                <Button onClick={openStartForm} size="sm" className="rounded-full text-xs">
+                  <Play className="w-3.5 h-3.5 mr-1.5" /> Start Event
+                </Button>
+                {/* First-time organizers land here with no idea what happens
+                    next; this is the one page where that question is urgent. */}
+                <button
+                  onClick={() => navigate('/how-it-works')}
+                  className="text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  How does this work?
+                </button>
+              </div>
             </>
           )}
 
@@ -377,14 +388,14 @@ export default function Tracker() {
                 {session && session.status !== 'none' ? 'Update timing' : 'Start Event'}
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
-                <label className="text-xs text-muted-foreground">
+                <label htmlFor="tracker-field" className="text-xs text-muted-foreground">
                   Start time
-                  <input type="datetime-local" value={startAt} onChange={e => setStartAt(e.target.value)}
+                  <input id="tracker-field" type="datetime-local" value={startAt} onChange={e => setStartAt(e.target.value)}
                     className="mt-1 w-full rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-foreground" />
                 </label>
-                <label className="text-xs text-muted-foreground">
+                <label htmlFor="tracker-field-2" className="text-xs text-muted-foreground">
                   Auto-stop time
-                  <input type="datetime-local" value={stopAt} onChange={e => setStopAt(e.target.value)}
+                  <input id="tracker-field-2" type="datetime-local" value={stopAt} onChange={e => setStopAt(e.target.value)}
                     className="mt-1 w-full rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-foreground" />
                 </label>
               </div>
@@ -394,8 +405,8 @@ export default function Tracker() {
               {/* The QR is just a link, so anyone sent it could check in from
                   anywhere while the event runs. A code shown only on your
                   screen means they have to actually be there. */}
-              <label className="flex items-start gap-2.5 mb-3 cursor-pointer">
-                <input type="checkbox" checked={requirePin} onChange={e => setRequirePin(e.target.checked)} className="mt-0.5" />
+              <label htmlFor="tracker-field-3" className="flex items-start gap-2.5 mb-3 cursor-pointer">
+                <input id="tracker-field-3" type="checkbox" checked={requirePin} onChange={e => setRequirePin(e.target.checked)} className="mt-0.5" />
                 <span className="text-xs text-muted-foreground">
                   <span className="font-semibold text-foreground">Require a code to check in</span> — we'll show a 4-digit code on this page. Volunteers type it when they scan, so only people actually at the event can check in.
                 </span>
@@ -497,6 +508,7 @@ export default function Tracker() {
                         {r.status === 'coming' && 'Hasn’t checked in yet'}
                         {r.status === 'no_show' && 'Never checked in'}
                         {r.status === 'rejected' && 'Hours removed'}
+                        {r.status === 'requested' && `Didn’t scan — asking you to confirm ${opp.duration} hrs`}
                         {showFlag && <span className="text-muted-foreground"> · missed {rel.noShows} of {rel.total} with you</span>}
                       </p>
                       {/* Still checked in when the clock ran out — their real
@@ -528,6 +540,18 @@ export default function Tracker() {
                           <button onClick={() => saveHours(r)} className="text-xs font-semibold text-primary hover:underline">Save</button>
                           <button onClick={() => setEditHoursFor(null)} aria-label="Cancel" className="text-muted-foreground hover:text-foreground">
                             <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ) : r.status === 'requested' ? (
+                        // The one row type that's a task. Two plain verbs,
+                        // no dialog — the claim is small and reversible
+                        // either way.
+                        <div className="flex flex-col items-end gap-0.5">
+                          <button onClick={() => markCame(r)} className="text-xs font-semibold text-primary hover:underline">
+                            Confirm hours
+                          </button>
+                          <button onClick={() => removeCredit(r)} className="text-xs font-semibold text-muted-foreground hover:text-red-500 transition-colors">
+                            Decline
                           </button>
                         </div>
                       ) : (r.status === 'coming' || r.status === 'no_show') ? (

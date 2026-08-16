@@ -81,10 +81,10 @@ export default function ForgotPassword() {
 
             <div className="rounded-3xl bg-card border border-border shadow-lg p-8 md:p-10 space-y-5">
               <div className="space-y-2">
-                <label className="block text-sm font-semibold text-foreground">Email Address</label>
+                <label htmlFor="forgot-password-email-address" className="block text-sm font-semibold text-foreground">Email Address</label>
                 <div className="relative">
                   <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                  <Input
+                  <Input id="forgot-password-email-address"
                     type="email"
                     placeholder="you@example.com"
                     value={email}

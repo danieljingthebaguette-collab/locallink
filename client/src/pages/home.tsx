@@ -40,16 +40,21 @@ const EASE_OUT = [0.25, 0.1, 0.25, 1] as const;
 // to anyone who has just registered. Previously only signed-out visitors ever saw
 // it, so the explanation reached people who hadn't joined and was hidden from the
 // person who just did.
+// Four steps rather than three: scanning is the one thing a volunteer has to
+// remember to do on the day, and folding it into "show up" is how people end
+// up at an event without knowing their hours depend on it.
 const VOLUNTEER_STEPS = [
   { n: 1, t: 'Browse the board', d: 'Real events from Somerset County orgs' },
-  { n: 2, t: "Tap I'm Interested", d: 'One click — the org gets notified' },
-  { n: 3, t: 'Show up & help', d: 'Earn service hours that count' },
+  { n: 2, t: 'Commit when you’re sure', d: 'Puts you on the organizer’s list' },
+  { n: 3, t: 'Scan the code there', d: 'Once when you arrive, once when you leave' },
+  { n: 4, t: 'Hours land on your profile', d: 'Verified by the organization' },
 ];
 
 const ORG_STEPS = [
-  { n: 1, t: 'Complete your profile', d: 'Add a description and contact email' },
-  { n: 2, t: 'Post an opportunity', d: 'An admin reviews it before it goes live' },
-  { n: 3, t: 'See who’s interested', d: 'You’re notified as volunteers sign up' },
+  { n: 1, t: 'Post an opportunity', d: 'An admin reviews it before it goes live' },
+  { n: 2, t: 'See who commits', d: 'Committed volunteers appear on your list' },
+  { n: 3, t: 'Start the event & show the QR', d: 'Volunteers scan it to check in and out' },
+  { n: 4, t: 'Download the spreadsheet', d: 'Hours are already recorded for you' },
 ];
 
 // Fixed spark layout for the "I'm Interested" burst — perimeter points with an
@@ -579,9 +584,9 @@ export default function Home() {
                   <span>Sort: {SORT_OPTIONS.find(o => o.value === sortBy)?.label}</span>
                   <ChevronDown className={cn("w-3.5 h-3.5 transition-transform duration-200", showSort && "rotate-180")} />
                 </button>
-                <label className="min-h-[44px] flex items-center gap-1 text-xs font-semibold text-muted-foreground uppercase tracking-wide cursor-pointer hover:text-foreground transition-colors">
+                <label htmlFor="home-field" className="min-h-[44px] flex items-center gap-1 text-xs font-semibold text-muted-foreground uppercase tracking-wide cursor-pointer hover:text-foreground transition-colors">
                   <span>Town:</span>
-                  <select
+                  <select id="home-field"
                     value={currentTown}
                     onChange={e => setTown(e.target.value)}
                     aria-label="Filter by town"
@@ -679,11 +684,20 @@ export default function Home() {
                 </div>
               ))}
             </div>
-            <button
-              onClick={() => markWelcomeSeen()}
-              className="mt-5 text-xs font-semibold text-primary hover:underline">
-              Got it
-            </button>
+            <div className="mt-5 flex items-center gap-4">
+              <button
+                onClick={() => markWelcomeSeen()}
+                className="text-xs font-semibold text-primary hover:underline">
+                Got it
+              </button>
+              {/* The walkthrough is four lines; this is where someone goes
+                  when four lines isn't enough. */}
+              <button
+                onClick={() => navigate('/how-it-works')}
+                className="text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors">
+                Full instructions
+              </button>
+            </div>
           </motion.div>
         )}
 
@@ -1148,10 +1162,10 @@ export default function Home() {
                       </div>
                       {/* External signup — org's own registration page, if they use one */}
                       <div>
-                        <label className="text-xs text-white/75 font-medium block mb-1">
+                        <label htmlFor="home-field-2" className="text-xs text-white/75 font-medium block mb-1">
                           Signup page (optional) — if volunteers need to register on your own site
                         </label>
-                        <input
+                        <input id="home-field-2"
                           type="text"
                           value={editForm.externalSignupUrl}
                           onChange={e => { setEditForm(f => ({ ...f, externalSignupUrl: e.target.value })); setSignupUrlEditError(''); }}

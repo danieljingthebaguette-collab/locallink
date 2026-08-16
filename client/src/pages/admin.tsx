@@ -952,10 +952,10 @@ function OpportunitiesTab({
                     </select>
                   </div>
                   <div>
-                    <label className="text-xs font-medium text-muted-foreground block mb-1">
+                    <label htmlFor="admin-field" className="text-xs font-medium text-muted-foreground block mb-1">
                       Signup page (optional) — if volunteers need to register on your own site
                     </label>
-                    <Input placeholder="https://your-site.org/signup" value={editForm.externalSignupUrl}
+                    <Input id="admin-field" placeholder="https://your-site.org/signup" value={editForm.externalSignupUrl}
                       onChange={e => { setEditForm({ ...editForm, externalSignupUrl: e.target.value }); setSignupUrlError(''); }}
                       className={cn("h-9 rounded-xl text-sm", signupUrlError && "ring-2 ring-red-400")} />
                     {signupUrlError && <p className="text-red-500 text-xs mt-1">{signupUrlError}</p>}

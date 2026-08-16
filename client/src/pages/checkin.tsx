@@ -19,7 +19,7 @@ interface StatusResponse {
   hoursLocked: boolean;
   signedUp: boolean;
   committed: boolean;
-  attendance: { hoursVerified: number | null; status: 'credited' | 'rejected' } | null;
+  attendance: { hoursVerified: number | null; status: 'credited' | 'rejected' | 'requested' } | null;
 }
 
 interface OppSummary {
@@ -115,6 +115,21 @@ export default function CheckIn() {
       const data = await res.json();
       if (!res.ok) setError(data.error || 'Could not check in');
       else setPin('');
+      await loadStatus();
+    } finally {
+      setActing(false);
+    }
+  };
+
+  const requestHours = async () => {
+    setActing(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/opportunities/${params.opportunityId}/request-hours`, {
+        method: 'POST', headers: authHeaders(), body: JSON.stringify({}),
+      });
+      const data = await res.json();
+      if (!res.ok) setError(data.error || 'Could not send that request');
       await loadStatus();
     } finally {
       setActing(false);
@@ -274,10 +289,36 @@ export default function CheckIn() {
           </div>
         )}
 
+        {/* Ended with no record of them. Usually a flat battery or no signal
+            rather than an absence, so there's a way to say so that doesn't
+            require knowing who to email. It grants nothing on its own. */}
         {finished && !status.attendance && (
           <div className="text-center py-6">
             <p className="font-heading font-bold text-foreground">This event has ended</p>
-            <p className="text-sm text-muted-foreground mt-1">You weren't checked in, so no hours were recorded.</p>
+            <p className="text-sm text-muted-foreground mt-1 mb-4">
+              You weren't checked in, so no hours were recorded.
+            </p>
+            {status.committed && (
+              <>
+                {error && <p className="text-sm text-red-500 mb-3">{error}</p>}
+                <Button onClick={requestHours} disabled={acting} variant="outline" className="rounded-full px-6">
+                  {acting && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+                  I was there — ask {opp.hostName} to confirm
+                </Button>
+              </>
+            )}
+          </div>
+        )}
+
+        {status.attendance?.status === 'requested' && (
+          <div className="text-center py-6">
+            <div className="w-12 h-12 rounded-full bg-amber-500/15 flex items-center justify-center mx-auto mb-3">
+              <Clock className="w-6 h-6 text-amber-500" />
+            </div>
+            <p className="font-heading font-bold text-foreground">Waiting on {opp.hostName}</p>
+            <p className="text-sm text-muted-foreground mt-1">
+              They'll see your request on their attendance list and confirm your hours.
+            </p>
           </div>
         )}
 

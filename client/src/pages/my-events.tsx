@@ -430,15 +430,17 @@ export default function MyEvents() {
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        {/* Tracker lives here now, not as its own nav tab —
-                            it's an action on the event you're hosting, same
-                            family as edit/delete. */}
+                        {/* Labelled, not icon-only. This is the entry to the
+                            whole attendance system, and a bare clipboard
+                            glyph with a title tooltip said nothing — tooltips
+                            don't exist on touch, so on a phone it was an
+                            unmarked button. */}
                         <button
                           onClick={() => navigate(`/tracker/${opp.id}`)}
-                          className="p-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 transition-colors"
-                          title="Track attendance"
+                          className="inline-flex items-center gap-1.5 pl-2.5 pr-3 py-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-semibold transition-colors"
                         >
                           <ClipboardList className="w-4 h-4" />
+                          Attendance
                         </button>
                         <button
                           onClick={() => editingId === opp.id ? setEditingId(null) : startEdit(opp)}
@@ -465,17 +467,17 @@ export default function MyEvents() {
                       <p className="text-sm font-semibold text-foreground">Edit Event</p>
                       <div className="space-y-3">
                         <div className="space-y-1">
-                          <label className="text-xs font-medium text-muted-foreground">Title *</label>
-                          <Input value={editForm.title} onChange={(e) => setEditForm({ ...editForm, title: e.target.value })} className="h-10 rounded-xl" />
+                          <label htmlFor="my-events-title" className="text-xs font-medium text-muted-foreground">Title *</label>
+                          <Input id="my-events-title" value={editForm.title} onChange={(e) => setEditForm({ ...editForm, title: e.target.value })} className="h-10 rounded-xl" />
                         </div>
                         <div className="space-y-1">
-                          <label className="text-xs font-medium text-muted-foreground">Description *</label>
-                          <Textarea value={editForm.description} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} className="rounded-xl min-h-[70px]" />
+                          <label htmlFor="my-events-description" className="text-xs font-medium text-muted-foreground">Description *</label>
+                          <Textarea id="my-events-description" value={editForm.description} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} className="rounded-xl min-h-[70px]" />
                         </div>
                         <div className="grid grid-cols-2 gap-3">
                           <div className="space-y-1">
-                            <label className="text-xs font-medium text-muted-foreground">Category</label>
-                            <select
+                            <label htmlFor="my-events-category" className="text-xs font-medium text-muted-foreground">Category</label>
+                            <select id="my-events-category"
                               value={editForm.category}
                               onChange={(e) => setEditForm({ ...editForm, category: e.target.value as Category })}
                               className="w-full h-10 rounded-xl border border-input bg-background px-3 text-sm"
@@ -486,16 +488,16 @@ export default function MyEvents() {
                             </select>
                           </div>
                           <div className="space-y-1">
-                            <label className="text-xs font-medium text-muted-foreground">Location *</label>
-                            <Input value={editForm.location} onChange={(e) => setEditForm({ ...editForm, location: e.target.value })} className="h-10 rounded-xl" />
+                            <label htmlFor="my-events-location" className="text-xs font-medium text-muted-foreground">Location *</label>
+                            <Input id="my-events-location" value={editForm.location} onChange={(e) => setEditForm({ ...editForm, location: e.target.value })} className="h-10 rounded-xl" />
                           </div>
                         </div>
                         <div className="grid grid-cols-3 gap-3">
                           {opp.isRecurring ? (
                             <>
                               <div className="space-y-1">
-                                <label className="text-xs font-medium text-muted-foreground">Day of Week</label>
-                                <select
+                                <label htmlFor="my-events-day-of-week" className="text-xs font-medium text-muted-foreground">Day of Week</label>
+                                <select id="my-events-day-of-week"
                                   value={editForm.recurringDay ?? 1}
                                   onChange={(e) => setEditForm({ ...editForm, recurringDay: parseInt(e.target.value) })}
                                   className="w-full h-10 rounded-xl border border-input bg-background px-3 text-sm"
@@ -506,8 +508,8 @@ export default function MyEvents() {
                                 </select>
                               </div>
                               <div className="space-y-1">
-                                <label className="text-xs font-medium text-muted-foreground">Time</label>
-                                <Input
+                                <label htmlFor="my-events-time" className="text-xs font-medium text-muted-foreground">Time</label>
+                                <Input id="my-events-time"
                                   type="time"
                                   value={editForm.recurringTime ?? '09:00'}
                                   onChange={(e) => setEditForm({ ...editForm, recurringTime: e.target.value })}
@@ -517,23 +519,23 @@ export default function MyEvents() {
                             </>
                           ) : (
                             <div className="space-y-1">
-                              <label className="text-xs font-medium text-muted-foreground">Date & Time *</label>
-                              <Input type="datetime-local" value={editForm.date} onChange={(e) => setEditForm({ ...editForm, date: e.target.value })} className="h-10 rounded-xl" />
+                              <label htmlFor="my-events-date-time" className="text-xs font-medium text-muted-foreground">Date & Time *</label>
+                              <Input id="my-events-date-time" type="datetime-local" value={editForm.date} onChange={(e) => setEditForm({ ...editForm, date: e.target.value })} className="h-10 rounded-xl" />
                             </div>
                           )}
                           <div className="space-y-1">
-                            <label className="text-xs font-medium text-muted-foreground">Duration (hrs)</label>
-                            <Input type="number" min={0.5} max={24} step={0.5} value={editForm.duration} onChange={(e) => setEditForm({ ...editForm, duration: parseFloat(e.target.value) || 0.5 })} className="h-10 rounded-xl" />
+                            <label htmlFor="my-events-duration-hrs" className="text-xs font-medium text-muted-foreground">Duration (hrs)</label>
+                            <Input id="my-events-duration-hrs" type="number" min={0.5} max={24} step={0.5} value={editForm.duration} onChange={(e) => setEditForm({ ...editForm, duration: parseFloat(e.target.value) || 0.5 })} className="h-10 rounded-xl" />
                           </div>
                           <div className="space-y-1">
-                            <label className="text-xs font-medium text-muted-foreground">Approx. Capacity</label>
-                            <Input type="number" min={0} max={1000} value={editForm.spots} onChange={(e) => setEditForm({ ...editForm, spots: parseInt(e.target.value) || 0 })} className="h-10 rounded-xl" />
+                            <label htmlFor="my-events-approx-capacity" className="text-xs font-medium text-muted-foreground">Approx. Capacity</label>
+                            <Input id="my-events-approx-capacity" type="number" min={0} max={1000} value={editForm.spots} onChange={(e) => setEditForm({ ...editForm, spots: parseInt(e.target.value) || 0 })} className="h-10 rounded-xl" />
                           </div>
                         </div>
                         {/* Image Upload */}
                         <div className="space-y-1">
-                          <label className="text-xs font-medium text-muted-foreground">Image (optional)</label>
-                          <input ref={editFileRef} type="file" accept="image/*" className="hidden"
+                          <label htmlFor="my-events-image-optional" className="text-xs font-medium text-muted-foreground">Image (optional)</label>
+                          <input id="my-events-image-optional" ref={editFileRef} type="file" accept="image/*" className="hidden"
                             onChange={e => {
                               const file = e.target.files?.[0];
                               if (!file) return;

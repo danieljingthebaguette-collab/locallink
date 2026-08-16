@@ -1748,6 +1748,9 @@ function occurrenceWindow(opp: { date: string; duration: number; isRecurring?: n
   return { start, end: new Date(start.getTime() + opp.duration * 3_600_000) };
 }
 
+// 'requested' is the volunteer's own claim that they were there but never
+// scanned — it carries no hours until a host approves it, so it can never
+// inflate a profile on its own.
 const VALID_ATTENDANCE_DECISIONS = ['credited', 'rejected'] as const;
 
 type SessionStatus = 'none' | 'scheduled' | 'running' | 'paused' | 'stopped';
@@ -1938,7 +1941,10 @@ function getMergedRoster(oppId: string, occurrenceDate: string, session: any, li
 
   const live = status === 'running' || status === 'paused';
   const roster = rows.map(r => {
-    if (r.attStatus === 'rejected') return { ...r, status: 'rejected' as const, hoursNow: 0 };
+    if (r.attStatus === 'rejected') return { ...r, status: 'rejected' as const, hoursNow: 0, cutShort: false, overListed: false };
+    // Claimed attendance awaiting a decision. Sorted to the top below,
+    // because it's the only row type that needs the organizer to act.
+    if (r.attStatus === 'requested') return { ...r, status: 'requested' as const, hoursNow: 0, cutShort: false, overListed: false };
     const openSegment = r.attendanceId && !r.checkOutAt && r.checkInAt;
     let derived: 'coming' | 'here' | 'left' | 'no_show';
     if (openSegment) derived = 'here';
@@ -1961,6 +1967,9 @@ function getMergedRoster(oppId: string, occurrenceDate: string, session: any, li
     const overListed = listedDuration > 0 && hoursNow > listedDuration + 0.01;
     return { ...r, status: derived, hoursNow, cutShort, overListed };
   });
+  // Anything waiting on the organizer floats to the top — it's the only
+  // part of this list that's a task rather than a record.
+  roster.sort((a, b) => Number(b.status === 'requested') - Number(a.status === 'requested'));
   return { sessionStatus: status, roster };
 }
 
@@ -2307,8 +2316,11 @@ router.get('/api/opportunities/:id/attendance', requireAuth, (req: AuthRequest, 
         const pSession = getSession(p.id, occDate);
         if (sessionStatus(pSession) !== 'stopped') continue; // never ran, or still running — not countable
         total++;
+        // Must be 'credited' specifically. A 'requested' row is the
+        // volunteer's own unapproved claim — letting it count here would
+        // let anyone clear their own no-show record by asserting it.
         const attended = db.prepare(
-          `SELECT 1 FROM attendance WHERE opportunityId = ? AND userId = ? AND occurrenceDate = ? AND status != 'rejected' AND checkInAt IS NOT NULL`
+          `SELECT 1 FROM attendance WHERE opportunityId = ? AND userId = ? AND occurrenceDate = ? AND status = 'credited' AND checkInAt IS NOT NULL`
         ).get(p.id, r.userId, occDate);
         if (!attended) noShows++;
       }
@@ -2443,6 +2455,7 @@ router.get('/api/opportunities/:id/attendance/export', requireAuth, (req: AuthRe
     const CSV_STATUS: Record<string, string> = {
       coming: 'Did not check in', here: 'Attended', left: 'Attended',
       no_show: 'Did not attend', rejected: 'Hours removed',
+      requested: 'Awaiting your confirmation',
     };
     const clock = (iso: string | null) => iso
       ? new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
@@ -2470,6 +2483,59 @@ router.get('/api/opportunities/:id/attendance/export', requireAuth, (req: AuthRe
  * host-facing ("who came to my event"); this is the other direction. Only
  * 'credited' rows count, so the number on a profile is always one an
  * organization signed off on — never self-reported. */
+/** "I was there" — the volunteer's own claim after missing a scan.
+ *
+ * Dead phones, no signal, an organizer who never showed the code: the miss
+ * is usually nobody's fault, and the only previous remedy was knowing which
+ * human to email. This files a request the organization sees on its roster.
+ * It grants nothing by itself — hours stay at 0 and the row is excluded
+ * from every credited total until a host approves it. */
+router.post('/api/opportunities/:id/request-hours', requireAuth, (req: AuthRequest, res: Response) => {
+  try {
+    const oppId = req.params.id;
+    const userId = req.userId!;
+    const opp = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(oppId) as any;
+    if (!opp) return res.status(404).json({ error: 'Opportunity not found' });
+
+    const occurrenceDate = activeOccurrenceDate(opp);
+    const session = getSession(oppId, occurrenceDate);
+    if (sessionStatus(session) !== 'stopped') {
+      return res.status(400).json({ error: "This event hasn't finished yet — you can still check in." });
+    }
+    const committed = db.prepare(
+      'SELECT 1 FROM signups WHERE opportunityId = ? AND userId = ? AND committedAt IS NOT NULL'
+    ).get(oppId, userId);
+    if (!committed) return res.status(403).json({ error: 'Only committed volunteers can request hours.' });
+
+    const existing = db.prepare(
+      'SELECT * FROM attendance WHERE opportunityId = ? AND userId = ? AND occurrenceDate = ?'
+    ).get(oppId, userId, occurrenceDate) as any;
+    if (existing) {
+      if (existing.status === 'requested') return res.json({ requested: true });
+      return res.status(400).json({ error: 'This event already has a decision on your hours.' });
+    }
+
+    const note = typeof (req.body || {}).note === 'string' ? String(req.body.note).slice(0, 300) : null;
+    const now = new Date().toISOString();
+    db.prepare(
+      `INSERT INTO attendance (id, opportunityId, userId, occurrenceDate, checkInAt, hoursClaimed, hoursVerified, status, note, createdAt)
+       VALUES (?, ?, ?, ?, ?, ?, 0, 'requested', ?, ?)`
+    ).run(randomUUID(), oppId, userId, occurrenceDate, now, opp.duration, note, now);
+
+    const host = db.prepare('SELECT id, notifyOnInterest FROM users WHERE id = ?').get(opp.hostId) as any;
+    if (host?.notifyOnInterest) {
+      const volunteer = db.prepare('SELECT username FROM users WHERE id = ?').get(userId) as any;
+      db.prepare('INSERT INTO notifications (id, userId, type, message, postId, read, createdAt) VALUES (?, ?, ?, ?, ?, 0, ?)').run(
+        randomUUID(), opp.hostId, 'hours_requested',
+        `${volunteer?.username || 'Someone'} says they attended "${opp.title}" — review their hours`, oppId, now
+      );
+    }
+    return res.json({ requested: true });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/api/me/hours', requireAuth, (req: AuthRequest, res: Response) => {
   try {
     // A volunteer who scanned in and never scanned out has no finalized

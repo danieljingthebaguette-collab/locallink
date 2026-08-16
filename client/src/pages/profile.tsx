@@ -273,10 +273,10 @@ export default function Profile() {
 
             {/* Username */}
             <div className="space-y-1">
-              <label className="text-sm font-semibold text-foreground">Username</label>
+              <label htmlFor="profile-username" className="text-sm font-semibold text-foreground">Username</label>
               <div className="relative">
                 <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
+                <Input id="profile-username"
                   value={editData.username}
                   onChange={(e) => { setEditData({ ...editData, username: e.target.value }); setEditErrors({ ...editErrors, username: undefined }); }}
                   className={cn('pl-10 h-11 rounded-xl border-2', editErrors.username ? 'border-red-400' : 'border-border')}
@@ -290,10 +290,10 @@ export default function Profile() {
 
               <div className="space-y-3">
                 <div className="space-y-1">
-                  <label className="text-xs text-muted-foreground">Current Password</label>
+                  <label htmlFor="profile-current-password" className="text-xs text-muted-foreground">Current Password</label>
                   <div className="relative">
                     <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <Input
+                    <Input id="profile-current-password"
                       type="password"
                       placeholder="Current password"
                       value={editData.currentPassword}
@@ -304,10 +304,10 @@ export default function Profile() {
                   {editErrors.currentPassword && <p className="text-xs text-red-600">{editErrors.currentPassword}</p>}
                 </div>
                 <div className="space-y-1">
-                  <label className="text-xs text-muted-foreground">New Password</label>
+                  <label htmlFor="profile-new-password" className="text-xs text-muted-foreground">New Password</label>
                   <div className="relative">
                     <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <Input
+                    <Input id="profile-new-password"
                       type="password"
                       placeholder="New password (min. 8 characters)"
                       value={editData.newPassword}
@@ -318,10 +318,10 @@ export default function Profile() {
                   {editErrors.newPassword && <p className="text-xs text-red-600">{editErrors.newPassword}</p>}
                 </div>
                 <div className="space-y-1">
-                  <label className="text-xs text-muted-foreground">Confirm New Password</label>
+                  <label htmlFor="profile-confirm-new-password" className="text-xs text-muted-foreground">Confirm New Password</label>
                   <div className="relative">
                     <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <Input
+                    <Input id="profile-confirm-new-password"
                       type="password"
                       placeholder="Confirm new password"
                       value={editData.confirmPassword}
@@ -412,8 +412,8 @@ export default function Profile() {
             {orgEditOpen && (
               <div className="space-y-4">
                 <div className="space-y-1">
-                  <label className="text-sm font-semibold text-foreground">About Your Organization *</label>
-                  <Textarea
+                  <label htmlFor="profile-about-your-organization" className="text-sm font-semibold text-foreground">About Your Organization *</label>
+                  <Textarea id="profile-about-your-organization"
                     placeholder="Briefly describe what your organization does and your goals..."
                     value={orgForm.orgDescription}
                     onChange={e => setOrgForm(f => ({ ...f, orgDescription: e.target.value }))}
@@ -421,8 +421,8 @@ export default function Profile() {
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-sm font-semibold text-foreground">Website URL</label>
-                  <Input
+                  <label htmlFor="profile-website-url" className="text-sm font-semibold text-foreground">Website URL</label>
+                  <Input id="profile-website-url"
                     placeholder="https://yourorg.org"
                     value={orgForm.orgWebsite}
                     onChange={e => setOrgForm(f => ({ ...f, orgWebsite: e.target.value }))}
@@ -431,8 +431,8 @@ export default function Profile() {
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-1">
-                    <label className="text-sm font-semibold text-foreground">Contact Email *</label>
-                    <Input
+                    <label htmlFor="profile-contact-email" className="text-sm font-semibold text-foreground">Contact Email *</label>
+                    <Input id="profile-contact-email"
                       type="email"
                       placeholder="contact@yourorg.org"
                       value={orgForm.orgEmail}
@@ -441,8 +441,8 @@ export default function Profile() {
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-sm font-semibold text-foreground">Contact Phone</label>
-                    <Input
+                    <label htmlFor="profile-contact-phone" className="text-sm font-semibold text-foreground">Contact Phone</label>
+                    <Input id="profile-contact-phone"
                       type="tel"
                       placeholder="(555) 555-5555"
                       value={orgForm.orgPhone}

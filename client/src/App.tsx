@@ -9,6 +9,7 @@ import FeedbackButton from "@/components/FeedbackButton";
 import Home from "@/pages/home";
 import MyEvents from "@/pages/my-events";
 import About from "@/pages/about";
+import HowItWorks from '@/pages/how-it-works';
 import Profile from "@/pages/profile";
 import Account from "@/pages/account";
 import Admin from "@/pages/admin";
@@ -44,6 +45,7 @@ function Router() {
       <Route path="/" component={Home} />
       <Route path="/my-events" component={MyEvents} />
       <Route path="/about" component={About} />
+      <Route path="/how-it-works" component={HowItWorks} />
       <Route path="/profile" component={Profile} />
       <Route path="/account" component={Account} />
       <Route path="/admin" component={Admin} />
