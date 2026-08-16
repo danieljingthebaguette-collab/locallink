@@ -29,6 +29,50 @@ export interface RecordEvent {
  * makes a milestone mean anything outside the site. */
 export const MILESTONE_TIERS = [10, 25, 50, 100];
 
+/** Total hours across every organization. Recognition only — no single
+ * organization sponsors a cross-organization total, so there is nobody to
+ * confirm it the way a per-organization certificate is confirmed. */
+export const OVERALL_TIERS = [50, 100, 250, 500];
+
+/** Total service across every organization. Sits above the per-organization
+ * breakdown because it is the number a school asks for, and because someone
+ * spreading their time over three causes would otherwise see nothing here
+ * at all. */
+export function OverallMilestones({
+  totalHours, milestones, nextTier,
+}: { totalHours: number; milestones: number[]; nextTier?: number | null }) {
+  if (!milestones.length && !nextTier) return null;
+  const prev = [...OVERALL_TIERS].reverse().find(t => totalHours >= t) ?? 0;
+  const pct = nextTier ? Math.max(2, Math.round(((totalHours - prev) / (nextTier - prev)) * 100)) : 100;
+  return (
+    <div className="rounded-2xl border border-border bg-card p-4">
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <p className="font-semibold text-foreground">Total service</p>
+          <p className="text-xs text-muted-foreground mt-0.5 tabular-nums">
+            {totalHours} hrs across every organization
+          </p>
+        </div>
+        {milestones.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {milestones.map(t => <MilestoneBadge key={t} tier={t} compact />)}
+          </div>
+        )}
+      </div>
+      {nextTier && (
+        <div className="mt-2.5">
+          <div className="h-1.5 rounded-full bg-secondary overflow-hidden">
+            <div className="h-full rounded-full bg-primary/50" style={{ width: `${pct}%` }} />
+          </div>
+          <p className="text-[11px] text-muted-foreground mt-1 tabular-nums">
+            {Math.round((nextTier - totalHours) * 10) / 10} hrs to {nextTier}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function fmtDate(d: string): string {
   // Dates are stored as plain YYYY-MM-DD. Appending a time keeps the browser
   // from reading a bare date as UTC and rendering the day before.

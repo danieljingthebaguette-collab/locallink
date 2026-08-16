@@ -261,6 +261,14 @@ try {
   db.exec('ALTER TABLE event_sessions ADD COLUMN checkinPin TEXT DEFAULT NULL');
 }
 
+// Migrate: certificate review became two stages — the organization confirms,
+// then an admin issues. Applications filed under the single-stage flow carry
+// status 'pending', which now matches neither queue: invisible to the
+// organization AND the admin, while the volunteer sees an Apply button as
+// though they never asked. Move them to the front of the new pipeline.
+// Idempotent, safe on every boot.
+db.exec("UPDATE certificate_applications SET status = 'pending_org' WHERE status = 'pending'");
+
 // Migrate: opt-in share link for a volunteer's verified record. NULL means
 // the profile is private, which is the default and stays the default —
 // this user base skews young, and a browsable directory of who volunteers

@@ -2737,6 +2737,22 @@ router.post('/api/opportunities/:id/request-hours', requireAuth, (req: AuthReque
 // hand one out for an afternoon.
 const MILESTONE_TIERS = [10, 25, 50, 100] as const;
 
+/** Total hours across every organization — a separate ladder, because the
+ * per-organization one leaves out the most common shape of all: someone who
+ * tries a few causes before settling, and has 95 real hours spread over
+ * three places while earning nothing.
+ *
+ * These are recognition only, never applied-for certificates: no single
+ * organization sponsors a cross-organization total, so there is nobody to
+ * confirm it in the way a per-organization certificate is confirmed.
+ *
+ * Set higher than the per-organization tiers deliberately. 100 is also
+ * roughly where a 16-25 year old sits for the President's Volunteer Service
+ * Award's entry level, which is the standard schools actually recognise —
+ * but nothing here claims to BE that award, which only its own certifying
+ * organizations can issue. */
+const OVERALL_TIERS = [50, 100, 250, 500] as const;
+
 /** A volunteer's verified record: what they did, who with, and when.
  *
  * Only 'credited' rows count, so nothing here is self-asserted — the same
@@ -2769,9 +2785,13 @@ function buildRecord(userId: string) {
     }))
     .sort((a, b) => b.hours - a.hours);
 
+  const totalHours = Math.round(rows.reduce((s, r) => s + r.hoursVerified, 0) * 100) / 100;
+
   return {
-    totalHours: Math.round(rows.reduce((s, r) => s + r.hoursVerified, 0) * 100) / 100,
+    totalHours,
     totalEvents: rows.length,
+    overallMilestones: OVERALL_TIERS.filter(t => totalHours >= t),
+    nextOverallTier: OVERALL_TIERS.find(t => totalHours < t) ?? null,
     orgs,
     events: rows.map(r => ({
       title: r.title, hostName: r.hostName, hostId: r.hostId,
@@ -3022,6 +3042,7 @@ router.get('/api/profile/shared/:token', (req: Request, res: Response) => {
       username: user.username,
       memberSince: user.createdAt,
       totalHours: record.totalHours,
+      overallMilestones: record.overallMilestones,
       totalEvents: record.totalEvents,
       orgs: record.orgs.map(o => ({ hostName: o.hostName, hours: o.hours, events: o.events, milestones: o.milestones })),
       events: record.events.map(e => ({ title: e.title, hostName: e.hostName, date: e.date, hours: e.hours })),

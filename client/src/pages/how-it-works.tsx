@@ -27,7 +27,7 @@ const VOLUNTEER_STEPS: Step[] = [
   { n: 4, Icon: Award, title: 'Your hours land on your profile',
     body: 'Verified by the organization, counted automatically. Check the Hours Verified tile on your Profile any time.' },
   { n: 5, Icon: Trophy, title: 'Ask for a certificate at 10, 25, 50 and 100 hours',
-    body: 'When your hours with one organization pass a milestone we\u2019ll tell you, and an Apply link appears on your profile. The organization confirms it, then LocalLink issues it \u2014 you get a printable certificate with their name on it.' },
+    body: 'Those are hours with a single organization. When you pass one we\u2019ll tell you, and an Apply link appears on your profile. That organization confirms it \u2014 the certificate carries their name \u2014 and then LocalLink issues it as a printable document. Your total across every organization is also recognised, at 50, 100, 250 and 500 hours, automatically.' },
 ];
 
 const ORG_STEPS: Step[] = [

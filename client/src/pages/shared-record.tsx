@@ -3,13 +3,14 @@ import { useParams } from 'wouter';
 import { Loader2, ShieldCheck, Printer } from 'lucide-react';
 import Logo from '@/components/Logo';
 import { Button } from '@/components/ui/button';
-import { OrgBreakdown, EventHistory, fmtDate, type RecordOrg, type RecordEvent } from '@/components/VolunteerRecord';
+import { OrgBreakdown, EventHistory, OverallMilestones, fmtDate, type RecordOrg, type RecordEvent } from '@/components/VolunteerRecord';
 
 interface SharedRecord {
   username: string;
   memberSince: string;
   totalHours: number;
   totalEvents: number;
+  overallMilestones?: number[];
   orgs: RecordOrg[];
   events: RecordEvent[];
 }
@@ -113,6 +114,13 @@ export default function SharedRecord() {
             </p>
           </div>
         </div>
+
+        {(data.overallMilestones?.length ?? 0) > 0 && (
+          <section className="mb-6">
+            <h2 className="font-heading font-bold text-lg text-foreground mb-3">Total service</h2>
+            <OverallMilestones totalHours={data.totalHours} milestones={data.overallMilestones ?? []} />
+          </section>
+        )}
 
         {data.orgs.length > 0 && (
           <section className="mb-6">

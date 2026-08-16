@@ -8,7 +8,7 @@ import { useAuthStore, useOpportunitiesStore, useFavoritesStore } from '@/lib/st
 import { User, Mail, Award, Calendar, Clock, LogOut, Loader2, Edit3, Lock, Save, X, Heart, Building2, Handshake, Bell, Camera, Link as LinkIcon, Copy, Check } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import ConfirmBubble from '@/components/ConfirmBubble';
-import { OrgBreakdown, EventHistory, type RecordOrg, type RecordEvent } from '@/components/VolunteerRecord';
+import { OrgBreakdown, EventHistory, OverallMilestones, type RecordOrg, type RecordEvent } from '@/components/VolunteerRecord';
 
 export default function Profile() {
   const [, navigate] = useLocation();
@@ -36,6 +36,7 @@ export default function Profile() {
   const [hours, setHours] = useState<number | null>(null);
   const [record, setRecord] = useState<{
     totalHours: number; totalEvents: number;
+    overallMilestones: number[]; nextOverallTier: number | null;
     orgs: RecordOrg[]; events: RecordEvent[];
   } | null>(null);
   const [shareToken, setShareToken] = useState<string | null>(null);
@@ -585,6 +586,42 @@ export default function Profile() {
             to the person who earned it — this is the part that shows the
             work: which organizations, how much with each, how close the
             next milestone is. */}
+        {/* How certificates work, stated where the badges actually are. A
+            first-time visitor's question is "what are these and how do I get
+            one" — answering it on the How It Works page only would send them
+            away from the page mid-thought. */}
+        {record && currentUser.accountType === 'volunteer' && (record.orgs.length > 0 || record.totalHours > 0) && (
+          <div className="rounded-2xl border border-border bg-secondary/30 p-5 mb-6">
+            <h3 className="font-heading font-bold text-foreground mb-1.5 flex items-center gap-2">
+              <Award className="w-4 h-4 text-primary" /> How certificates work
+            </h3>
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              Reach <span className="font-semibold text-foreground">10, 25, 50 or 100 hours with one
+              organization</span> and you can request a certificate from them. They confirm it — it
+              carries their name — and then LocalLink issues it as a printable document you can hand
+              to a school. Your <span className="font-semibold text-foreground">total across every
+              organization</span> earns recognition at 50, 100, 250 and 500 hours automatically.
+            </p>
+            <p className="text-xs text-muted-foreground leading-relaxed mt-2">
+              You can't enter your own hours — every one came from an organization — which is exactly
+              what makes a certificate worth showing.{' '}
+              <button onClick={() => navigate('/how-it-works')} className="font-semibold text-primary hover:underline">
+                Full instructions
+              </button>
+            </p>
+          </div>
+        )}
+
+        {record && record.totalHours > 0 && (
+          <div className="mb-6">
+            <OverallMilestones
+              totalHours={record.totalHours}
+              milestones={record.overallMilestones ?? []}
+              nextTier={record.nextOverallTier}
+            />
+          </div>
+        )}
+
         {record && record.orgs.length > 0 && (
           <div className="mb-6">
             <h3 className="font-heading font-bold text-lg text-foreground mb-3">Organizations you've volunteered with</h3>
