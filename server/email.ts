@@ -205,3 +205,46 @@ export async function sendEventReminderEmail(
     `Hi ${volunteerUsername},\n\nReminder: "${postTitle}" by ${orgName} is tomorrow (${dateStr}).\n\nView on LocalLink: ${APP_URL}\n\n---\nUnsubscribe from reminders: ${unsubUrl}\nNote: Important account notifications will still be sent even after unsubscribing.`
   );
 }
+
+/**
+ * The morning of the event, to volunteers who committed.
+ *
+ * Its whole job is the check-in link. A volunteer who arrives without it
+ * has to find the organizer's QR code on a table somewhere; a volunteer who
+ * has it in their inbox can check in from the door. Sent only to people who
+ * committed, because they're the ones the organization is expecting.
+ */
+export async function sendCheckInLinkEmail(
+  volunteerEmail: string, volunteerUsername: string, postTitle: string,
+  orgName: string, opportunityId: string, unsubToken: string
+): Promise<void> {
+  const unsubUrl = `${APP_URL}/api/unsubscribe?token=${unsubToken}`;
+  const checkInUrl = `${APP_URL}/checkin/${opportunityId}`;
+  const volunteerUsernameHtml = escapeHtml(volunteerUsername);
+  const postTitleHtml = escapeHtml(postTitle);
+  const orgNameHtml = escapeHtml(orgName);
+  await sendEmail(
+    volunteerEmail,
+    `Today: "${postTitle}" — your check-in link`,
+    `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:24px">
+      <h1 style="color:#6366f1;margin-bottom:4px">LocalLink</h1>
+      <h2 style="margin-top:0">You're volunteering today</h2>
+      <p>Hi ${volunteerUsernameHtml},</p>
+      <div style="background:#f5f3ff;border-left:4px solid #6366f1;border-radius:8px;padding:16px 20px;margin:20px 0">
+        <p style="margin:0;font-size:17px;font-weight:600;color:#1a1a2e">${postTitleHtml}</p>
+        <p style="margin:4px 0 0;font-size:13px;color:#555">With ${orgNameHtml}</p>
+      </div>
+      <p>Open this when you arrive to start your hours, and open it again when you leave to stop them.</p>
+      <a href="${checkInUrl}" style="display:inline-block;background:#6366f1;color:white;padding:14px 32px;border-radius:999px;text-decoration:none;font-weight:600;margin-top:8px">Check in to this event</a>
+      <p style="color:#555;font-size:13px;margin-top:20px">
+        You can also scan the QR code ${orgNameHtml} has at the event — it goes to the same place.
+        If they're using a check-in code, they'll have it on screen.
+      </p>
+      <p style="color:#aaa;font-size:11px;margin-top:28px">
+        You're receiving this because you committed to this event.<br>
+        <a href="${unsubUrl}" style="color:#aaa">Unsubscribe from event reminders</a>
+      </p>
+    </div>`,
+    `Hi ${volunteerUsername},\n\nYou're volunteering today: "${postTitle}" with ${orgName}.\n\nCheck in here when you arrive, and again when you leave:\n${checkInUrl}\n\nYou can also scan the QR code at the event — same link.\n\n---\nUnsubscribe from reminders: ${unsubUrl}`
+  );
+}

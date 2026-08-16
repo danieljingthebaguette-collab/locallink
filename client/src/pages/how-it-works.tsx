@@ -47,6 +47,7 @@ const ORG_STEPS: Step[] = [
 
 const VOLUNTEER_FAQ = [
   { q: 'My phone died and I couldn’t scan.', a: 'Open the event’s check-in page after it ends and press “I was there.” The organization gets a request and confirms your hours. It doesn’t give you hours on its own — they have to approve it.' },
+  { q: 'Where do I find the check-in link on the day?', a: 'We email it to you the morning of the event, if you committed. You can also scan the QR code the organization has there — it goes to the same place.' },
   { q: 'It’s asking for a code.', a: 'Some organizations turn on a short code that only appears on their own screen at the event. Ask whoever is running it — that’s how they make sure only people who actually showed up can check in.' },
   { q: 'I have to leave and come back.', a: 'Scan out when you go and scan in again when you return. Your hours add up across both, and any time the organization pauses the event isn’t counted.' },
   { q: 'I forgot to scan out.', a: 'Nothing breaks. Your hours close automatically when the organization ends the event. If you actually stayed longer, ask them to adjust it.' },

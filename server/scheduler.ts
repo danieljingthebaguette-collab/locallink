@@ -15,6 +15,7 @@
 import { randomUUID } from 'crypto';
 import db from './db.js';
 import { sendReopenReminderEmail } from './email.js';
+import { appLocalDay, appLocalHour } from './time.js';
 
 type SignupRow = {
   postId: string;
@@ -28,8 +29,11 @@ type SignupRow = {
 async function checkAndNotify(): Promise<void> {
   try {
     const now = new Date();
-    const day  = now.getDay();   // 0 = Sunday
-    const hour = now.getHours(); // 0–23
+    // The community's clock, not the server's. getDay()/getHours() on a UTC
+    // host made "Sunday evening" land on Sunday early afternoon for every
+    // person actually reading the email.
+    const day  = appLocalDay(now);
+    const hour = appLocalHour(now);
 
     // Only send on Sunday evenings (18:00–18:59 local server time)
     if (day !== 0 || hour !== 18) return;

@@ -261,6 +261,14 @@ try {
   db.exec('ALTER TABLE event_sessions ADD COLUMN checkinPin TEXT DEFAULT NULL');
 }
 
+// Migrate: when the morning-of check-in link was sent, so the hourly tick
+// can't mail the same person twice for one event.
+try {
+  db.prepare('SELECT checkInLinkSentAt FROM signups LIMIT 1').get();
+} catch {
+  db.exec('ALTER TABLE signups ADD COLUMN checkInLinkSentAt TEXT DEFAULT NULL');
+}
+
 // Migrate: certificate review became two stages — the organization confirms,
 // then an admin issues. Applications filed under the single-stage flow carry
 // status 'pending', which now matches neither queue: invisible to the

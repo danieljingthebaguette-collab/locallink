@@ -7,7 +7,8 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { randomUUID } from 'crypto';
-import { sendVerificationEmail, sendPasswordResetEmail, sendSignupNotificationEmail, sendPostApprovedEmail, sendPostDeniedEmail, sendEventCancelledEmail, sendEventReminderEmail } from './email.js';
+import { toAppLocalString, appLocalHour } from './time.js';
+import { sendVerificationEmail, sendPasswordResetEmail, sendSignupNotificationEmail, sendPostApprovedEmail, sendPostDeniedEmail, sendEventCancelledEmail, sendEventReminderEmail, sendCheckInLinkEmail } from './email.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -1759,8 +1760,13 @@ router.post('/api/admin/opportunities/:id/feature', requireAdmin, (req: Request,
 async function runReminderCron() {
   try {
     const now = new Date();
-    const in23h = new Date(now.getTime() + 23 * 60 * 60 * 1000).toISOString();
-    const in25h = new Date(now.getTime() + 25 * 60 * 60 * 1000).toISOString();
+    // opportunities.date is a naive local string, so the window has to be
+    // expressed the same way. Comparing it against toISOString() compared
+    // wall-clock time to UTC and sent every reminder the server's offset
+    // early — four hours, on a UTC host.
+    const in23h = toAppLocalString(new Date(now.getTime() + 23 * 60 * 60 * 1000));
+    const in25h = toAppLocalString(new Date(now.getTime() + 25 * 60 * 60 * 1000));
+    // lastReminderAt is a real instant we write ourselves, so it stays UTC.
     const twelveHoursAgo = new Date(now.getTime() - 12 * 60 * 60 * 1000).toISOString();
 
     // One-time events starting in 23-25 hours
@@ -1828,9 +1834,66 @@ async function runReminderCron() {
   }
 }
 
+/**
+ * Morning-of check-in links.
+ *
+ * The reminder above says "tomorrow"; this one carries the thing that
+ * actually matters on the day — the link that starts their hours. Without
+ * it a volunteer has to find the organizer's QR code on a table, which is
+ * the most common way hours go unrecorded.
+ *
+ * Committed volunteers only: they're who the organization is expecting, and
+ * Interested is explicitly a low-pressure bookmark that shouldn't generate
+ * mail. Deduplicated on checkInLinkSentAt, so the hourly tick can't repeat.
+ */
+/** Who should get a check-in link right now. Separated from the cron so
+ * the selection — which is where all the actual logic lives — can be
+ * checked without sending mail. */
+export function volunteersNeedingCheckInLink(now: Date = new Date()): any[] {
+  const today = toAppLocalString(now).slice(0, 10);
+  return db.prepare(`
+    SELECT o.id as oppId, o.title, o.hostName,
+           u.id as userId, u.email, u.username, u.unsubToken
+    FROM opportunities o
+    JOIN signups s ON s.opportunityId = o.id
+    JOIN users u ON u.id = s.userId
+    WHERE o.status = 'approved'
+      AND o.isRecurring = 0
+      AND o.date >= ? AND o.date <= ?
+      AND s.committedAt IS NOT NULL
+      AND s.checkInLinkSentAt IS NULL
+      AND u.emailReminders = 1
+      AND (u.banned IS NULL OR u.banned = 0)
+  `).all(today + 'T00:00', today + 'T23:59') as any[];
+}
+
+async function runCheckInLinkCron() {
+  try {
+    // 7am in the community's timezone, not the server's — the whole reason
+    // the reminder above was firing hours off.
+    if (appLocalHour() !== 7) return;
+
+    const now = new Date();
+    const rows = volunteersNeedingCheckInLink(now);
+
+    for (const row of rows) {
+      try {
+        await sendCheckInLinkEmail(row.email, row.username, row.title, row.hostName, row.oppId, row.unsubToken || '');
+        db.prepare('UPDATE signups SET checkInLinkSentAt = ? WHERE opportunityId = ? AND userId = ?')
+          .run(now.toISOString(), row.oppId, row.userId);
+        console.log(`📧 check-in link sent to ${row.email} for "${row.title}"`);
+      } catch { /* one bad address must not stop the rest */ }
+    }
+  } catch (err) {
+    console.error('[Check-in link cron] error:', err);
+  }
+}
+
 // Run immediately, then every hour
 runReminderCron();
 setInterval(runReminderCron, 60 * 60 * 1000);
+runCheckInLinkCron();
+setInterval(runCheckInLinkCron, 60 * 60 * 1000);
 
 // ===== JOIN LINKS (public) =====
 
