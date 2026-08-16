@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { useParams } from 'wouter';
-import { Loader2, Printer, Award } from 'lucide-react';
+import { useParams, useLocation } from 'wouter';
+import { Loader2, Printer, Award, X } from 'lucide-react';
 import Logo from '@/components/Logo';
 import { Button } from '@/components/ui/button';
+import { hasAppHistory } from '@/lib/history';
 
 interface Certificate {
   id: string;
@@ -21,11 +22,39 @@ interface Certificate {
  * LocalLink only sits in the footer as the issuer of record. */
 export default function CertificatePage() {
   const params = useParams<{ id: string }>();
+  const [, navigate] = useLocation();
   const [cert, setCert] = useState<Certificate | null>(null);
   const [loading, setLoading] = useState(true);
   // 410 means it was genuinely issued and has since been retired, which is a
   // different thing to say than "this link was never real".
   const [retired, setRetired] = useState(false);
+
+  /** Leaving.
+   *
+   * This page renders without site navigation, so without an explicit exit
+   * the only way out is the browser's own back button — and a volunteer who
+   * tapped "View" from their profile has no way back to it.
+   *
+   * Two audiences, two right answers. Someone who arrived from inside the
+   * site should land back where they were, so history.back() returns them to
+   * the exact scroll position on their profile. Someone who opened the link
+   * directly has nothing behind them but the blank page the tab started on,
+   * and back would drop them off the site entirely — verified, it really
+   * does — so they go to the board instead. */
+  const close = () => {
+    if (hasAppHistory()) window.history.back();
+    else navigate('/');
+  };
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      // Not while a print dialog or some other overlay owns the keyboard.
+      if (e.key === 'Escape' && !e.defaultPrevented) close();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -55,11 +84,15 @@ export default function CertificatePage() {
           <p className="font-heading font-bold text-xl text-foreground mb-2">
             {retired ? 'This certificate is no longer valid' : 'No certificate here'}
           </p>
-          <p className="text-muted-foreground text-sm">
+          <p className="text-muted-foreground text-sm mb-6">
             {retired
               ? 'It was issued, but the organization has since adjusted the hours behind it. Contact the organization if you think that\u2019s a mistake.'
               : "This certificate hasn't been issued, or the link is wrong."}
           </p>
+          {/* A dead end needs an exit more than a working page does. */}
+          <Button onClick={close} variant="outline" className="rounded-full px-6">
+            <X className="w-4 h-4 mr-1.5" /> Close
+          </Button>
         </div>
       </div>
     );
@@ -71,7 +104,11 @@ export default function CertificatePage() {
 
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4 print:p-0 print:block">
-      <div className="w-full max-w-3xl flex justify-end mb-4 print:hidden">
+      {/* Close on the left, actions on the right — and both gone on paper. */}
+      <div className="w-full max-w-3xl flex items-center justify-between gap-3 mb-4 print:hidden">
+        <Button onClick={close} variant="outline" size="sm" className="rounded-full text-xs" aria-label="Close certificate">
+          <X className="w-3.5 h-3.5 mr-1.5" /> Close
+        </Button>
         <Button onClick={() => window.print()} variant="outline" size="sm" className="rounded-full text-xs">
           <Printer className="w-3.5 h-3.5 mr-1.5" /> Print
         </Button>

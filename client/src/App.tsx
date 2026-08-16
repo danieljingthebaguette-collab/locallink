@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { Switch, Route, useLocation } from "wouter";
 import { MotionConfig } from "framer-motion";
 import { queryClient } from "./lib/queryClient";
@@ -6,6 +6,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import Navigation from "@/components/Navigation";
 import FeedbackButton from "@/components/FeedbackButton";
+import { noteAppNavigation } from "@/lib/history";
 import Home from "@/pages/home";
 import MyEvents from "@/pages/my-events";
 import About from "@/pages/about";
@@ -37,6 +38,19 @@ function ScrollToTop() {
   const [pathname] = useLocation();
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
+  }, [pathname]);
+  return null;
+}
+
+/** Records that the visitor moved between pages inside the app, so
+ * chromeless pages know whether "back" leads anywhere of ours. The first
+ * render is the arrival itself, not a navigation. */
+function TrackNavigation() {
+  const [pathname] = useLocation();
+  const isFirst = useRef(true);
+  useEffect(() => {
+    if (isFirst.current) { isFirst.current = false; return; }
+    noteAppNavigation();
   }, [pathname]);
   return null;
 }
@@ -92,6 +106,7 @@ function App() {
           animation on the site, so it doesn't have to be handled per component. */}
       <MotionConfig reducedMotion="user">
         <ScrollToTop />
+        <TrackNavigation />
         <Toaster />
         {!isDocument && <Navigation />}
         <Router />

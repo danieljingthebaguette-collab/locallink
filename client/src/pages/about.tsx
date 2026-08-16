@@ -1,4 +1,4 @@
-import { useLocation } from 'wouter';
+import { useLocation, Link } from 'wouter';
 import { Heart, Users, MapPin, Star, Mail, Globe } from 'lucide-react';
 import Logo from '@/components/Logo';
 
@@ -103,9 +103,9 @@ export default function About() {
           {/* About explains what LocalLink is; the instructions page explains
               how to actually run an event. Send people there rather than
               duplicating steps that would drift out of sync. */}
-          <a href="/how-it-works" className="inline-block text-sm font-semibold text-primary hover:underline pt-2">
+          <Link href="/how-it-works" className="inline-block text-sm font-semibold text-primary hover:underline pt-2">
             Step-by-step instructions for volunteers and organizations →
-          </a>
+          </Link>
         </section>
 
         {/* Contact */}

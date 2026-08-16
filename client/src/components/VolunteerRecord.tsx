@@ -1,4 +1,5 @@
 import { Award, Building2, Calendar, Check } from 'lucide-react';
+import { Link } from 'wouter';
 import { cn } from '@/lib/utils';
 
 export interface CertificateState {
@@ -154,7 +155,7 @@ export function OrgBreakdown({
                       <div key={tier} className="flex items-center gap-2 text-xs">
                         <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
                         <span className="text-muted-foreground">{tier}-hour certificate issued</span>
-                        <a href={`/certificate/${cert.id}`} className="font-semibold text-primary hover:underline">View</a>
+                        <Link href={`/certificate/${cert.id}`} className="font-semibold text-primary hover:underline">View</Link>
                       </div>
                     );
                   }
