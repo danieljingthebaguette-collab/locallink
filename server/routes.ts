@@ -731,12 +731,39 @@ router.post('/api/opportunities/:id/signup/commit', requireAuth, (req: AuthReque
       }
     }
 
+    // Committing tells the organization to expect this person, which is only
+    // true if they also did what that organization actually requires —
+    // registering on its own site, signing a waiver, emailing a coordinator.
+    // Being on LocalLink's roster while absent from theirs is the worst
+    // outcome for both sides, so when an event carries steps or a sign-up
+    // link, the commit doesn't land until the volunteer confirms.
+    //
+    // This records a confirmation, not proof: nothing here can verify a form
+    // was filled in on someone else's website. What it does guarantee is that
+    // the steps were put in front of them and they answered.
+    let steps: string[] = [];
+    try { steps = JSON.parse(opp.steps || '[]'); } catch { steps = []; }
+    const needsAcknowledgement = steps.length > 0 || !!opp.externalSignupUrl;
+    const acknowledged = (req.body || {}).acknowledgedSteps === true;
+    if (needsAcknowledgement && !acknowledged) {
+      return res.status(428).json({
+        error: `${opp.hostName} asks volunteers to complete a few steps before joining their list.`,
+        stepsRequired: true,
+        steps,
+        externalSignupUrl: opp.externalSignupUrl || null,
+      });
+    }
+
     const now = new Date().toISOString();
+    const ackAt = needsAcknowledgement ? now : null;
     const existing = db.prepare('SELECT * FROM signups WHERE opportunityId = ? AND userId = ?').get(oppId, userId) as any;
     if (existing) {
-      if (!existing.committedAt) db.prepare('UPDATE signups SET committedAt = ? WHERE id = ?').run(now, existing.id);
+      if (!existing.committedAt) {
+        db.prepare('UPDATE signups SET committedAt = ?, stepsAcknowledgedAt = ? WHERE id = ?').run(now, ackAt, existing.id);
+      }
     } else {
-      db.prepare('INSERT INTO signups (opportunityId, userId, committedAt, createdAt) VALUES (?, ?, ?, ?)').run(oppId, userId, now, now);
+      db.prepare('INSERT INTO signups (opportunityId, userId, committedAt, stepsAcknowledgedAt, createdAt) VALUES (?, ?, ?, ?, ?)')
+        .run(oppId, userId, now, ackAt, now);
       db.prepare('UPDATE opportunities SET popularity = popularity + 1 WHERE id = ?').run(oppId);
     }
 
@@ -2240,7 +2267,7 @@ function getMergedRoster(oppId: string, occurrenceDate: string, session: any, li
   // was credited, and only the organizer can know.
   const endedAtIso = session && sessionRanAndEnded ? new Date(sessionEndedAt(session)).toISOString() : null;
   const rows = db.prepare(
-    `SELECT u.id as userId, u.username, u.email, u.birthYear, s.committedAt,
+    `SELECT u.id as userId, u.username, u.email, u.birthYear, s.committedAt, s.stepsAcknowledgedAt,
             a.id as attendanceId, a.checkInAt, a.checkOutAt, a.hoursClaimed, a.hoursVerified, a.status as attStatus, a.note, a.hoursLocked
      FROM signups s
      JOIN users u ON u.id = s.userId

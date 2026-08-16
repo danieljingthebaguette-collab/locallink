@@ -22,6 +22,7 @@ interface RosterRow {
   cutShort: boolean;
   overListed: boolean;
   isMinor: boolean | null;
+  stepsAcknowledgedAt: string | null;
   status: RowStatus;
 }
 
@@ -515,7 +516,9 @@ export default function Tracker() {
                       <p className="text-xs text-muted-foreground">
                         {r.status === 'here' && `${r.hoursNow} hrs so far · in at ${fmtTime(r.checkInAt)}`}
                         {r.status === 'left' && `${r.hoursVerified ?? r.hoursClaimed ?? 0} hrs · ${fmtTime(r.checkInAt)}–${fmtTime(r.checkOutAt)}`}
-                        {r.status === 'coming' && 'Hasn’t checked in yet'}
+                        {r.status === 'coming' && (r.stepsAcknowledgedAt
+                          ? 'Confirmed your sign-up steps · hasn’t checked in yet'
+                          : 'Hasn’t checked in yet')}
                         {r.status === 'no_show' && 'Never checked in'}
                         {r.status === 'rejected' && 'Hours removed'}
                         {r.status === 'requested' && `Didn’t scan — asking you to confirm ${opp.duration} hrs`}

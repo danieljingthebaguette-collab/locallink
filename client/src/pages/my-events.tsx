@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { MapPin, Clock, Users, Calendar, XCircle, Loader2, Edit3, Trash2, ChevronUp, X, Save, Upload, Plus, ClipboardList, Check, Award } from 'lucide-react';
 import CreatePostModal from '@/components/CreatePostModal';
+import CommitDialog from '@/components/CommitDialog';
 import CropEditor, {
   type ImageTransform,
   DEFAULT_TRANSFORM,
@@ -70,6 +71,7 @@ export default function MyEvents() {
   const [committingId, setCommittingId] = useState<string | null>(null);
   const [certRequests, setCertRequests] = useState<any[]>([]);
   const [certActingId, setCertActingId] = useState<string | null>(null);
+  const [commitGate, setCommitGate] = useState<{ opp: Opportunity; steps: string[]; externalSignupUrl: string | null } | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmCancel, setConfirmCancel] = useState<Opportunity | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<Opportunity | null>(null);
@@ -203,11 +205,19 @@ export default function MyEvents() {
   // organization's Tracker roster. Toggled right from the same card,
   // anytime, no confirmation dialog — the user's answer was "anytime, the
   // org just sees the change," so there's nothing here worth a modal for.
-  const handleToggleCommit = async (opp: Opportunity, next: boolean) => {
+  const handleToggleCommit = async (opp: Opportunity, next: boolean, acknowledged = false) => {
     setCommittingId(opp.id);
     try {
-      const success = next ? await commit(opp.id) : await cancelCommit(opp.id);
-      if (success) {
+      const result = next ? await commit(opp.id, acknowledged) : await cancelCommit(opp.id);
+      // The organization runs its own sign-up — show it before putting this
+      // person on a list they aren't actually on.
+      if (result && typeof result === 'object' && (result as any).needsSteps) {
+        const r = result as any;
+        setCommitGate({ opp, steps: r.steps, externalSignupUrl: r.externalSignupUrl });
+        return;
+      }
+      if (result) {
+        setCommitGate(null);
         toast({ title: next ? "You're committed" : 'Commitment removed', description: next ? "You're on the organizer's list for this event." : undefined });
       } else {
         toast({ title: 'Error', description: 'Something went wrong.', variant: 'destructive' });
@@ -709,6 +719,17 @@ export default function MyEvents() {
 
       {/* Create Post Modal */}
       <CreatePostModal open={showCreateModal} onClose={() => setShowCreateModal(false)} />
+
+      {/* Stands between "I'd like to go" and the organization's roster. */}
+      <CommitDialog
+        open={!!commitGate}
+        orgName={commitGate?.opp.hostName ?? 'the organization'}
+        steps={commitGate?.steps ?? []}
+        externalSignupUrl={commitGate?.externalSignupUrl}
+        submitting={!!committingId}
+        onConfirm={() => commitGate && handleToggleCommit(commitGate.opp, true, true)}
+        onCancel={() => setCommitGate(null)}
+      />
 
       {/* Delete hosted event confirmation */}
       <AlertDialog open={!!confirmDelete} onOpenChange={(open) => !open && setConfirmDelete(null)}>

@@ -12,6 +12,7 @@ import { getCategoryColor, getModalGradient, getCategoryBorder, getCategoryLabel
 import { useAuthStore, useOpportunitiesStore, useFavoritesStore, getRecurringStatus } from '@/lib/store';
 import { CATEGORIES, TOWNS, type Category, type Opportunity } from '@/lib/mockData';
 import CreatePostModal from '@/components/CreatePostModal';
+import CommitDialog from '@/components/CommitDialog';
 import ConfirmBubble from '@/components/ConfirmBubble';
 import { useScrolled } from '@/hooks/use-scrolled';
 import { VerifiedBadge } from '@/components/VerifiedBadge';
@@ -116,6 +117,8 @@ export default function Home() {
   const [hostProfileLoading, setHostProfileLoading] = useState(false);
   const [signingUp, setSigningUp] = useState(false);
   const [showInterestBurst, setShowInterestBurst] = useState(false);
+  // Set when the server says the organization requires its own sign-up first.
+  const [commitGate, setCommitGate] = useState<{ oppId: string; steps: string[]; externalSignupUrl: string | null } | null>(null);
   const prefersReducedMotion = useReducedMotion();
   // Host "view interested" list — fetched on demand, not preloaded with the board
   const [showInterestedList, setShowInterestedList] = useState(false);
@@ -340,12 +343,22 @@ export default function Home() {
 
   // ── Commit / uncommit — the step beyond Interested that puts a volunteer
   // on the org's Tracker roster ───────────────────────────────────────
-  const handleCommit = async (oppId: string) => {
+  const handleCommit = async (oppId: string, acknowledged = false) => {
     setSigningUp(true);
     try {
-      const success = await commit(oppId);
-      if (success) toast({ title: "You're committed ✓", description: "You're on the organizer's list for this event." });
-      else toast({ title: 'Could not commit', description: 'Try again in a moment.' });
+      const result = await commit(oppId, acknowledged);
+      // The organization has its own sign-up. Show it rather than quietly
+      // adding someone to a list they aren't really on.
+      if (result && typeof result === 'object' && result.needsSteps) {
+        setCommitGate({ oppId, steps: result.steps, externalSignupUrl: result.externalSignupUrl });
+        return;
+      }
+      if (result) {
+        setCommitGate(null);
+        toast({ title: "You're committed ✓", description: "You're on the organizer's list for this event." });
+      } else {
+        toast({ title: 'Could not commit', description: 'Try again in a moment.' });
+      }
       const fresh = useOpportunitiesStore.getState().opportunities.find(o => o.id === oppId);
       if (fresh) setSelectedCard(fresh); else setSelectedCard(null);
     } finally { setSigningUp(false); }
@@ -1575,6 +1588,17 @@ export default function Home() {
         onDestructive={closeModalNow}
         cancelLabel="Keep editing"
         onCancel={() => setShowDiscardEdits(false)}
+      />
+
+      {/* Stands between "I'd like to go" and the organization's roster. */}
+      <CommitDialog
+        open={!!commitGate}
+        orgName={selectedCard?.hostName ?? 'the organization'}
+        steps={commitGate?.steps ?? []}
+        externalSignupUrl={commitGate?.externalSignupUrl}
+        submitting={signingUp}
+        onConfirm={() => commitGate && handleCommit(commitGate.oppId, true)}
+        onCancel={() => setCommitGate(null)}
       />
     </div>
   );

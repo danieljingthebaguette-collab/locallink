@@ -232,7 +232,9 @@ interface OpportunitiesState {
   deleteOwnOpportunity: (oppId: string) => Promise<boolean>;
   signup: (oppId: string, userId: string) => Promise<boolean>;
   cancelSignup: (oppId: string, userId: string) => Promise<boolean>;
-  commit: (oppId: string) => Promise<boolean>;
+  /** Returns 'needs-steps' with the organization's requirements when the
+   *  event has sign-up steps the volunteer hasn't confirmed yet. */
+  commit: (oppId: string, acknowledgedSteps?: boolean) => Promise<true | false | { needsSteps: true; steps: string[]; externalSignupUrl: string | null }>;
   cancelCommit: (oppId: string) => Promise<boolean>;
   getSignedUpEvents: (userId: string) => Opportunity[];
   getHostedEvents: (userId: string) => Opportunity[];
@@ -447,12 +449,19 @@ export const useOpportunitiesStore = create<OpportunitiesState>((set, get) => ({
   // The step beyond Interested — this is what puts someone on the org's
   // Tracker roster. Mirrors signup/cancelSignup exactly; the server creates
   // the underlying Interested signup too if one doesn't exist yet.
-  commit: async (oppId) => {
+  commit: async (oppId, acknowledgedSteps = false) => {
     try {
       const res = await fetch(`${API}/opportunities/${oppId}/signup/commit`, {
         method: 'POST',
         headers: getAuthHeaders(),
+        body: JSON.stringify({ acknowledgedSteps }),
       });
+      // 428 Precondition Required — the organization has steps this volunteer
+      // hasn't confirmed. Hand them back so the caller can show them.
+      if (res.status === 428) {
+        const d = await res.json().catch(() => ({}));
+        return { needsSteps: true as const, steps: d.steps || [], externalSignupUrl: d.externalSignupUrl ?? null };
+      }
       if (res.ok) {
         const oppRes = await fetch(`${API}/opportunities/${oppId}`, { headers: getAuthHeaders() });
         if (oppRes.ok) {

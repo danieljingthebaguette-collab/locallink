@@ -261,6 +261,17 @@ try {
   db.exec('ALTER TABLE event_sessions ADD COLUMN checkinPin TEXT DEFAULT NULL');
 }
 
+// Migrate: when the volunteer confirmed they'd completed the organization's
+// own sign-up steps. Committing means "expect me", which is only true if
+// they also did whatever that organization requires — registering on their
+// site, signing a waiver, emailing a coordinator. Recording the moment gives
+// the organization something to point at when someone turns up unregistered.
+try {
+  db.prepare('SELECT stepsAcknowledgedAt FROM signups LIMIT 1').get();
+} catch {
+  db.exec('ALTER TABLE signups ADD COLUMN stepsAcknowledgedAt TEXT DEFAULT NULL');
+}
+
 // Migrate: when the morning-of check-in link was sent, so the hourly tick
 // can't mail the same person twice for one event.
 try {
