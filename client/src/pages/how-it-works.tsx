@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/lib/store';
 import {
   Search, Check, QrCode, Award, Plus, Users, Play, Download, Trophy,
-  HelpCircle, Clock, Pause, ShieldCheck,
+  HelpCircle, Clock, Pause, ShieldCheck, Mail,
 } from 'lucide-react';
 
 type Role = 'volunteer' | 'organization';
@@ -179,6 +179,25 @@ export default function HowItWorks() {
               </details>
             ))}
           </div>
+        </section>
+
+        {/* A real person to reach when the instructions run out. Organizations
+            hit trouble mid-event — the code won't scan, hours look wrong, an
+            application is stuck — and at that moment a FAQ is not enough. */}
+        <section className="rounded-2xl border border-border bg-card p-5 mb-8">
+          <h2 className="font-heading font-bold text-base text-foreground mb-1">Still stuck?</h2>
+          <p className="text-sm text-muted-foreground leading-relaxed mb-3">
+            {role === 'organization'
+              ? 'If something goes wrong before or during an event — the code will not scan, hours look wrong, a certificate request is stuck — email us and we will sort it out.'
+              : 'If your hours are missing or wrong and the organization cannot fix it, email us.'}
+          </p>
+          <a
+            href="mailto:linklocal2@gmail.com"
+            className="inline-flex items-center gap-2 rounded-full bg-primary text-primary-foreground px-5 py-2.5 text-sm font-semibold hover:bg-primary/90 transition-colors"
+          >
+            <Mail className="w-4 h-4" />
+            linklocal2@gmail.com
+          </a>
         </section>
 
         <div className="flex flex-wrap gap-3">

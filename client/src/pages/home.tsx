@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'wouter';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { cn, getLocationError, getExternalSignupUrlError } from '@/lib/utils';
-import { Plus, MapPin, Users, Clock, Search, Loader2, Heart, Flag, X, Share2, Edit3, Save, ChevronDown, Star, Trash2, Repeat, Check } from 'lucide-react';
+import { Plus, MapPin, Users, Clock, Search, Loader2, Heart, Flag, X, Share2, Edit3, Save, ChevronDown, Star, Trash2, Repeat, Check, Globe, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -25,7 +25,7 @@ import CropEditor, {
 } from '@/components/CropEditor';
 
 // Module-level cache so host profile images survive re-renders and modal re-opens
-const hostProfileCache = new Map<string, { profileImage: string | null }>();
+const hostProfileCache = new Map<string, { profileImage: string | null; orgWebsite: string | null }>();
 
 const SORT_OPTIONS: { value: 'newest' | 'oldest' | 'soonest' | 'popular'; label: string }[] = [
   { value: 'newest',  label: 'Newest' },
@@ -113,7 +113,7 @@ export default function Home() {
 
   // Card / modal state
   const [selectedCard, setSelectedCard] = useState<Opportunity | null>(null);
-  const [hostProfile, setHostProfile] = useState<{ profileImage: string | null } | null>(null);
+  const [hostProfile, setHostProfile] = useState<{ profileImage: string | null; orgWebsite: string | null } | null>(null);
   const [hostProfileLoading, setHostProfileLoading] = useState(false);
   const [signingUp, setSigningUp] = useState(false);
   const [showInterestBurst, setShowInterestBurst] = useState(false);
@@ -205,7 +205,9 @@ export default function Home() {
     fetch(`/api/users/${selectedCard.hostId}/profile`)
       .then(r => r.ok ? r.json() : null)
       .then(data => {
-        const profile = data ? { profileImage: data.profileImage || null } : { profileImage: null };
+        const profile = data
+          ? { profileImage: data.profileImage || null, orgWebsite: data.orgWebsite || null }
+          : { profileImage: null, orgWebsite: null };
         hostProfileCache.set(selectedCard.hostId, profile);
         setHostProfile(profile);
       })
@@ -231,7 +233,9 @@ export default function Home() {
           if (!r.ok) return [id, null] as const;
           const d = await r.json();
           const img = d.profileImage || null;
-          hostProfileCache.set(id, { profileImage: img });
+          // Same shape the modal expects — a board prefetch must not poison the
+          // cache with a half-filled entry that then hides the website link.
+          hostProfileCache.set(id, { profileImage: img, orgWebsite: d.orgWebsite || null });
           return [id, img] as const;
         } catch { return [id, null] as const; }
       }));
@@ -1356,6 +1360,36 @@ export default function Home() {
                   className="bg-white/15 backdrop-blur-md rounded-2xl p-6 border border-white/20 space-y-3">
                   <h3 className="text-sm font-bold tracking-widest uppercase opacity-75">About This Opportunity</h3>
                   <p className="text-white/95 leading-relaxed text-base">{selectedCard.description}</p>
+
+                  {/* Both links, when each exists — they answer different questions.
+                      The organization's site is "who are these people"; the signup
+                      page is "what do I have to do before turning up". Shown here
+                      rather than only after committing, because that is the moment
+                      someone is deciding whether to. */}
+                  {(hostProfile?.orgWebsite || selectedCard.externalSignupUrl) && (
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      {hostProfile?.orgWebsite && (
+                        <a
+                          href={hostProfile.orgWebsite}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 rounded-full bg-white/20 hover:bg-white/30 transition-colors px-3.5 py-2 text-sm font-semibold text-white">
+                          <Globe className="w-3.5 h-3.5" />
+                          {selectedCard.hostName}'s website
+                        </a>
+                      )}
+                      {selectedCard.externalSignupUrl && (
+                        <a
+                          href={selectedCard.externalSignupUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 rounded-full bg-white/20 hover:bg-white/30 transition-colors px-3.5 py-2 text-sm font-semibold text-white">
+                          <ExternalLink className="w-3.5 h-3.5" />
+                          Sign-up page
+                        </a>
+                      )}
+                    </div>
+                  )}
                 </motion.div>
 
                 {/* Tags */}

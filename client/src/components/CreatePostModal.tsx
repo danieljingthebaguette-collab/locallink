@@ -101,6 +101,7 @@ interface PostDraft {
   recurringDay: number;
   recurringTime: string;
   steps: string[];
+  hasSignupPage: boolean | null;
 }
 
 function readDraft(): PostDraft | null {
@@ -188,6 +189,8 @@ export default function CreatePostModal({ open, onClose }: Props) {
   const [recurringDay, setRecurringDay] = useState(1);   // default: Monday
   const [recurringTime, setRecurringTime] = useState('12:00');
   const [steps, setSteps] = useState<string[]>(['']);
+  // null, not false: "no" is an answer the organizer has to actually give.
+  const [hasSignupPage, setHasSignupPage] = useState<boolean | null>(null);
   const [formData, setFormData] = useState({
     title: '', description: '', location: '', town: '', date: '', duration: 2, spots: 20, externalSignupUrl: '',
   });
@@ -239,6 +242,7 @@ export default function CreatePostModal({ open, onClose }: Props) {
     setRecurringDay(1);
     setRecurringTime('12:00');
     setSteps(['']);
+    setHasSignupPage(null);
     setShowCloseConfirm(false);
     onClose();
   };
@@ -266,7 +270,7 @@ export default function CreatePostModal({ open, onClose }: Props) {
     const draft: PostDraft = {
       savedAt: Date.now(),
       createStep, selectedType, selectedTags, formData,
-      spotsType, isRecurring, recurringDay, recurringTime, steps,
+      spotsType, isRecurring, recurringDay, recurringTime, steps, hasSignupPage,
     };
     try {
       localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
@@ -298,6 +302,7 @@ export default function CreatePostModal({ open, onClose }: Props) {
     setRecurringDay(d.recurringDay);
     setRecurringTime(d.recurringTime);
     setSteps(d.steps);
+    setHasSignupPage(d.hasSignupPage ?? null);
     setPendingDraft(null);
   };
 
@@ -333,6 +338,7 @@ export default function CreatePostModal({ open, onClose }: Props) {
     if (!file) return;
     setImageFile(file);
     setImagePreview(URL.createObjectURL(file));
+    setFormErrors(prev => ({ ...prev, image: '' }));
   };
 
   const clearImage = () => {
@@ -351,6 +357,11 @@ export default function CreatePostModal({ open, onClose }: Props) {
       if (locationError) errors.location = locationError;
     }
     if (!formData.town) errors.town = 'Please select a town';
+    if (!imageFile && !imagePreview) errors.image = 'A photo is required';
+    if (hasSignupPage === null) errors.hasSignupPage = 'Please answer yes or no';
+    if (hasSignupPage === true && !formData.externalSignupUrl.trim()) {
+      errors.externalSignupUrl = 'Add the link volunteers should register on';
+    }
     if (formData.externalSignupUrl.trim()) {
       const signupUrlError = getExternalSignupUrlError(formData.externalSignupUrl);
       if (signupUrlError) errors.externalSignupUrl = signupUrlError;
@@ -611,17 +622,32 @@ export default function CreatePostModal({ open, onClose }: Props) {
                         <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                           <p className="text-white font-semibold text-sm">Click to change image</p>
                         </div>
+                        {/* Bottom-LEFT, and labelled. This used to be a bare X at
+                            top-3 right-3, four pixels from the modal's own close X
+                            at top-4 right-4 — two 28px targets overlapping by 24px,
+                            with close painting on top because it comes later in the
+                            DOM. So the X you could actually hit threw away the whole
+                            post rather than the photo. Two destructive actions of
+                            different scope must not share a corner. */}
                         <button onClick={e => { e.stopPropagation(); clearImage(); }}
-                          className="absolute top-3 right-3 bg-black/60 rounded-full p-1.5 text-white hover:bg-black/80 transition-colors">
-                          <X className="w-4 h-4" />
+                          className="absolute bottom-3 left-3 bg-black/60 rounded-full pl-2 pr-3 py-1.5 text-white text-xs font-semibold hover:bg-black/80 transition-colors inline-flex items-center gap-1.5">
+                          <X className="w-3.5 h-3.5" />
+                          Remove photo
                         </button>
                       </>
                     ) : (
-                      <div className="absolute inset-0 bg-black/20 flex flex-col items-center justify-center gap-3 group-hover:bg-black/30 transition-colors">
+                      <div className={cn(
+                        "absolute inset-0 flex flex-col items-center justify-center gap-3 transition-colors",
+                        formErrors.image
+                          ? "bg-red-900/40 ring-2 ring-inset ring-red-400"
+                          : "bg-black/20 group-hover:bg-black/30"
+                      )}>
                         <Upload className="w-12 h-12 text-white/70 group-hover:text-white transition-colors" />
                         <div className="text-center">
-                          <p className="font-semibold text-white text-sm tracking-widest uppercase opacity-75">Add a Photo</p>
-                          <p className="text-white/60 text-xs mt-1">Click to upload (optional)</p>
+                          <p className="font-semibold text-white text-sm tracking-widest uppercase opacity-75">Add a Photo *</p>
+                          <p className={cn("text-xs mt-1", formErrors.image ? "text-red-100 font-semibold" : "text-white/60")}>
+                            {formErrors.image || 'Click to upload'}
+                          </p>
                         </div>
                       </div>
                     )}
@@ -851,17 +877,53 @@ export default function CreatePostModal({ open, onClose }: Props) {
                       {formErrors.steps && <p className="text-red-200 text-xs">{formErrors.steps}</p>}
                     </div>
 
-                    {/* External signup — org's own registration page, if they use one */}
-                    <div className="bg-white/15 backdrop-blur-md rounded-2xl p-4 border border-white/20 space-y-2">
-                      <label htmlFor="createpostmodal-field" className="text-xs font-bold tracking-widest uppercase opacity-75 block">
-                        Signup page (optional)
-                      </label>
-                      <p className="text-white/60 text-xs">If volunteers need to register on your own site.</p>
-                      <Input id="createpostmodal-field" placeholder="https://your-site.org/signup"
-                        value={formData.externalSignupUrl}
-                        onChange={e => { setFormData({ ...formData, externalSignupUrl: e.target.value }); setFormErrors({ ...formErrors, externalSignupUrl: '' }); }}
-                        className={cn("rounded-xl bg-white/80 text-foreground border-0 text-sm h-9", formErrors.externalSignupUrl && "ring-2 ring-red-400")} />
-                      {formErrors.externalSignupUrl && <p className="text-red-200 text-xs">{formErrors.externalSignupUrl}</p>}
+                    {/* External signup. Asked as a question with no default rather
+                        than left as a blank optional box: plenty of organizations
+                        genuinely have no signup page, and the ones that DO were
+                        skipping the field and stranding volunteers who thought
+                        committing here was enough. Answering is required; giving a
+                        URL is required only if the answer is yes. */}
+                    <div className="bg-white/15 backdrop-blur-md rounded-2xl p-4 border border-white/20 space-y-3">
+                      <p className="text-xs font-bold tracking-widest uppercase opacity-75">
+                        Do volunteers register on your own site? *
+                      </p>
+                      <div className="flex gap-2">
+                        <button type="button"
+                          onClick={() => { setHasSignupPage(true); setFormErrors({ ...formErrors, hasSignupPage: '' }); }}
+                          className={cn("flex-1 h-10 rounded-full text-sm font-semibold transition-colors",
+                            hasSignupPage === true ? "bg-white text-primary" : "bg-white/15 text-white hover:bg-white/25")}>
+                          Yes
+                        </button>
+                        <button type="button"
+                          onClick={() => {
+                            setHasSignupPage(false);
+                            setFormData(f => ({ ...f, externalSignupUrl: '' }));
+                            setFormErrors({ ...formErrors, hasSignupPage: '', externalSignupUrl: '' });
+                          }}
+                          className={cn("flex-1 h-10 rounded-full text-sm font-semibold transition-colors",
+                            hasSignupPage === false ? "bg-white text-primary" : "bg-white/15 text-white hover:bg-white/25")}>
+                          No
+                        </button>
+                      </div>
+                      {formErrors.hasSignupPage && <p className="text-red-200 text-xs">{formErrors.hasSignupPage}</p>}
+
+                      {hasSignupPage === true && (
+                        <div className="space-y-2 pt-1">
+                          <label htmlFor="createpostmodal-field" className="text-xs font-bold tracking-widest uppercase opacity-75 block">
+                            Signup page *
+                          </label>
+                          <Input id="createpostmodal-field" placeholder="https://your-site.org/signup"
+                            value={formData.externalSignupUrl}
+                            onChange={e => { setFormData({ ...formData, externalSignupUrl: e.target.value }); setFormErrors({ ...formErrors, externalSignupUrl: '' }); }}
+                            className={cn("rounded-xl bg-white/80 text-foreground border-0 text-sm h-9", formErrors.externalSignupUrl && "ring-2 ring-red-400")} />
+                          {formErrors.externalSignupUrl && <p className="text-red-200 text-xs">{formErrors.externalSignupUrl}</p>}
+                        </div>
+                      )}
+                      {hasSignupPage === false && (
+                        <p className="text-white/60 text-xs">
+                          Volunteers will just commit here — nothing else to do before the event.
+                        </p>
+                      )}
                     </div>
 
                     <div className="bg-white/15 backdrop-blur-md rounded-2xl p-4 border border-white/20 text-center">

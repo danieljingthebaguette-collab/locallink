@@ -519,10 +519,17 @@ router.put('/api/auth/profile', requireAuth, async (req: AuthRequest, res: Respo
 router.get('/api/users/:id/profile', (req: Request, res: Response) => {
   try {
     const user = db.prepare(
-      'SELECT username, profileImage FROM users WHERE id = ?'
+      'SELECT username, profileImage, accountType, orgWebsite FROM users WHERE id = ?'
     ).get(req.params.id) as any;
     if (!user) return res.status(404).json({ error: 'User not found' });
-    return res.json({ username: user.username, profileImage: user.profileImage || null });
+    // orgWebsite only for organizations — it is already public on their own
+    // profile page, but this endpoint answers for volunteers too and their
+    // row should not start carrying fields that only mean something for orgs.
+    return res.json({
+      username: user.username,
+      profileImage: user.profileImage || null,
+      orgWebsite: user.accountType === 'organization' ? (user.orgWebsite || null) : null,
+    });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }

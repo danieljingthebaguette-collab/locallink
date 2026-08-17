@@ -450,7 +450,11 @@ export default function Tracker() {
                     that rather than rendering an em dash. */}
                 {session.status === 'running' && <p className="text-sm text-foreground">Started {fmtTime(session.startedAt ?? session.autoStartAt)} · auto-stops {fmtTime(session.autoStopAt)}</p>}
                 {session.status === 'paused' && <p className="text-sm text-foreground">Paused — volunteers' clocks are on hold</p>}
-                {session.status === 'stopped' && <p className="text-sm text-foreground">Ended {fmtTime(session.stoppedAt)}</p>}
+                {/* Same fallback as the running line above: a session that ends by
+                    auto-stop never writes stoppedAt, which is the COMMON case since
+                    most organizers never press Stop. Without this it rendered
+                    "Ended —" — a sentence that looks cut off. */}
+                {session.status === 'stopped' && <p className="text-sm text-foreground">Ended {fmtTime(session.stoppedAt ?? session.autoStopAt)}</p>}
                 <p className="text-xs text-muted-foreground mt-1">Volunteers scan this to check in and out. Print it or pull it up on a screen at the event.</p>
 
                 {/* Shown here and nowhere else — that's the whole mechanism. */}
@@ -613,6 +617,16 @@ export default function Tracker() {
           {exporting ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Download className="w-3.5 h-3.5 mr-1.5" />}
           Download as spreadsheet
         </Button>
+
+        {/* This page is open on the organizer's phone AT the event. If something
+            is going wrong, it is going wrong here — so the way to reach us
+            belongs on this screen, not only in the instructions. */}
+        <p className="text-xs text-muted-foreground mt-6">
+          Something wrong with this event?{' '}
+          <a href="mailto:linklocal2@gmail.com" className="font-semibold text-primary hover:underline">
+            linklocal2@gmail.com
+          </a>
+        </p>
       </main>
     </div>
   );
