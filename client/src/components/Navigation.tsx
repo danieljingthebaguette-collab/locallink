@@ -101,9 +101,13 @@ export default function Navigation() {
                 )}>
                   LocalLink
                 </h1>
-                {/* Tagline is the first thing to go — it's orientation, not navigation */}
+                {/* Tagline is the first thing to go — it's orientation, not navigation.
+                    whitespace-nowrap is load-bearing: the collapse animation runs on
+                    max-height, so a second line has nowhere to go and gets silently
+                    eaten by overflow-hidden — the tagline reads "…to Local" with
+                    "Action" invisible. One line always, or none. */}
                 <p className={cn(
-                  "text-[10px] font-medium text-muted-foreground tracking-wide hidden sm:block overflow-hidden transition-all duration-200 ease-out",
+                  "text-[10px] font-medium text-muted-foreground tracking-wide whitespace-nowrap hidden sm:block overflow-hidden transition-all duration-200 ease-out",
                   scrolled ? "max-h-0 opacity-0" : "max-h-4 opacity-100"
                 )}>
                   Linking People to Local Action
@@ -120,7 +124,11 @@ export default function Navigation() {
                 This element never unmounts, so there is nothing to snapshot — it
                 just transitions left/width, driven by offsets inside this
                 container, which the header's scroll condense doesn't affect. */}
-            <div ref={navRef} className="relative hidden md:flex items-center gap-6">
+            {/* lg, not md. Five tabs + logo + tagline + auth cluster needs ~810px of
+                container; at md (768) that is 24px short, so flex shrank the logo
+                column and the labels wrapped to two lines inside a 64px header.
+                Below 1024 the bottom nav carries the same five destinations. */}
+            <div ref={navRef} className="relative hidden lg:flex items-center gap-6">
               {navIndicator && (
                 <span
                   className="absolute -bottom-px h-0.5 rounded-full bg-foreground transition-[left,width] duration-300 ease-out"
@@ -308,7 +316,7 @@ export default function Navigation() {
       </header>
 
       {/* Mobile Bottom Nav */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-lg border-t border-border z-50 md:hidden">
+      <nav className="fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-lg border-t border-border z-50 lg:hidden">
         <div className="container mx-auto px-2 flex items-center justify-around">
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon;

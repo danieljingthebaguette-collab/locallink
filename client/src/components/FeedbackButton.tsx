@@ -49,12 +49,13 @@ export default function FeedbackButton() {
 
   return (
     <>
-      {/* Floating trigger button */}
+      {/* Floating trigger button. bottom-20 clears the bottom nav, so it has to
+          drop to bottom-6 at the same breakpoint the nav disappears at — lg, not md. */}
       <motion.button
         whileHover={{ scale: 1.08 }}
         whileTap={{ scale: 0.94 }}
         onClick={() => setOpen(true)}
-        className="fixed bottom-20 right-4 md:bottom-6 md:right-6 z-50 flex items-center gap-2 bg-primary text-primary-foreground rounded-full shadow-lg px-4 py-2.5 text-sm font-semibold"
+        className="fixed bottom-20 right-4 lg:bottom-6 lg:right-6 z-50 flex items-center gap-2 bg-primary text-primary-foreground rounded-full shadow-lg px-4 py-2.5 text-sm font-semibold"
         title="Share feedback"
       >
         <MessageSquarePlus className="w-4 h-4" />
