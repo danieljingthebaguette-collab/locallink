@@ -14,6 +14,7 @@ import { CATEGORIES, TOWNS, type Category, type Opportunity } from '@/lib/mockDa
 import CreatePostModal from '@/components/CreatePostModal';
 import CommitDialog from '@/components/CommitDialog';
 import ConfirmBubble from '@/components/ConfirmBubble';
+import SoftEdge from '@/components/SoftEdge';
 import { useScrolled } from '@/hooks/use-scrolled';
 import { VerifiedBadge } from '@/components/VerifiedBadge';
 import CropEditor, {
@@ -531,9 +532,13 @@ export default function Home() {
 
       {/* Search & Filters */}
       {/* Pinned directly under the header, which condenses 64px -> 52px on
-          scroll. This must track that exactly or a gap opens above the pills. */}
+          scroll. This must track that exactly or a gap opens above the pills.
+          Being the lower of the two pinned bars, this one owns the boundary
+          the reader actually sees on the board — the header's edge is behind
+          it. It used to end in a 1px border and an abrupt blur cutoff, which
+          sliced the top row of cards clean through. */}
       <div className={cn(
-        "sticky z-40 bg-background/95 backdrop-blur-lg border-b border-border/40 transition-[top] duration-200 ease-out",
+        "sticky z-40 bg-background transition-[top] duration-200 ease-out",
         scrolled ? "top-[52px]" : "top-16"
       )}>
         <div className={cn(
@@ -628,6 +633,8 @@ export default function Home() {
             </div>
           </div>
         </div>
+        {/* top-full, so it hangs below the bar and rides the condense with it */}
+        <SoftEdge className="absolute inset-x-0 top-full" />
       </div>
 
       {/* Main Grid */}

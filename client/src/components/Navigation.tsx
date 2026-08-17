@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils';
 import { useAuthStore, useNotificationStore } from '@/lib/store';
 import { Home, Calendar, Info, User, LogOut, Shield, Bell, Users, X, Trash2, Edit3, UserMinus, RefreshCw, CheckCircle2, XCircle, Sun, Moon, HelpCircle } from 'lucide-react';
 import Logo from './Logo';
+import SoftEdge from './SoftEdge';
 import { useScrolled } from '@/hooks/use-scrolled';
 
 const NAV_ITEMS = [
@@ -85,7 +86,7 @@ export default function Navigation() {
       {/* Condenses on scroll: 64px -> 52px. The board's filter bar is pinned
           directly beneath this and shrinks by the same 12px, so the two stay
           flush — see HEADER_H / HEADER_H_SCROLLED in home.tsx. */}
-      <header className="sticky top-0 z-50 bg-background/95 backdrop-blur-lg relative">
+      <header className="sticky top-0 z-50 bg-background">
         <div className="container mx-auto px-4">
           <div className={cn(
             "flex items-center justify-between transition-[height] duration-200 ease-out",
@@ -294,26 +295,22 @@ export default function Navigation() {
             </div>
           </div>
         </div>
-        {/* Soft trailing edge instead of a hard border-b. A color-only fade
-            wasn't enough — the header carries backdrop-blur-lg, and a plain
-            gradient div has none, so content underneath still snapped from
-            blurred to sharp in a single row right at the seam, reading as a
-            hard line no matter how gradual the color was. This div carries
-            the SAME blur and matches the header's own 95% opacity exactly
-            (no opacity jump at the boundary either), then a mask fades the
-            whole rendered result — tint and blur together — down to nothing.
-            That's what makes the blur itself taper instead of just cutting
-            off. Sits right at the header's own bottom edge (top-full) and
-            rides along as the header condenses. */}
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute left-0 right-0 top-full h-12 backdrop-blur-lg bg-gradient-to-b from-background/95 to-transparent"
-          style={{
-            maskImage: 'linear-gradient(to bottom, black, transparent)',
-            WebkitMaskImage: 'linear-gradient(to bottom, black, transparent)',
-          }}
-        />
       </header>
+
+      {/* The header's soft edge, deliberately a fixed sibling at z-30 rather
+          than a child at the header's own z-50.
+          The board pins its filter bar immediately beneath the header, so
+          there is no gap there for content to show through — a fade drawn
+          from inside the header would paint its opaque top stop straight
+          across the search field. At z-30 it lives under anything pinned
+          (the filter bar is z-40, and draws its own edge) and over page
+          content, so the fade always lands on the last pinned bar's bottom
+          without either bar having to know about the other.
+          `top` tracks the header's 64 -> 52 condense on the same easing. */}
+      <SoftEdge className={cn(
+        'fixed inset-x-0 z-30 transition-[top] duration-200 ease-out',
+        scrolled ? 'top-[52px]' : 'top-16'
+      )} />
 
       {/* Mobile Bottom Nav */}
       <nav className="fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-lg border-t border-border z-50 lg:hidden">
