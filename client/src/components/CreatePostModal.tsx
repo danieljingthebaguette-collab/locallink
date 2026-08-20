@@ -361,6 +361,7 @@ export default function CreatePostModal({ open, onClose }: Props) {
       tags: selectedTags,
       steps: steps.filter(s => s.trim()),
       externalSignupUrl: formData.externalSignupUrl.trim() || null,
+      hasSignupPage: hasSignupPage ?? false,
       hostId: currentUser?.id || '',
       hostName: currentUser?.username || '',
       ...(isRecurring && { isRecurring: true, recurringDay, recurringTime }),

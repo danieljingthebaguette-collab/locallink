@@ -766,8 +766,8 @@ router.get('/api/my-posts', requireAuth, (req: AuthRequest, res: Response) => {
 // Creating an opportunity requires being logged in as an org account (or admin)
 router.post('/api/opportunities', requireAuth, (req: AuthRequest, res: Response) => {
   try {
-    const { title, description, category, location, town, date, duration, spots, spotsType, image, tags, isRecurring, recurringDay, recurringTime, steps, externalSignupUrl } = req.body;
-    if (!title || !description || !category || !location || !date || !duration) {
+    const { title, description, category, location, town, date, duration, spots, spotsType, image, tags, isRecurring, recurringDay, recurringTime, steps, externalSignupUrl, hasSignupPage } = req.body;
+    if (!title || !description || !category || !location || !date || !duration || !image) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
     const locationError = getLocationError(location);
@@ -776,8 +776,16 @@ router.post('/api/opportunities', requireAuth, (req: AuthRequest, res: Response)
     if (!town || !VALID_TOWNS.includes(town)) {
       return res.status(400).json({ error: 'Please select a town from the list' });
     }
-    // Never required — validated only when the org actually provided one
-    const trimmedSignupUrl = typeof externalSignupUrl === 'string' ? externalSignupUrl.trim() : '';
+    // Mirrors the create form's own gate: answering is required, a URL is
+    // required only when the answer is yes. Enforced here too so the check
+    // can't be skipped by calling the API directly.
+    if (typeof hasSignupPage !== 'boolean') {
+      return res.status(400).json({ error: 'Please answer yes or no' });
+    }
+    const trimmedSignupUrl = hasSignupPage && typeof externalSignupUrl === 'string' ? externalSignupUrl.trim() : '';
+    if (hasSignupPage && !trimmedSignupUrl) {
+      return res.status(400).json({ error: 'Add the link volunteers should register on' });
+    }
     if (trimmedSignupUrl) {
       const signupUrlError = getExternalSignupUrlError(trimmedSignupUrl);
       if (signupUrlError) return res.status(400).json({ error: signupUrlError });

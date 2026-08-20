@@ -288,7 +288,7 @@ interface OpportunitiesState {
   getFiltered: () => Opportunity[];
   fetchOpportunities: () => Promise<void>;
   fetchMyPosts: () => Promise<void>;
-  addOpportunity: (opp: Omit<Opportunity, 'id' | 'createdAt' | 'signups' | 'popularity'>) => Promise<Opportunity | null>;
+  addOpportunity: (opp: Omit<Opportunity, 'id' | 'createdAt' | 'signups' | 'popularity'> & { hasSignupPage: boolean }) => Promise<Opportunity | null>;
   updateOpportunity: (oppId: string, data: Partial<Omit<Opportunity, 'id' | 'createdAt' | 'signups' | 'popularity' | 'hostId' | 'hostName'>>) => Promise<boolean>;
   deleteOwnOpportunity: (oppId: string) => Promise<boolean>;
   signup: (oppId: string, userId: string) => Promise<{ success: boolean; error?: string }>;
