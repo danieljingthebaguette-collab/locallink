@@ -17,12 +17,17 @@ import { cn } from '@/lib/utils';
 // form has nothing required. Skip (or Escape, or clicking the backdrop)
 // dismisses for this browser session only and leaves onboardingCompletedAt
 // untouched, so the prompt is back next time they open the site.
-const SESSION_DISMISS_KEY = 'locallink_onboarding_dismissed';
-
+//
+// The dismissed flag lives in the auth store, not local state here — the
+// Profile reminder card and a bell notification both need to be able to
+// force this back open, and a store both already read is simpler than a
+// custom event to reach into an already-mounted component from elsewhere.
 export default function OnboardingQuestionnaire({ suppressed }: { suppressed?: boolean }) {
   const { toast } = useToast();
-  const { isLoggedIn, currentUser, submitOnboarding } = useAuthStore();
-  const [dismissed, setDismissed] = useState(() => sessionStorage.getItem(SESSION_DISMISS_KEY) === '1');
+  const {
+    isLoggedIn, currentUser, submitOnboarding,
+    onboardingPromptDismissed: dismissed, hideOnboardingPrompt, requestOnboardingReminder,
+  } = useAuthStore();
   const [hoursSoFar, setHoursSoFar] = useState('');
   const [interests, setInterests] = useState<string[]>([]);
   const [majors, setMajors] = useState('');
@@ -34,9 +39,13 @@ export default function OnboardingQuestionnaire({ suppressed }: { suppressed?: b
     && currentUser?.accountType === 'volunteer'
     && !currentUser?.onboardingCompletedAt;
 
+  // Leaving via any exit -- Skip, Escape, the backdrop -- both dismisses
+  // the modal and leaves the standing reminders (Profile card, bell) in
+  // place. The server dedupes the bell entry to one per account, so firing
+  // this on every skip is fine, not something worth guarding client-side.
   const skip = () => {
-    sessionStorage.setItem(SESSION_DISMISS_KEY, '1');
-    setDismissed(true);
+    hideOnboardingPrompt();
+    requestOnboardingReminder();
   };
 
   useEffect(() => {

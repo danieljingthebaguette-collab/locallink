@@ -37,11 +37,24 @@ function getAuthHeaders(): Record<string, string> {
   };
 }
 
+const ONBOARDING_DISMISS_KEY = 'locallink_onboarding_dismissed';
+
 // ===== Auth Store =====
 interface AuthState {
   isLoggedIn: boolean;
   currentUser: AppUser | null;
   loading: boolean;
+  // Whether the onboarding modal is hidden right now. Lives here rather than
+  // as local state inside the modal component so other places -- the
+  // Profile reminder card, a bell notification -- can reopen it without a
+  // custom event bus: they just call showOnboardingPrompt() on the same
+  // store the modal already reads. sessionStorage is the persistence layer
+  // (survives a reload within the same tab); this boolean is what actually
+  // drives the render, since writing localStorage/sessionStorage doesn't by
+  // itself trigger React to re-render anything.
+  onboardingPromptDismissed: boolean;
+  showOnboardingPrompt: () => void;
+  hideOnboardingPrompt: () => void;
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string; needsVerification?: boolean; suspended?: boolean; email?: string }>;
   register: (username: string, email: string, password: string, accountType?: string, joinSlug?: string, birthYear?: number) => Promise<{ success: boolean; error?: string; needsVerification?: boolean; email?: string }>;
   resendVerification: (email: string) => Promise<{ success: boolean; error?: string }>;
@@ -52,6 +65,7 @@ interface AuthState {
   loadUser: () => void;
   markWelcomeSeen: () => Promise<void>;
   submitOnboarding: (data: { hoursSoFar?: number | null; interests?: string[]; majors?: string; goalHours?: number | null; goalEvents?: number | null }) => Promise<{ success: boolean; error?: string }>;
+  requestOnboardingReminder: () => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>((set) => {
@@ -62,6 +76,16 @@ export const useAuthStore = create<AuthState>((set) => {
     isLoggedIn: !!initialUser,
     currentUser: initialUser,
     loading: false,
+    onboardingPromptDismissed: sessionStorage.getItem(ONBOARDING_DISMISS_KEY) === '1',
+
+    showOnboardingPrompt: () => {
+      sessionStorage.removeItem(ONBOARDING_DISMISS_KEY);
+      set({ onboardingPromptDismissed: false });
+    },
+    hideOnboardingPrompt: () => {
+      sessionStorage.setItem(ONBOARDING_DISMISS_KEY, '1');
+      set({ onboardingPromptDismissed: true });
+    },
 
     login: async (email, password) => {
       set({ loading: true });
@@ -232,6 +256,18 @@ export const useAuthStore = create<AuthState>((set) => {
         return { success: false, error: 'Network error' };
       }
     },
+
+    // Fire-and-forget, like markWelcomeSeen: a bell notification not
+    // appearing is not worth surfacing an error over. Server-side dedup
+    // (one deterministic id per user) is what actually prevents this from
+    // spamming a fresh notification every time Skip is clicked, so calling
+    // it on every skip is intentional and safe, not something this needs to
+    // guard against client-side.
+    requestOnboardingReminder: async () => {
+      try {
+        await fetch(`${API}/me/onboarding/remind-later`, { method: 'POST', headers: getAuthHeaders() });
+      } catch { /* ignore */ }
+    },
   };
 });
 
@@ -255,7 +291,7 @@ interface OpportunitiesState {
   addOpportunity: (opp: Omit<Opportunity, 'id' | 'createdAt' | 'signups' | 'committed' | 'popularity'>) => Promise<Opportunity | null>;
   updateOpportunity: (oppId: string, data: Partial<Omit<Opportunity, 'id' | 'createdAt' | 'signups' | 'committed' | 'popularity' | 'hostId' | 'hostName'>>) => Promise<boolean>;
   deleteOwnOpportunity: (oppId: string) => Promise<boolean>;
-  signup: (oppId: string, userId: string) => Promise<boolean>;
+  signup: (oppId: string, userId: string) => Promise<{ success: boolean; error?: string }>;
   cancelSignup: (oppId: string, userId: string) => Promise<boolean>;
   /** Returns 'needs-steps' with the organization's requirements when the
    *  event has sign-up steps the volunteer hasn't confirmed yet. */
@@ -445,14 +481,19 @@ export const useOpportunitiesStore = create<OpportunitiesState>((set, get) => ({
         headers: getAuthHeaders(),
         body: JSON.stringify({}),
       });
+      const data = await res.json().catch(() => ({}));
       if (res.ok) {
-        const updated = await res.json();
-        set((s) => ({ opportunities: s.opportunities.map(o => o.id === oppId ? updated : o) }));
-        return true;
+        set((s) => ({ opportunities: s.opportunities.map(o => o.id === oppId ? data : o) }));
+        return { success: true };
       }
       if (res.status === 401) useAuthStore.getState().logout();
-      return false;
-    } catch { return false; }
+      // The server's own message ("Already interested", or whatever it
+      // actually was) rather than a caller guessing at one reason -- this
+      // used to always say "you may already be interested" regardless of
+      // what actually failed, which is accurate for exactly one of its
+      // possible causes and misleading for the rest.
+      return { success: false, error: data.error };
+    } catch { return { success: false, error: 'Network error' }; }
   },
 
   cancelSignup: async (oppId, _userId) => {
@@ -816,7 +857,12 @@ export const useFavoritesStore = create<FavoritesState>((set, get) => ({
 export interface AppNotification {
   id: string;
   userId: string;
-  type: 'interest' | 'cancel' | 'admin_delete' | 'admin_edit' | 'reopen' | 'post_approved' | 'post_denied';
+  // Not exhaustive against every type the server can emit (tracker/certificate
+  // notifications aren't listed either) -- only types the client compares
+  // against with === need to be here; everything else already falls through
+  // to Navigation.tsx's default icon/style via .includes(), which doesn't
+  // need the literal type.
+  type: 'interest' | 'cancel' | 'admin_delete' | 'admin_edit' | 'reopen' | 'post_approved' | 'post_denied' | 'onboarding_reminder';
   message: string;
   postId: string | null;
   read: boolean;

@@ -3,7 +3,7 @@ import { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { useAuthStore, useNotificationStore } from '@/lib/store';
-import { Home, Calendar, Info, User, LogOut, Shield, Bell, Users, X, Trash2, Edit3, UserMinus, RefreshCw, CheckCircle2, XCircle, Sun, Moon, HelpCircle } from 'lucide-react';
+import { Home, Calendar, Info, User, LogOut, Shield, Bell, Users, X, Trash2, Edit3, UserMinus, RefreshCw, CheckCircle2, XCircle, Sun, Moon, HelpCircle, Sparkles } from 'lucide-react';
 import Logo from './Logo';
 import { useScrolled } from '@/hooks/use-scrolled';
 
@@ -17,7 +17,7 @@ const NAV_ITEMS = [
 
 export default function Navigation() {
   const [location, navigate] = useLocation();
-  const { isLoggedIn, currentUser, logout } = useAuthStore();
+  const { isLoggedIn, currentUser, logout, showOnboardingPrompt } = useAuthStore();
   const { notifications, unreadCount, fetchNotifications, markRead, markAllRead } = useNotificationStore();
   const [notifOpen, setNotifOpen] = useState(false);
   const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'));
@@ -234,7 +234,16 @@ export default function Navigation() {
                               notifications.map(n => (
                                 <button
                                   key={n.id}
-                                  onClick={() => { markRead(n.id); setNotifOpen(false); }}
+                                  onClick={() => {
+                                    markRead(n.id);
+                                    // The one type that isn't "here's something that happened" --
+                                    // it's a standing invitation, so clicking it re-opens the thing
+                                    // it's reminding about rather than just filing it as read.
+                                    // Harmless to call unconditionally: the modal itself won't open
+                                    // once onboardingCompletedAt is set, whoever asks it to.
+                                    if (n.type === 'onboarding_reminder') showOnboardingPrompt();
+                                    setNotifOpen(false);
+                                  }}
                                   className={cn(
                                     'w-full text-left px-4 py-3 hover:bg-secondary/50 transition-colors flex gap-3 items-start',
                                     !n.read && 'bg-primary/5'
@@ -258,7 +267,8 @@ export default function Navigation() {
                                     {n.type === 'reopen' && <RefreshCw className="w-4 h-4" />}
                                     {n.type === 'post_approved' && <CheckCircle2 className="w-4 h-4" />}
                                     {n.type === 'post_denied' && <XCircle className="w-4 h-4" />}
-                                    {!['interest','cancel','admin_delete','admin_edit','reopen','post_approved','post_denied'].includes(n.type) && <Bell className="w-4 h-4" />}
+                                    {n.type === 'onboarding_reminder' && <Sparkles className="w-4 h-4" />}
+                                    {!['interest','cancel','admin_delete','admin_edit','reopen','post_approved','post_denied','onboarding_reminder'].includes(n.type) && <Bell className="w-4 h-4" />}
                                   </div>
                                   <div className="flex-1 min-w-0">
                                     <p className="text-sm text-foreground leading-snug">{n.message}</p>

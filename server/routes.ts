@@ -160,6 +160,17 @@ function requireAuth(req: AuthRequest, res: Response, next: NextFunction) {
   const token = authHeader.split(' ')[1];
   try {
     const payload = jwt.verify(token, JWT_SECRET) as { userId: string; isAdmin: boolean };
+    // The JWT is stateless -- a valid signature only proves it was issued by
+    // this server, not that the account it names is still there. A deleted
+    // user's token stays "valid" until it expires (up to 30 days), and
+    // without this check they could keep authenticating: reads would just
+    // return nothing, but a write with a foreign key on userId (a signup,
+    // for instance) would hit that constraint and surface as a raw 500,
+    // which every caller then has to somehow explain to someone who has no
+    // idea their account is gone. One extra indexed lookup, on every
+    // authenticated request, closes it here instead of at each insert.
+    const exists = db.prepare('SELECT 1 FROM users WHERE id = ?').get(payload.userId);
+    if (!exists) return res.status(401).json({ error: 'Invalid or expired token' });
     req.userId = payload.userId;
     req.isAdmin = payload.isAdmin;
     next();
@@ -600,10 +611,47 @@ router.post('/api/me/onboarding', requireAuth, (req: AuthRequest, res: Response)
       numOrNull(goalHours), numOrNull(goalEvents), now, req.userId
     );
 
+    // Someone can complete it from the Profile reminder card or a fresh
+    // session prompt without ever clicking the bell notification a past
+    // skip created -- leaving that notification unread forever even though
+    // the thing it was reminding about is now done. Same dedup id as
+    // remind-later, so this is a no-op when it was never created.
+    db.prepare("UPDATE notifications SET read = 1 WHERE id = ?").run(`onboarding-reminder-${req.userId}`);
+
     const updated = db.prepare(
       'SELECT onboardingHoursSoFar, onboardingInterests, onboardingMajors, onboardingGoalHours, onboardingGoalEvents, onboardingCompletedAt FROM users WHERE id = ?'
     ).get(req.userId) as any;
     return res.json(onboardingFields(updated));
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+/** Called when someone exits the questionnaire without submitting.
+ *
+ * A deterministic id (one per user, not one per skip) keyed through INSERT
+ * OR IGNORE is the same dedup trick notifyMilestones uses: clicking Skip
+ * five times across five sessions writes the row once, not five bell
+ * entries repeating the same nudge. If they already completed it since the
+ * last skip, this still runs harmlessly -- it would only re-arm a
+ * notification that the modal itself won't act on, since the modal never
+ * opens once onboardingCompletedAt is set regardless of who calls
+ * showOnboardingPrompt(). */
+router.post('/api/me/onboarding/remind-later', requireAuth, (req: AuthRequest, res: Response) => {
+  try {
+    const user = db.prepare('SELECT accountType, onboardingCompletedAt FROM users WHERE id = ?').get(req.userId) as any;
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    if (user.accountType !== 'volunteer' || user.onboardingCompletedAt) {
+      return res.json({ reminded: false });
+    }
+    db.prepare(
+      'INSERT OR IGNORE INTO notifications (id, userId, type, message, read, createdAt) VALUES (?, ?, ?, ?, 0, ?)'
+    ).run(
+      `onboarding-reminder-${req.userId}`, req.userId, 'onboarding_reminder',
+      "You skipped the \"tell us about you\" questionnaire — takes under a minute, and helps us show you a better fit.",
+      new Date().toISOString()
+    );
+    return res.json({ reminded: true });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }

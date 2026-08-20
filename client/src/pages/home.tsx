@@ -320,8 +320,8 @@ export default function Home() {
     }
     setSigningUp(true);
     try {
-      const success = await signup(oppId, currentUser.id);
-      if (success) {
+      const result = await signup(oppId, currentUser.id);
+      if (result.success) {
         toast({ title: "You're interested! ✓", description: 'You can view this in My Events.' });
         if (!prefersReducedMotion) {
           setShowInterestBurst(true);
@@ -330,7 +330,11 @@ export default function Home() {
         const fresh = useOpportunitiesStore.getState().opportunities.find(o => o.id === oppId);
         if (fresh) setSelectedCard(fresh); else setSelectedCard(null);
       } else {
-        toast({ title: 'Could not register interest', description: 'You may already be interested in this opportunity.' });
+        // The server's actual reason, when it gave one -- a 409 really does
+        // mean "already interested", but that's not the only way this can
+        // fail, and claiming it was regardless of the real cause is worse
+        // than saying nothing.
+        toast({ title: 'Could not register interest', description: result.error || 'Please try again.' });
       }
     } finally { setSigningUp(false); }
   };

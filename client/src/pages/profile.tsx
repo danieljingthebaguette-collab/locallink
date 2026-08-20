@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { useAuthStore, useOpportunitiesStore, useFavoritesStore } from '@/lib/store';
-import { User, Mail, Award, Calendar, Clock, LogOut, Loader2, Edit3, Lock, Save, X, Heart, Building2, Handshake, Bell, Camera, Link as LinkIcon, Copy, Check } from 'lucide-react';
+import { User, Mail, Award, Calendar, Clock, LogOut, Loader2, Edit3, Lock, Save, X, Heart, Building2, Handshake, Bell, Camera, Link as LinkIcon, Copy, Check, Sparkles } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import ConfirmBubble from '@/components/ConfirmBubble';
 import { OrgBreakdown, EventHistory, OverallMilestones, type RecordOrg, type RecordEvent } from '@/components/VolunteerRecord';
@@ -13,7 +13,7 @@ import { OrgBreakdown, EventHistory, OverallMilestones, type RecordOrg, type Rec
 export default function Profile() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
-  const { isLoggedIn, currentUser, logout, updateProfile, loading } = useAuthStore();
+  const { isLoggedIn, currentUser, logout, updateProfile, loading, showOnboardingPrompt } = useAuthStore();
   const { getSignedUpEvents, getHostedEvents, fetchOpportunities, loading: opLoading, loaded } = useOpportunitiesStore();
   const { favorites, fetchFavorites, removeFavorite } = useFavoritesStore();
 
@@ -561,6 +561,29 @@ export default function Profile() {
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {/* Onboarding reminder — kept above the hours/certificate section on
+            purpose, both physically here and in the code: this is a plain
+            profile-completeness nudge, unrelated to verified hours. Same
+            standing-reminder shape as the bell notification (Navigation.tsx)
+            and driven by the same store action, so either one reopens the
+            identical modal. */}
+        {currentUser.accountType === 'volunteer' && !currentUser.onboardingCompletedAt && (
+          <div className="rounded-2xl border border-primary/30 bg-primary/5 p-5 mb-6 flex items-start gap-4">
+            <div className="w-9 h-9 rounded-full bg-primary/15 flex items-center justify-center flex-shrink-0">
+              <Sparkles className="w-4 h-4 text-primary" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h3 className="font-heading font-bold text-foreground mb-0.5">Tell us a bit about you</h3>
+              <p className="text-sm text-muted-foreground leading-relaxed mb-3">
+                Takes under a minute, and helps us show you opportunities that actually fit.
+              </p>
+              <Button size="sm" onClick={showOnboardingPrompt} className="rounded-full">
+                Fill it out
+              </Button>
+            </div>
           </div>
         )}
 
