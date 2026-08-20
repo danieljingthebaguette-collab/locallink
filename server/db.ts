@@ -546,6 +546,25 @@ try {
   db.exec('ALTER TABLE opportunities ADD COLUMN externalSignupUrl TEXT DEFAULT NULL');
 }
 
+// Migrate: add the volunteer onboarding questionnaire fields to users.
+// Six flat nullable columns, matching the org-profile precedent (orgDescription/
+// orgWebsite/orgEmail/orgPhone) rather than a separate table -- same 1:1
+// relationship, same "meaningless for the other account type" shape.
+// onboardingCompletedAt is the only field that gates anything: NULL is the
+// signal to prompt, on every existing row and every new one, until they
+// answer (or every field could be skipped individually and it would still
+// count as done -- completion is "they saw the form and submitted it").
+try {
+  db.prepare('SELECT onboardingCompletedAt FROM users LIMIT 1').get();
+} catch {
+  db.exec('ALTER TABLE users ADD COLUMN onboardingHoursSoFar REAL DEFAULT NULL');
+  db.exec('ALTER TABLE users ADD COLUMN onboardingInterests TEXT DEFAULT NULL');
+  db.exec('ALTER TABLE users ADD COLUMN onboardingMajors TEXT DEFAULT NULL');
+  db.exec('ALTER TABLE users ADD COLUMN onboardingGoalHours REAL DEFAULT NULL');
+  db.exec('ALTER TABLE users ADD COLUMN onboardingGoalEvents INTEGER DEFAULT NULL');
+  db.exec('ALTER TABLE users ADD COLUMN onboardingCompletedAt TEXT DEFAULT NULL');
+}
+
 // One-time backfill: tag pre-field posts with a town ONLY when the location or
 // title plainly contains a listed town's name — anything ambiguous stays null
 // for a human to set via the edit form. Idempotent (guarded by town IS NULL);

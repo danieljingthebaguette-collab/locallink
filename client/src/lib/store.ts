@@ -51,6 +51,7 @@ interface AuthState {
   logout: () => void;
   loadUser: () => void;
   markWelcomeSeen: () => Promise<void>;
+  submitOnboarding: (data: { hoursSoFar?: number | null; interests?: string[]; majors?: string; goalHours?: number | null; goalEvents?: number | null }) => Promise<{ success: boolean; error?: string }>;
 }
 
 export const useAuthStore = create<AuthState>((set) => {
@@ -206,6 +207,30 @@ export const useAuthStore = create<AuthState>((set) => {
           set({ currentUser: updated });
         }
       } catch { /* ignore */ }
+    },
+
+    // Same merge pattern as markWelcomeSeen -- the route returns only the
+    // onboarding fields, not the whole user, so this folds them into
+    // whatever's already there rather than replacing currentUser outright.
+    submitOnboarding: async (data) => {
+      try {
+        const res = await fetch(`${API}/me/onboarding`, {
+          method: 'POST',
+          headers: getAuthHeaders(),
+          body: JSON.stringify(data),
+        });
+        const resData = await res.json();
+        if (!res.ok) return { success: false, error: resData.error || 'Could not save your answers' };
+        const current = useAuthStore.getState().currentUser;
+        if (current) {
+          const updated = { ...current, ...resData };
+          localStorage.setItem('locallink_user', JSON.stringify(updated));
+          set({ currentUser: updated });
+        }
+        return { success: true };
+      } catch {
+        return { success: false, error: 'Network error' };
+      }
     },
   };
 });

@@ -62,6 +62,22 @@ function withTags(opp: any, signups: string[] = [], committed: string[] = []) {
   return { ...opp, tags: safeJsonParse<string[]>(opp.tags, []), steps: safeJsonParse<string[]>(opp.steps, []), signups, committed, hostVerified: !!opp.hostVerified };
 }
 
+/** The onboarding questionnaire fields, in the shape every user-facing
+ * response returns them. Used by every route that builds a client-facing
+ * user object (login, verify-email, PUT /auth/profile) so `currentUser`
+ * always carries accurate onboarding status regardless of which of those
+ * three paths logged someone in. */
+function onboardingFields(user: any) {
+  return {
+    onboardingHoursSoFar: user.onboardingHoursSoFar ?? null,
+    onboardingInterests: safeJsonParse<string[]>(user.onboardingInterests, []),
+    onboardingMajors: user.onboardingMajors || null,
+    onboardingGoalHours: user.onboardingGoalHours ?? null,
+    onboardingGoalEvents: user.onboardingGoalEvents ?? null,
+    onboardingCompletedAt: user.onboardingCompletedAt || null,
+  };
+}
+
 // Optional external signup URL on a post — validated only when non-blank.
 // Mirrored client-side in client/src/lib/utils.ts.
 function getExternalSignupUrlError(url: string): string | null {
@@ -86,6 +102,27 @@ const VALID_TOWNS = [
   'Montgomery/Skillman', 'Hillsborough', 'Princeton', 'Bridgewater',
   'Somerville', 'Franklin Township', 'Manville', 'Raritan',
   'Belle Mead/Rocky Hill', 'Flemington',
+] as const;
+
+// Mirrors FIELD_TAGS in client/src/lib/mockData.ts — keep the two lists in
+// sync. Used to whitelist the onboarding questionnaire's interest tags.
+const VALID_FIELD_TAGS = [
+  '🌿 Environment', '🐾 Animals', '🍽️ Food & Hunger', '🏠 Housing',
+  '🏥 Health & Medical', '🚒 Emergency Services', '👴 Senior Services',
+  '📚 Education', '🎨 Arts & Culture', '🏋️ Sports & Fitness',
+  '🛐 Faith & Spiritual', '👧 Youth & Children', '🤝 Social Services',
+  '📱 Technology', '🎓 Tutoring', '💼 Workforce Dev', '🏘️ Civic Engagement',
+  '♿ Disability Services', '🌍 Cultural Diversity', '🧠 Mental Health',
+  '💰 Financial Aid', '⚖️ Legal Aid', '🌾 Agriculture', '🚌 Transportation',
+  '🏫 After-School', '👨‍👩‍👧 Family Support', '🎭 Performing Arts', '📰 Media',
+  '🔬 Science & Research', '🕊️ Conflict Resolution', '🌐 Global Outreach',
+  '🎪 Events & Festivals', '🏺 History & Heritage', '♻️ Sustainability',
+  '🏗️ Community Dev', '📣 Advocacy', '🎒 School Supplies',
+  '🩺 Behavioral Health', '👮 Public Safety', '🧒 Early Childhood',
+  '🏕️ Outdoor Education', '🤱 Maternal Health', '🧑‍🤝‍🧑 Peer Mentorship',
+  '🖥️ Digital Literacy', '🎵 Music', '🛠️ Skilled Trades',
+  '🌱 Urban Gardening', '🐕 Service Animals', '🎗️ Chronic Illness',
+  '🏦 Econ. Empowerment',
 ] as const;
 
 type SpotsType = typeof VALID_SPOTS_TYPES[number];
@@ -291,7 +328,7 @@ router.post('/api/auth/login', async (req: Request, res: Response) => {
     // derive "under 18" for organizations, and this payload gets persisted
     // to localStorage by the client.
     const { password: _pwd, birthYear: _by, ...safeUser } = user;
-    return res.json({ ...safeUser, isAdmin: !!user.isAdmin, emailVerified: true, notifyOnInterest: !!user.notifyOnInterest, notifyOnReopen: user.notifyOnReopen !== 0, profileImage: user.profileImage || null, emailReminders: !!user.emailReminders, hasSeenWelcome: !!user.hasSeenWelcome, verified: !!user.verified, token });
+    return res.json({ ...safeUser, isAdmin: !!user.isAdmin, emailVerified: true, notifyOnInterest: !!user.notifyOnInterest, notifyOnReopen: user.notifyOnReopen !== 0, profileImage: user.profileImage || null, emailReminders: !!user.emailReminders, hasSeenWelcome: !!user.hasSeenWelcome, verified: !!user.verified, ...onboardingFields(user), token });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
@@ -335,6 +372,7 @@ router.get('/api/auth/verify-email', (req: Request, res: Response) => {
       profileImage: user.profileImage || null,
       emailReminders: !!user.emailReminders,
       hasSeenWelcome: !!user.hasSeenWelcome,
+      ...onboardingFields(user),
     });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
@@ -497,7 +535,7 @@ router.put('/api/auth/profile', requireAuth, async (req: AuthRequest, res: Respo
     }
 
     const updated = db.prepare(
-      'SELECT id, username, email, isAdmin, emailVerified, accountType, notifyOnInterest, notifyOnReopen, profileImage, orgDescription, orgWebsite, orgEmail, orgPhone, emailReminders, hasSeenWelcome, verified, createdAt FROM users WHERE id = ?'
+      'SELECT id, username, email, isAdmin, emailVerified, accountType, notifyOnInterest, notifyOnReopen, profileImage, orgDescription, orgWebsite, orgEmail, orgPhone, emailReminders, hasSeenWelcome, verified, createdAt, onboardingHoursSoFar, onboardingInterests, onboardingMajors, onboardingGoalHours, onboardingGoalEvents, onboardingCompletedAt FROM users WHERE id = ?'
     ).get(userId) as any;
     return res.json({
       ...updated,
@@ -509,7 +547,63 @@ router.put('/api/auth/profile', requireAuth, async (req: AuthRequest, res: Respo
       emailReminders: !!updated.emailReminders,
       hasSeenWelcome: !!updated.hasSeenWelcome,
       verified: !!updated.verified,
+      ...onboardingFields(updated),
     });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ===== ONBOARDING QUESTIONNAIRE =====
+// Deliberately kept separate from the tracker/certificate section of this
+// file rather than filed under /api/me alongside record/share — same
+// namespace convention, different neighborhood.
+//
+// Every field is independently optional; what makes the questionnaire
+// "done" is submitting at all, not filling in any particular answer. That
+// mirrors how it's presented client-side: one screen, nothing required,
+// and hitting Save (even mostly blank) stops the prompt from reappearing —
+// only Skip leaves it owed.
+const MAX_ONBOARDING_TEXT = 200;
+
+router.post('/api/me/onboarding', requireAuth, (req: AuthRequest, res: Response) => {
+  try {
+    const user = db.prepare('SELECT accountType FROM users WHERE id = ?').get(req.userId) as any;
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    // The question set (majors, college plans, hours-so-far) presumes a
+    // person volunteering, not an organization posting events.
+    if (user.accountType !== 'volunteer') {
+      return res.status(403).json({ error: 'The questionnaire is for volunteer accounts.' });
+    }
+
+    const { hoursSoFar, interests, majors, goalHours, goalEvents } = req.body || {};
+
+    const numOrNull = (v: unknown): number | null => {
+      if (v === undefined || v === null || v === '') return null;
+      const n = Number(v);
+      return Number.isFinite(n) && n >= 0 && n <= 100000 ? n : null;
+    };
+    // Whitelisted against the real tag list rather than trusted as free
+    // text — the same tags a post can be filed under, so an answer here is
+    // never a category that couldn't also describe an event.
+    const cleanInterests = Array.isArray(interests)
+      ? interests.filter((t: unknown) => typeof t === 'string' && (VALID_FIELD_TAGS as readonly string[]).includes(t))
+      : [];
+    const cleanMajors = typeof majors === 'string' ? majors.trim().slice(0, MAX_ONBOARDING_TEXT) : null;
+
+    const now = new Date().toISOString();
+    db.prepare(
+      `UPDATE users SET onboardingHoursSoFar = ?, onboardingInterests = ?, onboardingMajors = ?,
+       onboardingGoalHours = ?, onboardingGoalEvents = ?, onboardingCompletedAt = ? WHERE id = ?`
+    ).run(
+      numOrNull(hoursSoFar), JSON.stringify(cleanInterests), cleanMajors || null,
+      numOrNull(goalHours), numOrNull(goalEvents), now, req.userId
+    );
+
+    const updated = db.prepare(
+      'SELECT onboardingHoursSoFar, onboardingInterests, onboardingMajors, onboardingGoalHours, onboardingGoalEvents, onboardingCompletedAt FROM users WHERE id = ?'
+    ).get(req.userId) as any;
+    return res.json(onboardingFields(updated));
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }

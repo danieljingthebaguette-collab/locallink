@@ -71,6 +71,16 @@ export interface AppUser {
   emailReminders?: boolean;
   hasSeenWelcome?: boolean;
   unsubToken?: string | null;
+  // Onboarding questionnaire -- volunteers only. onboardingCompletedAt is the
+  // one field anything actually reads: null means the prompt is still owed,
+  // regardless of whether this is a brand-new account or a five-month-old
+  // one that skipped it every time.
+  onboardingHoursSoFar?: number | null;
+  onboardingInterests?: string[] | null;
+  onboardingMajors?: string | null;
+  onboardingGoalHours?: number | null;
+  onboardingGoalEvents?: number | null;
+  onboardingCompletedAt?: string | null;
 }
 
 export const SAMPLE_OPPORTUNITIES: Opportunity[] = [
@@ -195,6 +205,63 @@ export const SAMPLE_OPPORTUNITIES: Opportunity[] = [
     createdAt: new Date().toISOString()
   }
 ];
+
+// Shared between the post-creation form (what field is this event in?) and
+// the volunteer onboarding questionnaire (what do you enjoy?) -- one list,
+// so an org's field tags and a volunteer's stated interests are directly
+// comparable rather than two vocabularies that happen to look similar.
+export const FIELD_TAGS = [
+  '🌿 Environment',
+  '🐾 Animals',
+  '🍽️ Food & Hunger',
+  '🏠 Housing',
+  '🏥 Health & Medical',
+  '🚒 Emergency Services',
+  '👴 Senior Services',
+  '📚 Education',
+  '🎨 Arts & Culture',
+  '🏋️ Sports & Fitness',
+  '🛐 Faith & Spiritual',
+  '👧 Youth & Children',
+  '🤝 Social Services',
+  '📱 Technology',
+  '🎓 Tutoring',
+  '💼 Workforce Dev',
+  '🏘️ Civic Engagement',
+  '♿ Disability Services',
+  '🌍 Cultural Diversity',
+  '🧠 Mental Health',
+  '💰 Financial Aid',
+  '⚖️ Legal Aid',
+  '🌾 Agriculture',
+  '🚌 Transportation',
+  '🏫 After-School',
+  '👨‍👩‍👧 Family Support',
+  '🎭 Performing Arts',
+  '📰 Media',
+  '🔬 Science & Research',
+  '🕊️ Conflict Resolution',
+  '🌐 Global Outreach',
+  '🎪 Events & Festivals',
+  '🏺 History & Heritage',
+  '♻️ Sustainability',
+  '🏗️ Community Dev',
+  '📣 Advocacy',
+  '🎒 School Supplies',
+  '🩺 Behavioral Health',
+  '👮 Public Safety',
+  '🧒 Early Childhood',
+  '🏕️ Outdoor Education',
+  '🤱 Maternal Health',
+  '🧑‍🤝‍🧑 Peer Mentorship',
+  '🖥️ Digital Literacy',
+  '🎵 Music',
+  '🛠️ Skilled Trades',
+  '🌱 Urban Gardening',
+  '🐕 Service Animals',
+  '🎗️ Chronic Illness',
+  '🏦 Econ. Empowerment',
+] as const;
 
 export const CATEGORIES: { value: Category | 'all'; label: string }[] = [
   { value: 'all', label: 'All' },

@@ -6,6 +6,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import Navigation from "@/components/Navigation";
 import FeedbackButton from "@/components/FeedbackButton";
+import OnboardingQuestionnaire from "@/components/OnboardingQuestionnaire";
 import { noteAppNavigation } from "@/lib/history";
 import Home from "@/pages/home";
 import MyEvents from "@/pages/my-events";
@@ -98,6 +99,13 @@ function App() {
     || location.startsWith('/tracker/')
     || location.startsWith('/checkin/');
 
+  // Same reasoning as hideFeedback -- a task screen (the tracker, mid check-in)
+  // or a chromeless document isn't the moment to interrupt with an unrelated
+  // popup. Also suppressed on /account: it's the login/register page itself,
+  // and the moment right after someone finishes registering is not the
+  // moment to stack a second form over the first.
+  const hideOnboarding = hideFeedback || location.startsWith('/account');
+
   return (
     <QueryClientProvider client={queryClient}>
       {/* "user" defers to the OS reduced-motion setting for every framer-motion
@@ -109,6 +117,7 @@ function App() {
         {!isDocument && <Navigation />}
         <Router />
         {!hideFeedback && <FeedbackButton />}
+        <OnboardingQuestionnaire suppressed={hideOnboarding} />
       </MotionConfig>
     </QueryClientProvider>
   );

@@ -12,7 +12,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { useAuthStore, useOpportunitiesStore } from '@/lib/store';
 import ConfirmBubble from '@/components/ConfirmBubble';
-import { type Category, TOWNS } from '@/lib/mockData';
+import { type Category, TOWNS, FIELD_TAGS } from '@/lib/mockData';
 import { useLocation } from 'wouter';
 
 // ── Questionnaire config ─────────────────────────────────────────────
@@ -26,58 +26,7 @@ const POST_TYPES: { id: Category; label: string; Icon: LucideIcon; desc: string 
   { id: 'environment', label: 'Environment',          Icon: Sprout,    desc: 'Conservation and green initiatives' },
 ];
 
-const FIELD_TAGS = [
-  '🌿 Environment',
-  '🐾 Animals',
-  '🍽️ Food & Hunger',
-  '🏠 Housing',
-  '🏥 Health & Medical',
-  '🚒 Emergency Services',
-  '👴 Senior Services',
-  '📚 Education',
-  '🎨 Arts & Culture',
-  '🏋️ Sports & Fitness',
-  '🛐 Faith & Spiritual',
-  '👧 Youth & Children',
-  '🤝 Social Services',
-  '📱 Technology',
-  '🎓 Tutoring',
-  '💼 Workforce Dev',
-  '🏘️ Civic Engagement',
-  '♿ Disability Services',
-  '🌍 Cultural Diversity',
-  '🧠 Mental Health',
-  '💰 Financial Aid',
-  '⚖️ Legal Aid',
-  '🌾 Agriculture',
-  '🚌 Transportation',
-  '🏫 After-School',
-  '👨‍👩‍👧 Family Support',
-  '🎭 Performing Arts',
-  '📰 Media',
-  '🔬 Science & Research',
-  '🕊️ Conflict Resolution',
-  '🌐 Global Outreach',
-  '🎪 Events & Festivals',
-  '🏺 History & Heritage',
-  '♻️ Sustainability',
-  '🏗️ Community Dev',
-  '📣 Advocacy',
-  '🎒 School Supplies',
-  '🩺 Behavioral Health',
-  '👮 Public Safety',
-  '🧒 Early Childhood',
-  '🏕️ Outdoor Education',
-  '🤱 Maternal Health',
-  '🧑‍🤝‍🧑 Peer Mentorship',
-  '🖥️ Digital Literacy',
-  '🎵 Music',
-  '🛠️ Skilled Trades',
-  '🌱 Urban Gardening',
-  '🐕 Service Animals',
-  '🎗️ Chronic Illness',
-  '🏦 Econ. Empowerment',
-];
+// Shared with the onboarding questionnaire -- see mockData.ts.
 
 type CreateStep = 'type' | 'tags' | 'details';
 type SpotsType = 'limited' | 'unlimited' | 'none';
