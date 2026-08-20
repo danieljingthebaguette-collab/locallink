@@ -12,9 +12,8 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { MapPin, Clock, Users, Calendar, XCircle, Loader2, Edit3, Trash2, ChevronUp, X, Save, Upload, Plus, ClipboardList, Check, Award } from 'lucide-react';
+import { MapPin, Clock, Users, Calendar, XCircle, Loader2, Edit3, Trash2, ChevronUp, X, Save, Upload, Plus } from 'lucide-react';
 import CreatePostModal from '@/components/CreatePostModal';
-import CommitDialog from '@/components/CommitDialog';
 import CropEditor, {
   type ImageTransform,
   DEFAULT_TRANSFORM,
@@ -65,13 +64,9 @@ export default function MyEvents() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const { isLoggedIn, currentUser } = useAuthStore();
-  const { getSignedUpEvents, cancelSignup, commit, cancelCommit, updateOpportunity, deleteOwnOpportunity, fetchOpportunities, fetchMyPosts, myPosts, loading } = useOpportunitiesStore();
+  const { getSignedUpEvents, cancelSignup, updateOpportunity, deleteOwnOpportunity, fetchOpportunities, fetchMyPosts, myPosts, loading } = useOpportunitiesStore();
 
   const [cancellingId, setCancellingId] = useState<string | null>(null);
-  const [committingId, setCommittingId] = useState<string | null>(null);
-  const [certRequests, setCertRequests] = useState<any[]>([]);
-  const [certActingId, setCertActingId] = useState<string | null>(null);
-  const [commitGate, setCommitGate] = useState<{ opp: Opportunity; steps: string[]; externalSignupUrl: string | null } | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmCancel, setConfirmCancel] = useState<Opportunity | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<Opportunity | null>(null);
@@ -95,50 +90,6 @@ export default function MyEvents() {
     fetchOpportunities();
     if (isLoggedIn) fetchMyPosts();
   }, [fetchOpportunities, fetchMyPosts, isLoggedIn]);
-
-  const loadCertRequests = async () => {
-    const token = localStorage.getItem('locallink_token');
-    if (!token) return;
-    try {
-      const res = await fetch('/api/my-org/certificate-applications', { headers: { Authorization: `Bearer ${token}` } });
-      if (res.ok) {
-        const d = await res.json();
-        setCertRequests(Array.isArray(d) ? d : []);
-      }
-    } catch { /* ignore */ }
-  };
-
-  useEffect(() => {
-    if (isLoggedIn && currentUser?.accountType === 'organization') loadCertRequests();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLoggedIn, currentUser?.accountType]);
-
-  const decideCertificate = async (r: any, action: 'approve' | 'decline') => {
-    const token = localStorage.getItem('locallink_token');
-    if (!token) return;
-    setCertActingId(r.id);
-    try {
-      const res = await fetch(`/api/my-org/certificate-applications/${r.id}/${action}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({}),
-      });
-      const d = await res.json().catch(() => ({}));
-      if (res.ok) {
-        setCertRequests(list => list.filter(x => x.id !== r.id));
-        toast({
-          title: action === 'approve'
-            ? `Confirmed — LocalLink will issue ${r.volunteerName}'s certificate`
-            : 'Request declined',
-        });
-      } else {
-        toast({ title: d.error || 'Could not update', variant: 'destructive' });
-        loadCertRequests();
-      }
-    } finally {
-      setCertActingId(null);
-    }
-  };
 
   // Revoke blob URL when the preview changes or the component unmounts to prevent memory leaks
   useEffect(() => {
@@ -198,32 +149,6 @@ export default function MyEvents() {
     } finally {
       setCancellingId(null);
       setConfirmCancel(null);
-    }
-  };
-
-  // The step beyond Interested — this is what puts a volunteer on the
-  // organization's Tracker roster. Toggled right from the same card,
-  // anytime, no confirmation dialog — the user's answer was "anytime, the
-  // org just sees the change," so there's nothing here worth a modal for.
-  const handleToggleCommit = async (opp: Opportunity, next: boolean, acknowledged = false) => {
-    setCommittingId(opp.id);
-    try {
-      const result = next ? await commit(opp.id, acknowledged) : await cancelCommit(opp.id);
-      // The organization runs its own sign-up — show it before putting this
-      // person on a list they aren't actually on.
-      if (result && typeof result === 'object' && (result as any).needsSteps) {
-        const r = result as any;
-        setCommitGate({ opp, steps: r.steps, externalSignupUrl: r.externalSignupUrl });
-        return;
-      }
-      if (result) {
-        setCommitGate(null);
-        toast({ title: next ? "You're committed" : 'Commitment removed', description: next ? "You're on the organizer's list for this event." : undefined });
-      } else {
-        toast({ title: 'Error', description: 'Something went wrong.', variant: 'destructive' });
-      }
-    } finally {
-      setCommittingId(null);
     }
   };
 
@@ -351,9 +276,6 @@ export default function MyEvents() {
                   type="signup"
                   cancellingId={cancellingId}
                   onRequestCancel={() => setConfirmCancel(opp)}
-                  isCommitted={opp.committed.includes(currentUser.id)}
-                  committing={committingId === opp.id}
-                  onToggleCommit={(next) => handleToggleCommit(opp, next)}
                 />
               ))}
             </div>
@@ -370,51 +292,6 @@ export default function MyEvents() {
             <div className="space-y-4 opacity-70">
               {past.map((opp) => (
                 <EventCard key={opp.id} opp={opp} type="past" cancellingId={null} onRequestCancel={() => {}} />
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* ── Certificate requests ──
-            Sits above Hosted Events because it's a task with someone waiting
-            on it, not a list to browse. Only renders when there's something
-            to decide, so it never becomes furniture. */}
-        {certRequests.length > 0 && (
-          <div className="mb-8">
-            <h3 className="text-lg font-semibold text-foreground mb-1 flex items-center gap-2">
-              <Award className="w-5 h-5 text-primary" />
-              Certificate requests ({certRequests.length})
-            </h3>
-            <p className="text-sm text-muted-foreground mb-4">
-              These volunteers reached a milestone with your organization and are asking for a
-              certificate. It will carry your name, so you confirm before LocalLink issues it.
-            </p>
-            <div className="space-y-3">
-              {certRequests.map(r => (
-                <div key={r.id} className="rounded-2xl border border-border bg-card p-5">
-                  <div className="flex items-start justify-between gap-4 flex-wrap">
-                    <div className="min-w-0">
-                      <p className="font-heading font-bold text-foreground">
-                        {r.volunteerName} · {r.tier}-hour certificate
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-1 tabular-nums">
-                        {r.currentHours} verified hours with you
-                      </p>
-                    </div>
-                    <div className="flex gap-2 flex-shrink-0">
-                      <Button size="sm" disabled={certActingId === r.id}
-                              onClick={() => decideCertificate(r, 'approve')}
-                              className="rounded-full text-xs">
-                        Confirm
-                      </Button>
-                      <Button size="sm" variant="outline" disabled={certActingId === r.id}
-                              onClick={() => decideCertificate(r, 'decline')}
-                              className="rounded-full text-xs text-red-500 hover:text-red-500">
-                        Decline
-                      </Button>
-                    </div>
-                  </div>
-                </div>
               ))}
             </div>
           </div>
@@ -531,18 +408,6 @@ export default function MyEvents() {
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        {/* Labelled, not icon-only. This is the entry to the
-                            whole attendance system, and a bare clipboard
-                            glyph with a title tooltip said nothing — tooltips
-                            don't exist on touch, so on a phone it was an
-                            unmarked button. */}
-                        <button
-                          onClick={() => navigate(`/tracker/${opp.id}`)}
-                          className="inline-flex items-center gap-1.5 pl-2.5 pr-3 py-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-semibold transition-colors"
-                        >
-                          <ClipboardList className="w-4 h-4" />
-                          Attendance
-                        </button>
                         <button
                           onClick={() => editingId === opp.id ? setEditingId(null) : startEdit(opp)}
                           className="p-2 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary transition-colors"
@@ -720,17 +585,6 @@ export default function MyEvents() {
       {/* Create Post Modal */}
       <CreatePostModal open={showCreateModal} onClose={() => setShowCreateModal(false)} />
 
-      {/* Stands between "I'd like to go" and the organization's roster. */}
-      <CommitDialog
-        open={!!commitGate}
-        orgName={commitGate?.opp.hostName ?? 'the organization'}
-        steps={commitGate?.steps ?? []}
-        externalSignupUrl={commitGate?.externalSignupUrl}
-        submitting={!!committingId}
-        onConfirm={() => commitGate && handleToggleCommit(commitGate.opp, true, true)}
-        onCancel={() => setCommitGate(null)}
-      />
-
       {/* Delete hosted event confirmation */}
       <AlertDialog open={!!confirmDelete} onOpenChange={(open) => !open && setConfirmDelete(null)}>
         <AlertDialogContent>
@@ -757,15 +611,12 @@ export default function MyEvents() {
 
 // ── Shared event card for signup/past rows ──
 function EventCard({
-  opp, type, cancellingId, onRequestCancel, isCommitted, committing, onToggleCommit,
+  opp, type, cancellingId, onRequestCancel,
 }: {
   opp: Opportunity;
   type: 'signup' | 'past';
   cancellingId: string | null;
   onRequestCancel: () => void;
-  isCommitted?: boolean;
-  committing?: boolean;
-  onToggleCommit?: (next: boolean) => void;
 }) {
   return (
     <div className="rounded-2xl border border-border bg-card p-5 hover:shadow-md transition-all">
@@ -775,13 +626,6 @@ function EventCard({
             <span className={cn('px-3 py-1 rounded-full text-xs font-bold text-white inline-block', CATEGORY_BG[opp.category] || 'bg-primary')}>
               {getCategoryLabel(opp.category)}
             </span>
-            {/* The step beyond Interested — this is what put them on the
-                organizer's Tracker roster, so it's worth its own badge here. */}
-            {type === 'signup' && isCommitted && (
-              <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 inline-flex items-center gap-1">
-                <Check className="w-3 h-3" /> Committed
-              </span>
-            )}
           </div>
           <h3 className="font-heading font-bold text-lg text-foreground">{opp.title}</h3>
           <p className="text-muted-foreground text-sm line-clamp-2">{opp.description}</p>
@@ -790,18 +634,6 @@ function EventCard({
             <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" />{opp.duration}h</span>
             <span className="flex items-center gap-1"><Users className="w-3.5 h-3.5" />Host: {opp.hostName}</span>
           </div>
-          {type === 'signup' && onToggleCommit && (
-            <button
-              onClick={() => onToggleCommit(!isCommitted)}
-              disabled={committing}
-              className={cn(
-                "text-xs font-semibold transition-colors disabled:opacity-50",
-                isCommitted ? "text-muted-foreground hover:text-foreground" : "text-primary hover:underline"
-              )}
-            >
-              {committing ? 'Updating...' : isCommitted ? 'Remove commitment' : "Commit — put me on the organizer's list"}
-            </button>
-          )}
         </div>
         {type === 'signup' && (
           <button

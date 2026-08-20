@@ -3,14 +3,13 @@ import { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { useAuthStore, useNotificationStore } from '@/lib/store';
-import { Home, Calendar, Info, User, LogOut, Shield, Bell, Users, X, Trash2, Edit3, UserMinus, RefreshCw, CheckCircle2, XCircle, Sun, Moon, HelpCircle, Sparkles } from 'lucide-react';
+import { Home, Calendar, Info, User, LogOut, Shield, Bell, Users, X, Trash2, Edit3, UserMinus, RefreshCw, CheckCircle2, XCircle, Sun, Moon, Sparkles } from 'lucide-react';
 import Logo from './Logo';
 import { useScrolled } from '@/hooks/use-scrolled';
 
 const NAV_ITEMS = [
   { path: '/', label: 'Home', mobileLabel: 'Home', icon: Home },
   { path: '/my-events', label: 'My Events', mobileLabel: 'Events', icon: Calendar },
-  { path: '/how-it-works', label: 'How It Works', mobileLabel: 'Help', icon: HelpCircle },
   { path: '/about', label: 'About', mobileLabel: 'About', icon: Info },
   { path: '/profile', label: 'Profile', mobileLabel: 'Profile', icon: User },
 ];

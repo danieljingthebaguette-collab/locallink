@@ -5,10 +5,9 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { useAuthStore, useOpportunitiesStore, useFavoritesStore } from '@/lib/store';
-import { User, Mail, Award, Calendar, Clock, LogOut, Loader2, Edit3, Lock, Save, X, Heart, Building2, Handshake, Bell, Camera, Link as LinkIcon, Copy, Check, Sparkles } from 'lucide-react';
+import { User, Mail, Award, Calendar, LogOut, Loader2, Edit3, Lock, Save, X, Heart, Building2, Handshake, Bell, Camera, Sparkles } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import ConfirmBubble from '@/components/ConfirmBubble';
-import { OrgBreakdown, EventHistory, OverallMilestones, type RecordOrg, type RecordEvent } from '@/components/VolunteerRecord';
 
 export default function Profile() {
   const [, navigate] = useLocation();
@@ -33,17 +32,6 @@ export default function Profile() {
   const [orgSaving, setOrgSaving] = useState(false);
   const [showUpgradeConfirm, setShowUpgradeConfirm] = useState(false);
   const [upgrading, setUpgrading] = useState(false);
-  const [hours, setHours] = useState<number | null>(null);
-  const [record, setRecord] = useState<{
-    totalHours: number; totalEvents: number;
-    overallMilestones: number[]; nextOverallTier: number | null;
-    orgs: RecordOrg[]; events: RecordEvent[];
-  } | null>(null);
-  const [shareToken, setShareToken] = useState<string | null>(null);
-  const [sharing, setSharing] = useState(false);
-  const [shareCopied, setShareCopied] = useState(false);
-  const [showAllEvents, setShowAllEvents] = useState(false);
-  const [applyingCert, setApplyingCert] = useState<string | null>(null);
 
   const handleUpgradeToOrg = async () => {
     setShowUpgradeConfirm(false);
@@ -67,78 +55,6 @@ export default function Profile() {
   useEffect(() => {
     if (isLoggedIn) fetchFavorites();
   }, [isLoggedIn, fetchFavorites]);
-
-  // One request covers the hours tile and everything below it — the record
-  // endpoint already returns the total, so there's no reason to also hit
-  // /api/me/hours here.
-  useEffect(() => {
-    const token = localStorage.getItem('locallink_token');
-    if (!isLoggedIn || !token) return;
-    let cancelled = false;
-    fetch('/api/me/record', { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => (r.ok ? r.json() : null))
-      .then(d => {
-        if (cancelled || !d) return;
-        setHours(d.totalHours);
-        setRecord(d);
-        setShareToken(d.shareToken ?? null);
-      })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, [isLoggedIn]);
-
-  const toggleShare = async () => {
-    const token = localStorage.getItem('locallink_token');
-    if (!token) return;
-    setSharing(true);
-    try {
-      const res = await fetch('/api/me/share', {
-        method: shareToken ? 'DELETE' : 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        const d = await res.json();
-        setShareToken(d.shareToken ?? null);
-        toast({ title: d.shareToken ? 'Share link created' : 'Share link turned off' });
-      }
-    } finally {
-      setSharing(false);
-    }
-  };
-
-  const applyForCertificate = async (hostId: string, tier: number) => {
-    const token = localStorage.getItem('locallink_token');
-    if (!token) return;
-    setApplyingCert(`${hostId}-${tier}`);
-    try {
-      const res = await fetch('/api/certificates/apply', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ hostId, tier }),
-      });
-      const d = await res.json();
-      if (res.ok) {
-        toast({ title: 'Application sent', description: 'An admin will review it and issue your certificate.' });
-        const r = await fetch('/api/me/record', { headers: { Authorization: `Bearer ${token}` } });
-        if (r.ok) setRecord(await r.json());
-      } else {
-        toast({ title: d.error || 'Could not apply', variant: 'destructive' });
-      }
-    } finally {
-      setApplyingCert(null);
-    }
-  };
-
-  const copyShareLink = async () => {
-    if (!shareToken) return;
-    try {
-      await navigator.clipboard.writeText(`${window.location.origin}/v/${shareToken}`);
-      setShareCopied(true);
-      setTimeout(() => setShareCopied(false), 2000);
-    } catch {
-      toast({ title: 'Could not copy — select the link and copy it manually', variant: 'destructive' });
-    }
-  };
 
   useEffect(() => {
     if (currentUser) {
@@ -564,9 +480,7 @@ export default function Profile() {
           </div>
         )}
 
-        {/* Onboarding reminder — kept above the hours/certificate section on
-            purpose, both physically here and in the code: this is a plain
-            profile-completeness nudge, unrelated to verified hours. Same
+        {/* Onboarding reminder — a plain profile-completeness nudge. Same
             standing-reminder shape as the bell notification (Navigation.tsx)
             and driven by the same store action, so either one reopens the
             identical modal. */}
@@ -591,10 +505,12 @@ export default function Profile() {
         <div className="grid grid-cols-2 gap-3 mb-8">
           {[
             // Volunteers never host (the upgrade only runs one way), so that
-            // tile was permanently 0 for them — hours take the slot instead.
+            // tile was permanently 0 for them — favorited orgs take the slot
+            // instead. Both tiles now read from data this build actually has,
+            // with no dependency on verified-hours tracking.
             currentUser.accountType === 'organization'
               ? { icon: Calendar, label: 'Events Hosted', value: opLoading && !loaded ? '...' : hosted.length, color: 'text-green-500' }
-              : { icon: Clock, label: 'Hours Verified', value: hours === null ? '...' : Number(hours.toFixed(1)), color: 'text-emerald-500' },
+              : { icon: Heart, label: 'Orgs Favorited', value: favorites.length, color: 'text-emerald-500' },
             { icon: Award, label: 'Events Interested', value: opLoading && !loaded ? '...' : signedUp.length, color: 'text-purple-500' },
           ].map((stat) => (
             <div key={stat.label} className="rounded-2xl border border-border bg-card p-4 text-center">
@@ -604,134 +520,6 @@ export default function Profile() {
             </div>
           ))}
         </div>
-
-        {/* Where the hours came from. A single number is worth very little
-            to the person who earned it — this is the part that shows the
-            work: which organizations, how much with each, how close the
-            next milestone is. */}
-        {/* How certificates work, stated where the badges actually are. A
-            first-time visitor's question is "what are these and how do I get
-            one" — answering it on the How It Works page only would send them
-            away from the page mid-thought. */}
-        {record && currentUser.accountType === 'volunteer' && (record.orgs.length > 0 || record.totalHours > 0) && (
-          <div className="rounded-2xl border border-border bg-secondary/30 p-5 mb-6">
-            <h3 className="font-heading font-bold text-foreground mb-1.5 flex items-center gap-2">
-              <Award className="w-4 h-4 text-primary" /> How certificates work
-            </h3>
-            <p className="text-sm text-muted-foreground leading-relaxed">
-              Reach <span className="font-semibold text-foreground">10, 25, 50 or 100 hours with one
-              organization</span> and you can request a certificate from them. They confirm it — it
-              carries their name — and then LocalLink issues it as a printable document you can hand
-              to a school. Your <span className="font-semibold text-foreground">total across every
-              organization</span> earns recognition at 50, 100, 250 and 500 hours automatically.
-            </p>
-            <p className="text-xs text-muted-foreground leading-relaxed mt-2">
-              You can't enter your own hours — every one came from an organization — which is exactly
-              what makes a certificate worth showing.{' '}
-              <button onClick={() => navigate('/how-it-works')} className="font-semibold text-primary hover:underline">
-                Full instructions
-              </button>
-            </p>
-          </div>
-        )}
-
-        {record && record.totalHours > 0 && (
-          <div className="mb-6">
-            <OverallMilestones
-              totalHours={record.totalHours}
-              milestones={record.overallMilestones ?? []}
-              nextTier={record.nextOverallTier}
-            />
-          </div>
-        )}
-
-        {record && record.orgs.length > 0 && (
-          <div className="mb-6">
-            <h3 className="font-heading font-bold text-lg text-foreground mb-3">Organizations you've volunteered with</h3>
-            <OrgBreakdown
-              orgs={record.orgs}
-              onOrgClick={(id) => navigate(`/org/${id}`)}
-              onApply={applyForCertificate}
-              applyingKey={applyingCert}
-            />
-          </div>
-        )}
-
-        {record && record.events.length > 0 && (
-          <div className="mb-6">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-heading font-bold text-lg text-foreground">
-                Events you've completed ({record.totalEvents})
-              </h3>
-              {record.events.length > 5 && (
-                <button
-                  onClick={() => setShowAllEvents(v => !v)}
-                  className="text-xs font-semibold text-primary hover:underline"
-                >
-                  {showAllEvents ? 'Show less' : `Show all ${record.events.length}`}
-                </button>
-              )}
-            </div>
-            <EventHistory events={record.events} limit={showAllEvents ? undefined : 5} />
-          </div>
-        )}
-
-        {/* Nothing to show yet — say what would put something here. */}
-        {record && record.events.length === 0 && currentUser.accountType === 'volunteer' && (
-          <div className="rounded-2xl border-2 border-dashed border-border p-8 text-center mb-6">
-            <Award className="w-10 h-10 text-muted-foreground mx-auto opacity-40 mb-3" />
-            <p className="text-muted-foreground font-medium">No verified hours yet</p>
-            <p className="text-sm text-muted-foreground mt-1 mb-4">
-              Commit to an event, then scan the organization's code when you get there.
-            </p>
-            <Button onClick={() => navigate('/how-it-works')} variant="outline" className="rounded-full">
-              How it works
-            </Button>
-          </div>
-        )}
-
-        {/* The share link. Off until they ask for it, and revocable — this
-            is a record of a young person's movements, so browsing is not a
-            feature and the default is no link at all. */}
-        {currentUser.accountType === 'volunteer' && (
-          <div className="rounded-2xl border border-border bg-card p-6 mb-6">
-            <h3 className="font-heading font-bold text-lg text-foreground mb-1 flex items-center gap-2">
-              <LinkIcon className="w-5 h-5 text-primary" />
-              Share your record
-            </h3>
-            <p className="text-sm text-muted-foreground mb-4">
-              Creates a private link to your verified hours that anyone can open without an
-              account — for a school counselor or an application. Your profile stays hidden
-              otherwise, and turning the link off makes it stop working immediately.
-            </p>
-            {shareToken ? (
-              <div className="space-y-3">
-                <div className="rounded-xl border border-border bg-background px-3 py-2 text-xs text-muted-foreground break-all font-mono">
-                  {window.location.origin}/v/{shareToken}
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Button onClick={copyShareLink} size="sm" variant="outline" className="rounded-full text-xs">
-                    {shareCopied ? <Check className="w-3.5 h-3.5 mr-1.5" /> : <Copy className="w-3.5 h-3.5 mr-1.5" />}
-                    {shareCopied ? 'Copied' : 'Copy link'}
-                  </Button>
-                  <Button onClick={() => navigate(`/v/${shareToken}`)} size="sm" variant="outline" className="rounded-full text-xs">
-                    Preview
-                  </Button>
-                  <Button onClick={toggleShare} disabled={sharing} size="sm" variant="outline"
-                          className="rounded-full text-xs text-red-500 hover:text-red-500">
-                    {sharing && <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />}
-                    Turn off
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <Button onClick={toggleShare} disabled={sharing} size="sm" className="rounded-full text-xs">
-                {sharing && <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />}
-                Create share link
-              </Button>
-            )}
-          </div>
-        )}
 
         {/* Hosting summary stays for organizations only. */}
         {currentUser.accountType === 'organization' && (

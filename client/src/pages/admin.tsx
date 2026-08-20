@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { useAuthStore, useAdminStore, useOpportunitiesStore, type JoinLink } from '@/lib/store';
 import { VerifiedBadge } from '@/components/VerifiedBadge';
-import { Ban, CheckCircle2, TrendingUp, Scale, ClipboardCheck, XCircle, Award } from 'lucide-react';
+import { Ban, CheckCircle2, TrendingUp, Scale, ClipboardCheck, XCircle } from 'lucide-react';
 import type { AppUser, Opportunity } from '@/lib/mockData';
 import { CATEGORIES, TOWNS, type Category } from '@/lib/mockData';
 import {
@@ -35,7 +35,7 @@ import {
   Calendar,
 } from 'lucide-react';
 
-type Tab = 'overview' | 'users' | 'opportunities' | 'verify' | 'certificates' | 'reports' | 'feedback' | 'appeals' | 'join-links';
+type Tab = 'overview' | 'users' | 'opportunities' | 'verify' | 'reports' | 'feedback' | 'appeals' | 'join-links';
 
 export default function Admin() {
   const [, navigate] = useLocation();
@@ -46,7 +46,6 @@ export default function Admin() {
   const [activeTab, setActiveTab] = useState<Tab>('overview');
   // Badge count lives here so the tab shows a pending total without the tab
   // itself having to be open.
-  const [pendingCertCount, setPendingCertCount] = useState(0);
 
   // Redirect non-admin users
   useEffect(() => {
@@ -65,11 +64,6 @@ export default function Admin() {
       fetchOpportunities();
       fetchPendingOpportunities();
       fetchJoinLinks();
-      const token = localStorage.getItem('locallink_token');
-      fetch('/api/admin/certificate-applications', { headers: { Authorization: `Bearer ${token}` } })
-        .then(r => (r.ok ? r.json() : []))
-        .then(d => setPendingCertCount(Array.isArray(d) ? d.length : 0))
-        .catch(() => {});
     }
   }, [currentUser]);
 
@@ -80,7 +74,6 @@ export default function Admin() {
     { value: 'users', label: 'Users', icon: <Users className="w-4 h-4" /> },
     { value: 'opportunities', label: 'Opportunities', icon: <MapPin className="w-4 h-4" /> },
     { value: 'verify', label: 'Verify', icon: <ClipboardCheck className="w-4 h-4" />, badge: pendingOpportunities.length },
-    { value: 'certificates', label: 'Certificates', icon: <Award className="w-4 h-4" />, badge: pendingCertCount },
     { value: 'reports', label: 'Reports', icon: <Flag className="w-4 h-4" /> },
     { value: 'feedback', label: 'Feedback', icon: <MessageSquare className="w-4 h-4" /> },
     { value: 'appeals', label: 'Appeals', icon: <Scale className="w-4 h-4" /> },
@@ -224,7 +217,6 @@ export default function Admin() {
             }}
           />
         )}
-        {activeTab === 'certificates' && <CertificatesTab toast={toast} onCountChange={setPendingCertCount} />}
         {activeTab === 'reports' && <ReportsTab toast={toast} />}
         {activeTab === 'feedback' && <FeedbackTab toast={toast} />}
         {activeTab === 'appeals' && <AppealsTab toast={toast} onUnbanUser={unbanUser} />}
@@ -1557,143 +1549,6 @@ function JoinLinksTab({
           ))}
         </div>
       )}
-    </div>
-  );
-}
-
-/** Certificate applications waiting on a decision.
- *
- * Reaching a milestone is automatic; issuing a certificate with LocalLink's
- * name on it is not. Each row shows the hours the volunteer had when they
- * applied alongside what they have right now, because those can differ — a
- * credit revoked in between is exactly the case worth catching, and the
- * server refuses to issue in that situation regardless of what's clicked. */
-function CertificatesTab({ toast, onCountChange }: { toast: any; onCountChange: (n: number) => void }) {
-  const [apps, setApps] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [actingId, setActingId] = useState<string | null>(null);
-  const [decliningId, setDecliningId] = useState<string | null>(null);
-  const [note, setNote] = useState('');
-
-  const load = async () => {
-    setLoading(true);
-    try {
-      const token = localStorage.getItem('locallink_token');
-      const res = await fetch('/api/admin/certificate-applications', { headers: { Authorization: `Bearer ${token}` } });
-      if (res.ok) {
-        const d = await res.json();
-        setApps(d);
-        onCountChange(d.length);
-      }
-    } catch { /* ignore */ }
-    setLoading(false);
-  };
-
-  useEffect(() => { load(); }, []);
-
-  const decide = async (app: any, action: 'issue' | 'decline') => {
-    setActingId(app.id);
-    try {
-      const token = localStorage.getItem('locallink_token');
-      const res = await fetch(`/api/admin/certificate-applications/${app.id}/${action}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify(action === 'decline' ? { note: note.trim() || undefined } : {}),
-      });
-      const d = await res.json().catch(() => ({}));
-      if (res.ok) {
-        setApps(a => {
-          const next = a.filter(x => x.id !== app.id);
-          onCountChange(next.length);
-          return next;
-        });
-        setDecliningId(null); setNote('');
-        toast({ title: action === 'issue' ? `Certificate issued to ${app.volunteerName}` : 'Application declined' });
-      } else {
-        toast({ title: d.error || 'Could not update', variant: 'destructive' });
-        if (res.status === 409) load(); // eligibility changed underneath — refresh
-      }
-    } finally {
-      setActingId(null);
-    }
-  };
-
-  if (loading) {
-    return <div className="text-center py-12 text-muted-foreground">Loading applications...</div>;
-  }
-
-  if (!apps.length) {
-    return (
-      <div className="rounded-2xl border-2 border-dashed border-border p-10 text-center">
-        <Award className="w-10 h-10 text-muted-foreground mx-auto opacity-40 mb-3" />
-        <p className="text-muted-foreground font-medium">No certificate applications waiting</p>
-        <p className="text-sm text-muted-foreground mt-1">
-          Volunteers can apply once they reach 10, 25, 50 or 100 verified hours with one organization.
-        </p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-3">
-      {apps.map(app => {
-        const stillEligible = app.currentHours >= app.tier;
-        return (
-          <div key={app.id} className="rounded-2xl border border-border bg-card p-5">
-            <div className="flex items-start justify-between gap-4 flex-wrap">
-              <div className="min-w-0">
-                <p className="font-heading font-bold text-foreground">
-                  {app.volunteerName} · {app.tier}-hour certificate
-                </p>
-                <p className="text-sm text-muted-foreground mt-0.5">with {app.orgName}</p>
-                <p className="text-xs text-muted-foreground mt-2 tabular-nums">
-                  {app.currentHours} verified hours now
-                  {app.currentHours !== app.hoursAtApply && ` (was ${app.hoursAtApply} when applied)`}
-                </p>
-                {!stillEligible && (
-                  <p className="text-xs text-red-500 mt-1">
-                    No longer meets {app.tier} hours — issuing will be refused.
-                  </p>
-                )}
-              </div>
-              <div className="flex flex-wrap gap-2 flex-shrink-0">
-                <Button
-                  size="sm"
-                  disabled={actingId === app.id || !stillEligible}
-                  onClick={() => decide(app, 'issue')}
-                  className="rounded-full text-xs"
-                >
-                  <CheckCircle2 className="w-3.5 h-3.5 mr-1.5" /> Issue
-                </Button>
-                <Button
-                  size="sm" variant="outline"
-                  disabled={actingId === app.id}
-                  onClick={() => setDecliningId(decliningId === app.id ? null : app.id)}
-                  className="rounded-full text-xs text-red-500 hover:text-red-500"
-                >
-                  <XCircle className="w-3.5 h-3.5 mr-1.5" /> Decline
-                </Button>
-              </div>
-            </div>
-
-            {decliningId === app.id && (
-              <div className="mt-4 flex flex-col sm:flex-row gap-2">
-                <Input
-                  value={note}
-                  onChange={e => setNote(e.target.value)}
-                  placeholder="Reason (shown to the volunteer, optional)"
-                  className="flex-1"
-                />
-                <Button size="sm" variant="outline" disabled={actingId === app.id}
-                        onClick={() => decide(app, 'decline')}
-                        className="rounded-full text-xs text-red-500 hover:text-red-500">
-                  Confirm decline
-                </Button>
-              </div>
-            )}
-          </div>
-        );
-      })}
     </div>
   );
 }

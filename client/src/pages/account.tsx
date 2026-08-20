@@ -387,9 +387,9 @@ export default function Account() {
                     ))}
                   </select>
                   <p className="text-xs text-muted-foreground">
-                    Organizations you commit to can see whether you're under 18, so they can sort
-                    out consent forms and supervision. Nobody else sees it, and it never appears on
-                    a record you share. You need to be 13 or older to use LocalLink.
+                    Organizations you sign up with can see whether you're under 18, so they can sort
+                    out consent forms and supervision. Nobody else sees it. You need to be 13 or
+                    older to use LocalLink.
                   </p>
                 </div>
               )}

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'wouter';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { cn, getLocationError, getExternalSignupUrlError } from '@/lib/utils';
-import { Plus, MapPin, Users, Clock, Search, Loader2, Heart, Flag, X, Share2, Edit3, Save, ChevronDown, Star, Trash2, Repeat, Check, Globe, ExternalLink } from 'lucide-react';
+import { Plus, MapPin, Users, Clock, Search, Loader2, Heart, Flag, X, Share2, Edit3, Save, ChevronDown, Star, Trash2, Repeat, Globe, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -12,7 +12,6 @@ import { getCategoryColor, getModalGradient, getCategoryBorder, getCategoryLabel
 import { useAuthStore, useOpportunitiesStore, useFavoritesStore, getRecurringStatus } from '@/lib/store';
 import { CATEGORIES, TOWNS, type Category, type Opportunity } from '@/lib/mockData';
 import CreatePostModal from '@/components/CreatePostModal';
-import CommitDialog from '@/components/CommitDialog';
 import ConfirmBubble from '@/components/ConfirmBubble';
 import { useScrolled } from '@/hooks/use-scrolled';
 import { VerifiedBadge } from '@/components/VerifiedBadge';
@@ -41,21 +40,16 @@ const EASE_OUT = [0.25, 0.1, 0.25, 1] as const;
 // to anyone who has just registered. Previously only signed-out visitors ever saw
 // it, so the explanation reached people who hadn't joined and was hidden from the
 // person who just did.
-// Four steps rather than three: scanning is the one thing a volunteer has to
-// remember to do on the day, and folding it into "show up" is how people end
-// up at an event without knowing their hours depend on it.
 const VOLUNTEER_STEPS = [
   { n: 1, t: 'Browse the board', d: 'Real events from Somerset County orgs' },
-  { n: 2, t: 'Commit when you’re sure', d: 'Puts you on the organizer’s list' },
-  { n: 3, t: 'Scan the code there', d: 'Once when you arrive, once when you leave' },
-  { n: 4, t: 'Hours land on your profile', d: 'Verified by the organization' },
+  { n: 2, t: 'Tap I’m Interested', d: 'One click — the org gets notified' },
+  { n: 3, t: 'Show up & help', d: 'Coordinate the details directly with them' },
 ];
 
 const ORG_STEPS = [
   { n: 1, t: 'Post an opportunity', d: 'An admin reviews it before it goes live' },
-  { n: 2, t: 'See who commits', d: 'Committed volunteers appear on your list' },
-  { n: 3, t: 'Start the event & show the QR', d: 'Volunteers scan it to check in and out' },
-  { n: 4, t: 'Download the spreadsheet', d: 'Hours are already recorded for you' },
+  { n: 2, t: 'See who’s interested', d: 'Everyone who taps in appears on your list' },
+  { n: 3, t: 'Reach out directly', d: 'Their name and email are right there' },
 ];
 
 // Fixed spark layout for the "I'm Interested" burst — perimeter points with an
@@ -104,7 +98,7 @@ export default function Home() {
   const {
     setSearchQuery, setCategory, setSortBy, setTown, getFiltered,
     currentCategory, searchQuery, sortBy, currentTown,
-    signup, cancelSignup, commit, cancelCommit, fetchOpportunities, updateOpportunity,
+    signup, cancelSignup, fetchOpportunities, updateOpportunity,
     loading, loaded, opportunities,
   } = useOpportunitiesStore();
   // Destructure `favorites` array directly so React re-renders when it changes
@@ -117,8 +111,6 @@ export default function Home() {
   const [hostProfileLoading, setHostProfileLoading] = useState(false);
   const [signingUp, setSigningUp] = useState(false);
   const [showInterestBurst, setShowInterestBurst] = useState(false);
-  // Set when the server says the organization requires its own sign-up first.
-  const [commitGate, setCommitGate] = useState<{ oppId: string; steps: string[]; externalSignupUrl: string | null } | null>(null);
   const prefersReducedMotion = useReducedMotion();
   // Host "view interested" list — fetched on demand, not preloaded with the board
   const [showInterestedList, setShowInterestedList] = useState(false);
@@ -257,7 +249,6 @@ export default function Home() {
   const formatDate = (d: string) => new Date(d).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
   const formatTime = (d: string) => new Date(d).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
   const isInterested = (opp: Opportunity) => currentUser ? opp.signups.includes(currentUser.id) : false;
-  const isCommitted = (opp: Opportunity) => currentUser ? opp.committed.includes(currentUser.id) : false;
 
   const DAY_FULL  = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   const DAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -344,38 +335,6 @@ export default function Home() {
     setSigningUp(true);
     try {
       await cancelSignup(oppId, currentUser.id);
-      const fresh = useOpportunitiesStore.getState().opportunities.find(o => o.id === oppId);
-      if (fresh) setSelectedCard(fresh); else setSelectedCard(null);
-    } finally { setSigningUp(false); }
-  };
-
-  // ── Commit / uncommit — the step beyond Interested that puts a volunteer
-  // on the org's Tracker roster ───────────────────────────────────────
-  const handleCommit = async (oppId: string, acknowledged = false) => {
-    setSigningUp(true);
-    try {
-      const result = await commit(oppId, acknowledged);
-      // The organization has its own sign-up. Show it rather than quietly
-      // adding someone to a list they aren't really on.
-      if (result && typeof result === 'object' && result.needsSteps) {
-        setCommitGate({ oppId, steps: result.steps, externalSignupUrl: result.externalSignupUrl });
-        return;
-      }
-      if (result) {
-        setCommitGate(null);
-        toast({ title: "You're committed ✓", description: "You're on the organizer's list for this event." });
-      } else {
-        toast({ title: 'Could not commit', description: 'Try again in a moment.' });
-      }
-      const fresh = useOpportunitiesStore.getState().opportunities.find(o => o.id === oppId);
-      if (fresh) setSelectedCard(fresh); else setSelectedCard(null);
-    } finally { setSigningUp(false); }
-  };
-
-  const handleCancelCommit = async (oppId: string) => {
-    setSigningUp(true);
-    try {
-      await cancelCommit(oppId);
       const fresh = useOpportunitiesStore.getState().opportunities.find(o => o.id === oppId);
       if (fresh) setSelectedCard(fresh); else setSelectedCard(null);
     } finally { setSigningUp(false); }
@@ -1396,6 +1355,30 @@ export default function Home() {
                   )}
                 </motion.div>
 
+                {/* How to participate — the organization's own steps, shown here
+                    informationally. No gate, no checkbox: there's no roster this
+                    confirms you onto, just the org's own instructions for anyone
+                    deciding whether to go. */}
+                {selectedCard.steps && selectedCard.steps.length > 0 && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.24, duration: 0.32, ease: EASE_OUT }}
+                    className="bg-white/15 backdrop-blur-md rounded-2xl p-6 border border-white/20 space-y-3">
+                    <h3 className="text-sm font-bold tracking-widest uppercase opacity-75">How to Participate</h3>
+                    <ol className="space-y-2.5">
+                      {selectedCard.steps.map((step, i) => (
+                        <li key={i} className="flex items-start gap-3">
+                          <span className="flex-shrink-0 w-6 h-6 rounded-full bg-white/20 text-white text-xs font-bold flex items-center justify-center tabular-nums mt-0.5">
+                            {i + 1}
+                          </span>
+                          <span className="text-white/95 text-sm leading-relaxed">{step}</span>
+                        </li>
+                      ))}
+                    </ol>
+                  </motion.div>
+                )}
+
                 {/* Tags */}
                 {selectedCard.tags && selectedCard.tags.length > 0 && (
                   <motion.div
@@ -1492,29 +1475,8 @@ export default function Home() {
                             {showInterestBurst && <InterestBurst />}
                           </div>
 
-                          {/* The step beyond Interested. This is what puts a
-                              volunteer on the organizer's Tracker roster — Interested
-                              alone never does, on purpose, so browsing stays low-pressure. */}
-                          {isCommitted(selectedCard) ? (
-                            <div className="rounded-2xl py-2.5 px-3 bg-white/10 border border-white/20 flex items-center justify-between gap-2">
-                              <span className="text-white text-sm font-semibold flex items-center gap-1.5">
-                                <Check className="w-4 h-4 text-emerald-300" /> Committed — you're on their list
-                              </span>
-                              <button onClick={() => handleCancelCommit(selectedCard.id)} disabled={signingUp}
-                                className="text-white/60 hover:text-white/80 text-xs font-medium flex-shrink-0 transition-colors">
-                                Undo
-                              </button>
-                            </div>
-                          ) : (
-                            <button onClick={() => handleCommit(selectedCard.id)} disabled={signingUp}
-                              className="w-full rounded-2xl py-2.5 font-semibold bg-white text-primary hover:bg-white/90 text-sm transition-colors flex items-center justify-center gap-2 disabled:opacity-70">
-                              {signingUp && <Loader2 className="w-4 h-4 animate-spin" />}
-                              I'm Committing — put me on the list
-                            </button>
-                          )}
-
-                          {/* Viral loop: the moment someone commits is the moment
-                              they're most likely to bring a friend along */}
+                          {/* Viral loop: the moment someone says they're interested
+                              is the moment they're most likely to bring a friend along */}
                           <button onClick={() => handleShare(selectedCard.id)}
                             className="w-full rounded-2xl py-2.5 font-semibold bg-white/15 hover:bg-white/25 border border-white/30 text-white text-sm transition-colors flex items-center justify-center gap-2">
                             <Share2 className="w-4 h-4" /> Invite a friend — copy link
@@ -1628,16 +1590,6 @@ export default function Home() {
         onCancel={() => setShowDiscardEdits(false)}
       />
 
-      {/* Stands between "I'd like to go" and the organization's roster. */}
-      <CommitDialog
-        open={!!commitGate}
-        orgName={selectedCard?.hostName ?? 'the organization'}
-        steps={commitGate?.steps ?? []}
-        externalSignupUrl={commitGate?.externalSignupUrl}
-        submitting={signingUp}
-        onConfirm={() => commitGate && handleCommit(commitGate.oppId, true)}
-        onCancel={() => setCommitGate(null)}
-      />
     </div>
   );
 }

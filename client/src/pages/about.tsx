@@ -1,4 +1,4 @@
-import { useLocation, Link } from 'wouter';
+import { useLocation } from 'wouter';
 import { Heart, Users, MapPin, Star, Mail, Globe, Instagram } from 'lucide-react';
 import Logo from '@/components/Logo';
 
@@ -88,9 +88,8 @@ export default function About() {
             {[
               { step: '1', text: 'Create a free account and verify your email.' },
               { step: '2', text: 'Browse volunteer opportunities in your area or search by category.' },
-              { step: '3', text: 'Mark yourself Interested in anything you might attend, then Commit to the ones you know you’re going to.' },
-              { step: '4', text: 'At the event, scan the organization’s code when you arrive and again when you leave.' },
-              { step: '5', text: 'Your hours are confirmed by the organization and appear on your profile automatically.' },
+              { step: '3', text: 'Tap I’m Interested on anything you’d like to attend.' },
+              { step: '4', text: 'The organization sees your name and email, and reaches out with the details.' },
             ].map(({ step, text }) => (
               <li key={step} className="flex items-start gap-4">
                 <span className="flex-shrink-0 inline-flex items-center justify-center w-8 h-8 rounded-full bg-primary text-primary-foreground text-sm font-bold">
@@ -100,12 +99,6 @@ export default function About() {
               </li>
             ))}
           </ol>
-          {/* About explains what LocalLink is; the instructions page explains
-              how to actually run an event. Send people there rather than
-              duplicating steps that would drift out of sync. */}
-          <Link href="/how-it-works" className="inline-block text-sm font-semibold text-primary hover:underline pt-2">
-            Step-by-step instructions for volunteers and organizations →
-          </Link>
         </section>
 
         {/* Contact */}

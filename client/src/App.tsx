@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import { Switch, Route, useLocation } from "wouter";
 import { MotionConfig } from "framer-motion";
 import { queryClient } from "./lib/queryClient";
@@ -7,13 +7,9 @@ import { Toaster } from "@/components/ui/toaster";
 import Navigation from "@/components/Navigation";
 import FeedbackButton from "@/components/FeedbackButton";
 import OnboardingQuestionnaire from "@/components/OnboardingQuestionnaire";
-import { noteAppNavigation } from "@/lib/history";
 import Home from "@/pages/home";
 import MyEvents from "@/pages/my-events";
 import About from "@/pages/about";
-import HowItWorks from '@/pages/how-it-works';
-import SharedRecord from '@/pages/shared-record';
-import CertificatePage from '@/pages/certificate';
 import Profile from "@/pages/profile";
 import Account from "@/pages/account";
 import Admin from "@/pages/admin";
@@ -25,8 +21,6 @@ import Privacy from "@/pages/privacy";
 import NotFound from "@/pages/not-found";
 import OrgProfilePage from "@/pages/org-profile";
 import JoinPage from "@/pages/join";
-import Tracker from "@/pages/tracker";
-import CheckIn from "@/pages/checkin";
 
 /**
  * wouter keeps the window scroll offset across route changes, so clicking
@@ -42,28 +36,12 @@ function ScrollToTop() {
   return null;
 }
 
-/** Records that the visitor moved between pages inside the app, so
- * chromeless pages know whether "back" leads anywhere of ours. The first
- * render is the arrival itself, not a navigation. */
-function TrackNavigation() {
-  const [pathname] = useLocation();
-  const isFirst = useRef(true);
-  useEffect(() => {
-    if (isFirst.current) { isFirst.current = false; return; }
-    noteAppNavigation();
-  }, [pathname]);
-  return null;
-}
-
 function Router() {
   return (
     <Switch>
       <Route path="/" component={Home} />
       <Route path="/my-events" component={MyEvents} />
       <Route path="/about" component={About} />
-      <Route path="/how-it-works" component={HowItWorks} />
-      <Route path="/v/:token" component={SharedRecord} />
-      <Route path="/certificate/:id" component={CertificatePage} />
       <Route path="/profile" component={Profile} />
       <Route path="/account" component={Account} />
       <Route path="/admin" component={Admin} />
@@ -73,8 +51,6 @@ function Router() {
       <Route path="/terms" component={Terms} />
       <Route path="/privacy" component={Privacy} />
       <Route path="/org/:id" component={OrgProfilePage} />
-      <Route path="/tracker/:opportunityId" component={Tracker} />
-      <Route path="/checkin/:opportunityId" component={CheckIn} />
       <Route path="/join/:slug" component={JoinPage} />
       <Route component={NotFound} />
     </Switch>
@@ -84,27 +60,10 @@ function Router() {
 function App() {
   const [location] = useLocation();
 
-  // Shared records and certificates are documents handed to someone outside
-  // the site — usually a school counselor who was sent a link. Site
-  // navigation would invite them to browse a product they have no account
-  // for, and frame a verification record as a web page rather than a record.
-  const isDocument = location.startsWith('/v/') || location.startsWith('/certificate/');
-
-  // The floating feedback bubble is pinned bottom-right, which is exactly
-  // where the roster's row actions sit on a narrow screen — it covered
-  // "Mark as came" on a phone, and the organizer's phone is the device
-  // they're holding at the door. Hidden anywhere the page is a task being
-  // performed rather than something being browsed.
-  const hideFeedback = isDocument
-    || location.startsWith('/tracker/')
-    || location.startsWith('/checkin/');
-
-  // Same reasoning as hideFeedback -- a task screen (the tracker, mid check-in)
-  // or a chromeless document isn't the moment to interrupt with an unrelated
-  // popup. Also suppressed on /account: it's the login/register page itself,
-  // and the moment right after someone finishes registering is not the
-  // moment to stack a second form over the first.
-  const hideOnboarding = hideFeedback || location.startsWith('/account');
+  // The only screen an unrelated popup shouldn't stack on top of: the
+  // login/register page itself, and the moment right after registering is
+  // not the moment to stack a second form over the first.
+  const hideOnboarding = location.startsWith('/account');
 
   return (
     <QueryClientProvider client={queryClient}>
@@ -112,11 +71,10 @@ function App() {
           animation on the site, so it doesn't have to be handled per component. */}
       <MotionConfig reducedMotion="user">
         <ScrollToTop />
-        <TrackNavigation />
         <Toaster />
-        {!isDocument && <Navigation />}
+        <Navigation />
         <Router />
-        {!hideFeedback && <FeedbackButton />}
+        <FeedbackButton />
         <OnboardingQuestionnaire suppressed={hideOnboarding} />
       </MotionConfig>
     </QueryClientProvider>

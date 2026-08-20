@@ -32,12 +32,11 @@ export interface Opportunity {
   hostId: string;
   hostName: string;
   signups: string[];
-  committed: string[]; // subset of signups who took the extra step beyond Interested — this is what the org's Tracker roster shows
   popularity: number;
   tags: string[];
   createdAt: string;
   isAvailable?: boolean;  // true (default) = accepting sign-ups; false = closed by host
-  adultsOnly?: boolean;   // organization marked this 18+; blocks committing for known minors
+  adultsOnly?: boolean;   // organization marked this 18+; blocks signing up for known minors
   isRecurring?: boolean;  // true = repeats every week on recurringDay at recurringTime
   recurringDay?: number;  // 0 = Sunday … 6 = Saturday
   recurringTime?: string; // "HH:MM" (24-hour), e.g. "12:00"
@@ -98,7 +97,6 @@ export const SAMPLE_OPPORTUNITIES: Opportunity[] = [
     hostId: '1',
     hostName: 'EcoWarriors',
     signups: [],
-    committed: [],
     popularity: 38,
     spotsType: 'limited',
     tags: [],
@@ -118,7 +116,6 @@ export const SAMPLE_OPPORTUNITIES: Opportunity[] = [
     hostId: '2',
     hostName: 'MathGenius',
     signups: [],
-    committed: [],
     popularity: 5,
     spotsType: 'limited',
     tags: [],
@@ -138,7 +135,6 @@ export const SAMPLE_OPPORTUNITIES: Opportunity[] = [
     hostId: '3',
     hostName: 'SportsClub',
     signups: [],
-    committed: [],
     popularity: 22,
     spotsType: 'limited',
     tags: [],
@@ -158,7 +154,6 @@ export const SAMPLE_OPPORTUNITIES: Opportunity[] = [
     hostId: '4',
     hostName: 'FoodForAll',
     signups: [],
-    committed: [],
     popularity: 25,
     spotsType: 'limited',
     tags: [],
@@ -178,7 +173,6 @@ export const SAMPLE_OPPORTUNITIES: Opportunity[] = [
     hostId: '5',
     hostName: 'GreenFuture',
     signups: [],
-    committed: [],
     popularity: 18,
     spotsType: 'limited',
     tags: [],
@@ -198,7 +192,6 @@ export const SAMPLE_OPPORTUNITIES: Opportunity[] = [
     hostId: '6',
     hostName: 'GreenThumb',
     signups: [],
-    committed: [],
     popularity: 15,
     spotsType: 'limited',
     tags: [],

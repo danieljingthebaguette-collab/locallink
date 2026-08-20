@@ -25,13 +25,17 @@ export default defineConfig({
     emptyOutDir: true,
   },
   server: {
+    // This worktree runs alongside the main LocalLink dev server, which
+    // already owns 5173/3001 -- 5175/3002 here, matching .env, so both can
+    // be up at once without colliding.
+    port: 5175,
     proxy: {
       '/api': {
-        target: 'http://localhost:3001',
+        target: 'http://localhost:3002',
         changeOrigin: true,
       },
       '/uploads': {
-        target: 'http://localhost:3001',
+        target: 'http://localhost:3002',
         changeOrigin: true,
       },
     },

@@ -746,7 +746,7 @@ export default function CreatePostModal({ open, onClose }: Props) {
                         <label className="flex items-start gap-2.5 mb-3 cursor-pointer">
                           <input type="checkbox" checked={adultsOnly} onChange={e => setAdultsOnly(e.target.checked)} className="mt-0.5" />
                           <span className="text-xs opacity-90">
-                            <span className="font-bold">Adults only (18+)</span> — for work a minor can’t do, like power tools or late shifts. Volunteers under 18 won’t be able to commit.
+                            <span className="font-bold">Adults only (18+)</span> — for work a minor can’t do, like power tools or late shifts. Volunteers under 18 won’t be able to sign up.
                           </span>
                         </label>
                         <span id="post-spots-label" className="text-xs font-bold tracking-widest uppercase opacity-75 block">Spots</span>
@@ -830,7 +830,7 @@ export default function CreatePostModal({ open, onClose }: Props) {
                         than left as a blank optional box: plenty of organizations
                         genuinely have no signup page, and the ones that DO were
                         skipping the field and stranding volunteers who thought
-                        committing here was enough. Answering is required; giving a
+                        signing up here was enough. Answering is required; giving a
                         URL is required only if the answer is yes. */}
                     <div className="bg-white/15 backdrop-blur-md rounded-2xl p-4 border border-white/20 space-y-3">
                       <p className="text-xs font-bold tracking-widest uppercase opacity-75">
@@ -870,7 +870,7 @@ export default function CreatePostModal({ open, onClose }: Props) {
                       )}
                       {hasSignupPage === false && (
                         <p className="text-white/60 text-xs">
-                          Volunteers will just commit here — nothing else to do before the event.
+                          Volunteers just sign up here — nothing else to do before the event.
                         </p>
                       )}
                     </div>

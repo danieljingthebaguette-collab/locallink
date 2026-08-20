@@ -288,15 +288,11 @@ interface OpportunitiesState {
   getFiltered: () => Opportunity[];
   fetchOpportunities: () => Promise<void>;
   fetchMyPosts: () => Promise<void>;
-  addOpportunity: (opp: Omit<Opportunity, 'id' | 'createdAt' | 'signups' | 'committed' | 'popularity'>) => Promise<Opportunity | null>;
-  updateOpportunity: (oppId: string, data: Partial<Omit<Opportunity, 'id' | 'createdAt' | 'signups' | 'committed' | 'popularity' | 'hostId' | 'hostName'>>) => Promise<boolean>;
+  addOpportunity: (opp: Omit<Opportunity, 'id' | 'createdAt' | 'signups' | 'popularity'>) => Promise<Opportunity | null>;
+  updateOpportunity: (oppId: string, data: Partial<Omit<Opportunity, 'id' | 'createdAt' | 'signups' | 'popularity' | 'hostId' | 'hostName'>>) => Promise<boolean>;
   deleteOwnOpportunity: (oppId: string) => Promise<boolean>;
   signup: (oppId: string, userId: string) => Promise<{ success: boolean; error?: string }>;
   cancelSignup: (oppId: string, userId: string) => Promise<boolean>;
-  /** Returns 'needs-steps' with the organization's requirements when the
-   *  event has sign-up steps the volunteer hasn't confirmed yet. */
-  commit: (oppId: string, acknowledgedSteps?: boolean) => Promise<true | false | { needsSteps: true; steps: string[]; externalSignupUrl: string | null }>;
-  cancelCommit: (oppId: string) => Promise<boolean>;
   getSignedUpEvents: (userId: string) => Opportunity[];
   getHostedEvents: (userId: string) => Opportunity[];
 }
@@ -505,54 +501,6 @@ export const useOpportunitiesStore = create<OpportunitiesState>((set, get) => ({
       if (res.ok) {
         const updated = await res.json();
         set((s) => ({ opportunities: s.opportunities.map(o => o.id === oppId ? updated : o) }));
-        return true;
-      }
-      if (res.status === 401) useAuthStore.getState().logout();
-      return false;
-    } catch { return false; }
-  },
-
-  // The step beyond Interested — this is what puts someone on the org's
-  // Tracker roster. Mirrors signup/cancelSignup exactly; the server creates
-  // the underlying Interested signup too if one doesn't exist yet.
-  commit: async (oppId, acknowledgedSteps = false) => {
-    try {
-      const res = await fetch(`${API}/opportunities/${oppId}/signup/commit`, {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: JSON.stringify({ acknowledgedSteps }),
-      });
-      // 428 Precondition Required — the organization has steps this volunteer
-      // hasn't confirmed. Hand them back so the caller can show them.
-      if (res.status === 428) {
-        const d = await res.json().catch(() => ({}));
-        return { needsSteps: true as const, steps: d.steps || [], externalSignupUrl: d.externalSignupUrl ?? null };
-      }
-      if (res.ok) {
-        const oppRes = await fetch(`${API}/opportunities/${oppId}`, { headers: getAuthHeaders() });
-        if (oppRes.ok) {
-          const updated = await oppRes.json();
-          set((s) => ({ opportunities: s.opportunities.map(o => o.id === oppId ? updated : o) }));
-        }
-        return true;
-      }
-      if (res.status === 401) useAuthStore.getState().logout();
-      return false;
-    } catch { return false; }
-  },
-
-  cancelCommit: async (oppId) => {
-    try {
-      const res = await fetch(`${API}/opportunities/${oppId}/signup/commit`, {
-        method: 'DELETE',
-        headers: getAuthHeaders(),
-      });
-      if (res.ok) {
-        const oppRes = await fetch(`${API}/opportunities/${oppId}`, { headers: getAuthHeaders() });
-        if (oppRes.ok) {
-          const updated = await oppRes.json();
-          set((s) => ({ opportunities: s.opportunities.map(o => o.id === oppId ? updated : o) }));
-        }
         return true;
       }
       if (res.status === 401) useAuthStore.getState().logout();
@@ -857,11 +805,10 @@ export const useFavoritesStore = create<FavoritesState>((set, get) => ({
 export interface AppNotification {
   id: string;
   userId: string;
-  // Not exhaustive against every type the server can emit (tracker/certificate
-  // notifications aren't listed either) -- only types the client compares
-  // against with === need to be here; everything else already falls through
-  // to Navigation.tsx's default icon/style via .includes(), which doesn't
-  // need the literal type.
+  // Not exhaustive against every type the server can emit -- only types the
+  // client compares against with === need to be here; everything else
+  // already falls through to Navigation.tsx's default icon/style via
+  // .includes(), which doesn't need the literal type.
   type: 'interest' | 'cancel' | 'admin_delete' | 'admin_edit' | 'reopen' | 'post_approved' | 'post_denied' | 'onboarding_reminder';
   message: string;
   postId: string | null;
