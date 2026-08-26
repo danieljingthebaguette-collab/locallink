@@ -610,7 +610,7 @@ export default function Home() {
                 Find local volunteer opportunities in Somerset County
               </h1>
               <p className="text-muted-foreground text-base md:text-lg mt-4 max-w-xl leading-relaxed">
-                Real organizations, real events, service hours that count.
+                Real organizations, real events, right where you live.
               </p>
               <Button onClick={() => navigate('/account')} className="mt-7 rounded-full px-8 h-12 font-semibold">
                 Sign up free

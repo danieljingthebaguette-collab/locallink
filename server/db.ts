@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { mkdirSync } from 'fs';
+import { randomUUID } from 'crypto';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // In production set DB_PATH to a persistent disk location (e.g. /data/locallink.db on Fly.io/Railway)
@@ -423,37 +424,95 @@ if (!process.env.ADMIN_EMAIL) {
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'linklocal2@gmail.com';
 db.prepare('UPDATE users SET isAdmin = 1, emailVerified = 1 WHERE email = ?').run(ADMIN_EMAIL);
 
+// Helper: returns an ISO datetime string N days from now at a given time
+const futureDate = (daysFromNow: number, time: string) => {
+  const d = new Date();
+  d.setDate(d.getDate() + daysFromNow);
+  return `${d.toISOString().slice(0, 10)}T${time}`;
+};
+
+// Declared out here so the town backfill further down can reuse the same
+// values rather than repeating them.
+const SEED_OPPS = [
+    { id: '1', title: 'Community Clean-up', description: 'Join us for a community clean-up event at Lake Accotink Park. Help make our neighborhood cleaner and greener!', category: 'volunteer', location: 'Lake Accotink Park, Montgomery', town: 'Montgomery/Skillman', date: futureDate(3, '09:00'), duration: 3, spots: 50, spotsRemaining: 12, image: 'https://images.unsplash.com/photo-1618477388954-7852f32655ec?w=800', hostId: 'seed1', hostName: 'EcoWarriors', popularity: 38 },
+    { id: '2', title: 'Math Tutoring Session', description: 'Free tutoring for middle school students. Help students excel in mathematics!', category: 'education', location: 'Montgomery Public Library', town: 'Montgomery/Skillman', date: futureDate(6, '14:00'), duration: 2, spots: 20, spotsRemaining: 15, image: 'https://images.unsplash.com/photo-1503676260728-1c00da094a0b?w=800', hostId: 'seed2', hostName: 'MathGenius', popularity: 5 },
+    { id: '3', title: 'Youth Soccer Tournament', description: 'Coach and mentor young athletes at our annual youth soccer tournament!', category: 'fitness', location: 'Sports Complex', town: 'Bridgewater', date: futureDate(8, '10:00'), duration: 6, spots: 30, spotsRemaining: 8, image: 'https://images.unsplash.com/photo-1431324155629-1a6deb1dec8d?w=800', hostId: 'seed3', hostName: 'SportsClub', popularity: 22 },
+    { id: '4', title: 'Food Bank Packaging', description: 'Help package and distribute food to families in need in our community.', category: 'community', location: '123 Charity Street', town: 'Somerville', date: futureDate(5, '08:00'), duration: 4, spots: 100, spotsRemaining: 75, image: 'https://images.unsplash.com/photo-1593113598332-cd288d649433?w=800', hostId: 'seed4', hostName: 'FoodForAll', popularity: 25 },
+    { id: '5', title: 'Environmental Workshop', description: 'Learn about climate change and sustainable practices in this interactive workshop.', category: 'environment', location: 'Green Center', town: 'Princeton', date: futureDate(10, '13:00'), duration: 3, spots: 40, spotsRemaining: 22, image: 'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?w=800', hostId: 'seed5', hostName: 'GreenFuture', popularity: 18 },
+    { id: '6', title: 'Community Garden Setup', description: 'Help build and plant a new community garden in downtown Montgomery.', category: 'environment', location: 'Downtown Plaza', town: 'Montgomery/Skillman', date: futureDate(14, '09:00'), duration: 3, spots: 25, spotsRemaining: 10, image: 'https://images.unsplash.com/photo-1464226184884-fa280b87c399?w=800', hostId: 'seed6', hostName: 'GreenThumb', popularity: 15 },
+  ];
+
 // Seed data if tables are empty
 const oppCount = db.prepare('SELECT COUNT(*) as count FROM opportunities').get() as any;
 const alreadySeeded = db.prepare("SELECT id FROM opportunities WHERE id = '1'").get();
 if (!alreadySeeded && oppCount.count === 0) {
   const insertOpp = db.prepare(`
-    INSERT INTO opportunities (id, title, description, category, location, date, duration, spots, spotsRemaining, image, hostId, hostName, popularity, createdAt)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO opportunities (id, title, description, category, location, town, date, duration, spots, spotsRemaining, image, hostId, hostName, popularity, createdAt)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
-  // Helper: returns an ISO datetime string N days from now at a given time
-  const futureDate = (daysFromNow: number, time: string) => {
-    const d = new Date();
-    d.setDate(d.getDate() + daysFromNow);
-    return `${d.toISOString().slice(0, 10)}T${time}`;
-  };
-
-  const seedOpps = [
-    { id: '1', title: 'Community Clean-up', description: 'Join us for a community clean-up event at Lake Accotink Park. Help make our neighborhood cleaner and greener!', category: 'volunteer', location: 'Lake Accotink Park, Montgomery', date: futureDate(3, '09:00'), duration: 3, spots: 50, spotsRemaining: 12, image: 'https://images.unsplash.com/photo-1618477388954-7852f32655ec?w=800', hostId: 'seed1', hostName: 'EcoWarriors', popularity: 38 },
-    { id: '2', title: 'Math Tutoring Session', description: 'Free tutoring for middle school students. Help students excel in mathematics!', category: 'education', location: 'Montgomery Public Library', date: futureDate(6, '14:00'), duration: 2, spots: 20, spotsRemaining: 15, image: 'https://images.unsplash.com/photo-1503676260728-1c00da094a0b?w=800', hostId: 'seed2', hostName: 'MathGenius', popularity: 5 },
-    { id: '3', title: 'Youth Soccer Tournament', description: 'Coach and mentor young athletes at our annual youth soccer tournament!', category: 'fitness', location: 'Sports Complex', date: futureDate(8, '10:00'), duration: 6, spots: 30, spotsRemaining: 8, image: 'https://images.unsplash.com/photo-1431324155629-1a6deb1dec8d?w=800', hostId: 'seed3', hostName: 'SportsClub', popularity: 22 },
-    { id: '4', title: 'Food Bank Packaging', description: 'Help package and distribute food to families in need in our community.', category: 'community', location: '123 Charity Street', date: futureDate(5, '08:00'), duration: 4, spots: 100, spotsRemaining: 75, image: 'https://images.unsplash.com/photo-1593113598332-cd288d649433?w=800', hostId: 'seed4', hostName: 'FoodForAll', popularity: 25 },
-    { id: '5', title: 'Environmental Workshop', description: 'Learn about climate change and sustainable practices in this interactive workshop.', category: 'environment', location: 'Green Center', date: futureDate(10, '13:00'), duration: 3, spots: 40, spotsRemaining: 22, image: 'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?w=800', hostId: 'seed5', hostName: 'GreenFuture', popularity: 18 },
-    { id: '6', title: 'Community Garden Setup', description: 'Help build and plant a new community garden in downtown Montgomery.', category: 'environment', location: 'Downtown Plaza', date: futureDate(14, '09:00'), duration: 3, spots: 25, spotsRemaining: 10, image: 'https://images.unsplash.com/photo-1464226184884-fa280b87c399?w=800', hostId: 'seed6', hostName: 'GreenThumb', popularity: 15 },
-  ];
-
-  const insertMany = db.transaction((opps: typeof seedOpps) => {
-    for (const o of opps) {
-      insertOpp.run(o.id, o.title, o.description, o.category, o.location, o.date, o.duration, o.spots, o.spotsRemaining, o.image, o.hostId, o.hostName, o.popularity, new Date().toISOString());
+  const insertMany = db.transaction(() => {
+    const now = new Date().toISOString();
+    for (const o of SEED_OPPS) {
+      insertOpp.run(o.id, o.title, o.description, o.category, o.location, o.town, o.date, o.duration, o.spots, o.spotsRemaining, o.image, o.hostId, o.hostName, o.popularity, now);
     }
   });
-  insertMany(seedOpps);
+  insertMany();
 }
+
+// The sample posts predate the town column, so a database seeded earlier has
+// four of them sitting with no town -- which the board's town filter drops.
+// The generic location-matching backfill above can't place them ("Sports
+// Complex", "Green Center"), so set them from the same list the seed uses.
+const setSeedTown = db.prepare(
+  "UPDATE opportunities SET town = ? WHERE id = ? AND hostId = ? AND (town IS NULL OR town = '')"
+);
+db.transaction(() => {
+  for (const o of SEED_OPPS) setSeedTown.run(o.town, o.id, o.hostId);
+})();
+
+// The organizations hosting the sample posts above. Without these rows the
+// board asks /api/users/seedN/profile for every card and gets a 404, so host
+// avatars never load and the host-name link to /org/:id dead-ends.
+//
+// Runs outside the seeding block, and only for a host some opportunity
+// actually points at, so it also repairs databases seeded before these rows
+// existed while staying a no-op on any database that has no sample posts.
+//
+// Addresses use the reserved .example TLD so nothing here can reach a real
+// inbox, and notifyOnInterest is off so signing up to a sample post doesn't
+// queue mail to a domain that cannot receive it. The password column holds a
+// sentinel rather than a hash -- bcryptjs returns false for anything that is
+// not a valid hash, so these accounts can never be logged into.
+const SEED_ORGS = [
+  { id: 'seed1', name: 'EcoWarriors', desc: 'Neighbourhood clean-ups and conservation days across Montgomery and Skillman.' },
+  { id: 'seed2', name: 'MathGenius',  desc: 'Free maths tutoring for middle and high school students.' },
+  { id: 'seed3', name: 'SportsClub',  desc: 'Youth sports coaching, tournaments and open recreation nights.' },
+  { id: 'seed4', name: 'FoodForAll',  desc: 'Packing and distributing food to families across the county.' },
+  { id: 'seed5', name: 'GreenFuture', desc: 'Workshops on climate, sustainability and practical green living.' },
+  { id: 'seed6', name: 'GreenThumb',  desc: 'Building and tending community gardens in the downtown area.' },
+];
+
+const seedOrgIsHosting = db.prepare('SELECT 1 FROM opportunities WHERE hostId = ? LIMIT 1');
+const seedOrgExists = db.prepare('SELECT 1 FROM users WHERE id = ? LIMIT 1');
+const insertSeedOrg = db.prepare(`
+  INSERT OR IGNORE INTO users (id, username, email, password, isAdmin, emailVerified, accountType,
+                               orgDescription, orgEmail, orgWebsite, verified, notifyOnInterest,
+                               unsubToken, createdAt)
+  VALUES (?, ?, ?, 'NO_LOGIN', 0, 1, 'organization', ?, ?, ?, 1, 0, ?, ?)
+`);
+
+db.transaction(() => {
+  const now = new Date().toISOString();
+  for (const o of SEED_ORGS) {
+    if (!seedOrgIsHosting.get(o.id) || seedOrgExists.get(o.id)) continue;
+    const handle = o.name.toLowerCase();
+    insertSeedOrg.run(
+      o.id, o.name, `${handle}@example.com`, o.desc,
+      `contact@${handle}.example`, `https://${handle}.example`,
+      randomUUID(), now
+    );
+  }
+})();
 
 export default db;
