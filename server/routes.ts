@@ -45,6 +45,13 @@ const upload = multer({
 
 const router = Router();
 
+// Unlike ADMIN_EMAIL below, this one can't just warn and fall back: the
+// fallback string is sitting in source, so a production deploy that forgets
+// to set JWT_SECRET would sign every login with a secret anyone can read and
+// forge an admin token from. Refuse to boot instead.
+if (process.env.NODE_ENV === 'production' && !process.env.JWT_SECRET) {
+  throw new Error('JWT_SECRET environment variable must be set in production.');
+}
 const JWT_SECRET = process.env.JWT_SECRET || 'locallink-dev-secret-change-in-production';
 const SALT_ROUNDS = 12;
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'linklocal2@gmail.com';
@@ -818,6 +825,11 @@ router.post('/api/opportunities', requireAuth, (req: AuthRequest, res: Response)
     if (!town || !VALID_TOWNS.includes(town)) {
       return res.status(400).json({ error: 'Please select a town from the list' });
     }
+    // Mirrors the create form's own check. Recurring posts skip this — their
+    // date is server-computed as the next occurrence, always in the future.
+    if (!isRecurring && new Date(date) <= new Date()) {
+      return res.status(400).json({ error: 'Date must be in the future' });
+    }
     // Length caps, enforced here because the form can be bypassed entirely
     for (const [field, value] of [['title', title], ['description', description], ['location', location]] as const) {
       const lengthError = getLengthError(field, value);
@@ -1035,6 +1047,12 @@ router.put('/api/opportunities/:id', requireAuth, (req: AuthRequest, res: Respon
     // Town stays optional on edits — pre-existing posts may be townless until backfilled
     if (town !== undefined && town !== null && town !== '' && !VALID_TOWNS.includes(town)) {
       return res.status(400).json({ error: `Invalid town. Must be one of: ${VALID_TOWNS.join(', ')}` });
+    }
+    // Same length caps the create route enforces — the edit form can be bypassed too
+    for (const [field, value] of [['title', title], ['description', description], ['location', location]] as const) {
+      if (value === undefined) continue;
+      const lengthError = getLengthError(field, value);
+      if (lengthError) return res.status(400).json({ error: lengthError });
     }
     // Never required — validated only when a non-blank value was sent; a blank value clears it to null
     let trimmedSignupUrl: string | undefined;
@@ -1445,6 +1463,17 @@ router.post('/api/admin/opportunities/:id/deny', requireAdmin, async (req: Reque
     } catch { /* non-fatal */ }
 
     return res.json({ success: true });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/api/admin/stats', requireAdmin, (_req: Request, res: Response) => {
+  try {
+    const totalUsers = (db.prepare('SELECT COUNT(*) as count FROM users').get() as any).count;
+    const totalOpps = (db.prepare("SELECT COUNT(*) as count FROM opportunities WHERE status = 'approved'").get() as any).count;
+    const totalSignups = (db.prepare('SELECT COUNT(*) as count FROM signups').get() as any).count;
+    return res.json({ totalUsers, totalOpps, totalSignups });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
