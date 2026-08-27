@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { cn, getLocationError, getExternalSignupUrlError } from '@/lib/utils';
+import { cn, getLocationError, getExternalSignupUrlError, LIMITS, getLengthError } from '@/lib/utils';
 import {
   X, Upload, ChevronRight, Loader2, Trash2, FileText, RotateCcw,
   Handshake, BookOpen, Activity, Users, Sprout, Calendar, Repeat, AlertTriangle,
@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
+import { useModalA11y } from '@/hooks/use-modal-a11y';
 import { useAuthStore, useOpportunitiesStore } from '@/lib/store';
 import ConfirmBubble from '@/components/ConfirmBubble';
 import { type Category, TOWNS, FIELD_TAGS } from '@/lib/mockData';
@@ -167,15 +168,6 @@ export default function CreatePostModal({ open, onClose }: Props) {
     if (open) setPendingDraft(readDraft());
   }, [open]);
 
-  // Lock background scroll while the modal is up, so dismissing it doesn't
-  // drop the host somewhere else on the board.
-  useEffect(() => {
-    if (!open) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = prev; };
-  }, [open]);
-
   const handleClose = () => {
     // Reset state on close
     setCreateStep('type');
@@ -260,19 +252,10 @@ export default function CreatePostModal({ open, onClose }: Props) {
     setPendingDraft(null);
   };
 
-  // Escape routes through the same guard as every other dismissal path.
-  // No dep array: re-subscribing per render keeps the closure honest about
-  // current form state, and one keydown listener is not worth memoising.
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      if (showCloseConfirm) setShowCloseConfirm(false);
-      else requestClose();
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  });
+  // Escape, scroll lock and focus handling, shared with every other overlay.
+  // The nested "save as draft?" bubble registers its own layer, so while that
+  // is up it owns Escape and this one stays quiet -- no explicit check needed.
+  const modalRef = useModalA11y(open, requestClose);
 
   const handleTypeSelect = (type: Category) => {
     setSelectedType(type);
@@ -299,12 +282,17 @@ export default function CreatePostModal({ open, onClose }: Props) {
   const validateDetails = () => {
     const errors: Record<string, string> = {};
     if (!formData.title.trim()) errors.title = 'Title is required';
+    else errors.title = getLengthError('title', formData.title) || '';
     if (!formData.description.trim()) errors.description = 'Description is required';
+    else errors.description = getLengthError('description', formData.description) || '';
     if (!formData.location.trim()) errors.location = 'Location is required';
     else {
-      const locationError = getLocationError(formData.location);
+      const locationError = getLocationError(formData.location) || getLengthError('location', formData.location);
       if (locationError) errors.location = locationError;
     }
+    // Blank strings above mean "checked, fine" -- drop them so the caller's
+    // Object.keys length check doesn't treat a passing field as a failure.
+    for (const k of Object.keys(errors)) if (!errors[k]) delete errors[k];
     if (!formData.town) errors.town = 'Please select a town';
     if (!imageFile && !imagePreview) errors.image = 'A photo is required';
     if (hasSignupPage === null) errors.hasSignupPage = 'Please answer yes or no';
@@ -395,7 +383,11 @@ export default function CreatePostModal({ open, onClose }: Props) {
           <motion.div initial={{ scale: 0.92, opacity: 0, y: 24 }} animate={{ scale: 1, opacity: 1, y: 0 }}
             exit={{ scale: 0.92, opacity: 0, y: 24 }} transition={{ type: 'spring', stiffness: 320, damping: 32 }}
             onClick={e => e.stopPropagation()}
-            className="w-full max-w-2xl max-h-[92vh] overflow-y-auto relative">
+            ref={modalRef}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Create an opportunity"
+            className="w-full max-w-2xl max-h-[92vh] overflow-y-auto relative focus:outline-none">
 
             {/* Profile incomplete gate */}
             {!isOrgProfileComplete && (
@@ -615,7 +607,7 @@ export default function CreatePostModal({ open, onClose }: Props) {
                   <div className="p-6 md:p-8 space-y-5 text-white">
                     <div>
                       <label htmlFor="createpostmodal-post-title" className="text-xs font-bold tracking-widest uppercase opacity-75 mb-2 block">Post Title *</label>
-                      <Input id="createpostmodal-post-title" placeholder="Give your opportunity a name..."
+                      <Input id="createpostmodal-post-title" placeholder="Give your opportunity a name..." maxLength={LIMITS.title}
                         value={formData.title}
                         onChange={e => { setFormData({ ...formData, title: e.target.value }); setFormErrors({ ...formErrors, title: '' }); }}
                         className={cn("rounded-2xl bg-white/90 text-foreground font-semibold border-0 h-12", formErrors.title && "ring-2 ring-red-400")} />
@@ -625,7 +617,7 @@ export default function CreatePostModal({ open, onClose }: Props) {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="bg-white/15 rounded-2xl p-4 border border-white/20 space-y-2">
                         <label htmlFor="createpostmodal-description" className="text-xs font-bold tracking-widest uppercase opacity-75 block">Description *</label>
-                        <Textarea id="createpostmodal-description" placeholder="Describe this opportunity..."
+                        <Textarea id="createpostmodal-description" placeholder="Describe this opportunity..." maxLength={LIMITS.description}
                           value={formData.description}
                           onChange={e => { setFormData({ ...formData, description: e.target.value }); setFormErrors({ ...formErrors, description: '' }); }}
                           className={cn("rounded-xl bg-white/80 text-foreground border-0 text-sm resize-none min-h-[90px]", formErrors.description && "ring-2 ring-red-400")} />
@@ -635,7 +627,7 @@ export default function CreatePostModal({ open, onClose }: Props) {
                       <div className="bg-white/15 rounded-2xl p-4 border border-white/20 space-y-3">
                         <div>
                           <label htmlFor="createpostmodal-location" className="text-xs font-bold tracking-widest uppercase opacity-75 block mb-1">Location *</label>
-                          <Input id="createpostmodal-location" placeholder="Full address or place name — shown as a map link"
+                          <Input id="createpostmodal-location" placeholder="Full address or place name — shown as a map link" maxLength={LIMITS.location}
                             value={formData.location}
                             onChange={e => { setFormData({ ...formData, location: e.target.value }); setFormErrors({ ...formErrors, location: '' }); }}
                             className={cn("rounded-xl bg-white/80 text-foreground border-0 text-sm h-9", formErrors.location && "ring-2 ring-red-400")} />
@@ -802,7 +794,7 @@ export default function CreatePostModal({ open, onClose }: Props) {
                           <div key={idx} className="flex items-center gap-2">
                             <span className="w-6 h-6 rounded-full bg-white/30 text-white text-xs font-bold flex items-center justify-center flex-shrink-0">{idx + 1}</span>
                             <Input
-                              placeholder={`Step ${idx + 1}...`}
+                              placeholder={`Step ${idx + 1}...`} maxLength={LIMITS.step}
                               value={step}
                               onChange={e => {
                                 const updated = [...steps];

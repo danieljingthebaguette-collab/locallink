@@ -108,6 +108,29 @@ function getExternalSignupUrlError(url: string): string | null {
   return null;
 }
 
+// Length caps for free text. Mirrors LIMITS in client/src/lib/utils.ts — keep
+// the two in sync. This copy is the one that matters: the form's limits are a
+// courtesy, and anything posting straight to the API skips them. Without these
+// a 50,000-character description and a 300-character unbroken title were both
+// accepted, and neither can wrap inside a card.
+const LIMITS = {
+  title: 120,
+  description: 2000,
+  location: 200,
+  step: 200,
+  steps: 12,
+  orgDescription: 1500,
+  externalSignupUrl: 500,
+} as const;
+
+/** Returns an error string when a field is over its cap, else null. */
+function getLengthError(field: keyof typeof LIMITS, value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const max = LIMITS[field];
+  const len = value.trim().length;
+  return len > max ? `Keep this under ${max} characters (currently ${len})` : null;
+}
+
 // Allowed enum values — validated server-side to prevent garbage data
 const VALID_SPOTS_TYPES  = ['limited', 'unlimited', 'none'] as const;
 const VALID_CATEGORIES   = ['volunteer', 'education', 'fitness', 'environment', 'community'] as const;
@@ -544,6 +567,8 @@ router.put('/api/auth/profile', requireAuth, async (req: AuthRequest, res: Respo
     }
 
     if (orgDescription !== undefined) {
+      const lengthError = getLengthError('orgDescription', orgDescription);
+      if (lengthError) return res.status(400).json({ error: lengthError });
       db.prepare('UPDATE users SET orgDescription = ? WHERE id = ?').run(orgDescription || null, userId);
     }
     if (orgWebsite !== undefined) {
@@ -775,6 +800,20 @@ router.post('/api/opportunities', requireAuth, (req: AuthRequest, res: Response)
     // Town is required on NEW posts (existing rows stay null until backfilled)
     if (!town || !VALID_TOWNS.includes(town)) {
       return res.status(400).json({ error: 'Please select a town from the list' });
+    }
+    // Length caps, enforced here because the form can be bypassed entirely
+    for (const [field, value] of [['title', title], ['description', description], ['location', location]] as const) {
+      const lengthError = getLengthError(field, value);
+      if (lengthError) return res.status(400).json({ error: lengthError });
+    }
+    if (Array.isArray(steps)) {
+      if (steps.length > LIMITS.steps) {
+        return res.status(400).json({ error: `Keep this to ${LIMITS.steps} steps or fewer` });
+      }
+      for (const s of steps) {
+        const stepError = getLengthError('step', s);
+        if (stepError) return res.status(400).json({ error: stepError });
+      }
     }
     // Mirrors the create form's own gate: answering is required, a URL is
     // required only when the answer is yes. Enforced here too so the check

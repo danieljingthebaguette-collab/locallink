@@ -65,3 +65,29 @@ export function getRelativeDay(iso: string, now: Date = new Date()): string | nu
   if (days <= 21) return `In ${days} days`;
   return null;
 }
+
+/**
+ * Length caps for free text. Mirrored in server/routes.ts -- keep the two in
+ * sync; the server is the one that actually enforces them, since the form can
+ * be bypassed entirely by posting to the API.
+ *
+ * Generous rather than tight: the point is to stop a megabyte of text and an
+ * unwrappable 300-character word breaking the board, not to police how much
+ * an organizer writes about their event.
+ */
+export const LIMITS = {
+  title: 120,
+  description: 2000,
+  location: 200,
+  step: 200,
+  steps: 12,
+  orgDescription: 1500,
+  externalSignupUrl: 500,
+} as const;
+
+/** Returns an error when `value` is over the cap for `field`, else null. */
+export function getLengthError(field: keyof typeof LIMITS, value: string): string | null {
+  const max = LIMITS[field];
+  const len = value.trim().length;
+  return len > max ? `Keep this under ${max} characters (currently ${len})` : null;
+}

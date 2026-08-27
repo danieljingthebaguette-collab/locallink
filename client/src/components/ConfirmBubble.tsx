@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useModalA11y } from '@/hooks/use-modal-a11y';
 
 interface Props {
   open: boolean;
@@ -27,6 +28,11 @@ export default function ConfirmBubble({
   confirmLabel, onConfirm,
   cancelLabel, onCancel,
 }: Props) {
+  // Escape cancels -- the safe choice, never the destructive one. This bubble
+  // guards work someone can't get back, so the fast way out must not be the
+  // way that throws it away.
+  const ref = useModalA11y(open, onCancel);
+
   return (
     <AnimatePresence>
       {open && (
@@ -41,7 +47,8 @@ export default function ConfirmBubble({
             exit={{ scale: 0.9, opacity: 0, y: 10 }}
             transition={{ type: 'spring', stiffness: 420, damping: 30 }}
             onClick={e => e.stopPropagation()}
-            className="w-full max-w-xs rounded-2xl bg-card border border-border shadow-md p-5 space-y-4">
+            ref={ref}
+            className="w-full max-w-xs rounded-2xl bg-card border border-border shadow-md p-5 space-y-4 focus:outline-none">
             <div className="flex items-start gap-3">
               {icon && (
                 <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">

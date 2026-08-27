@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
+import { useModalA11y } from '@/hooks/use-modal-a11y';
 import { getCardSize, isLargeCard, getTitleSize } from '@/lib/cardUtils';
 import { getCategoryColor, getModalGradient, getCategoryBorder, getCategoryLabel, countInterestMatches } from '@/lib/categoryUtils';
 import { useAuthStore, useOpportunitiesStore, useFavoritesStore, getRecurringStatus } from '@/lib/store';
@@ -358,6 +359,11 @@ export default function Home() {
     if (showEditForm) setShowDiscardEdits(true);
     else closeModalNow();
   };
+
+  // Escape, scroll lock, and focus in/out for the post modal. Routed through
+  // handleCloseModal so Escape respects the unsaved-edits guard exactly as the
+  // X and the backdrop already do.
+  const cardModalRef = useModalA11y(!!selectedCard, handleCloseModal);
 
   // ── Host: view interested volunteers (fetched on demand, host-only server-side) ──
   const toggleInterestedList = async (oppId: string) => {
@@ -874,7 +880,7 @@ export default function Home() {
                             </motion.span>
                           )}
                         </div>
-                        <h3 className={cn("font-heading font-bold leading-tight", getTitleSize(effectivePopularity))}>{opp.title}</h3>
+                        <h3 className={cn("font-heading font-bold leading-tight break-words", getTitleSize(effectivePopularity))}>{opp.title}</h3>
                         {opp.tags && opp.tags.length > 0 && (
                           <div className="flex flex-wrap gap-1 pt-1">
                             {opp.tags.slice(0, 2).map(tag => (
@@ -1013,7 +1019,11 @@ export default function Home() {
               exit={{ scale: 0.9, opacity: 0, y: 24 }}
               transition={{ type: 'spring', stiffness: 420, damping: 36 }}
               onClick={e => e.stopPropagation()}
-              className={cn("rounded-3xl w-full max-w-3xl overflow-hidden border-2 border-white/20 shadow-md max-h-[90vh] flex flex-col", getModalGradient(selectedCard.category))}>
+              ref={cardModalRef}
+              role="dialog"
+              aria-modal="true"
+              aria-label={selectedCard.title}
+              className={cn("rounded-3xl w-full max-w-3xl overflow-hidden border-2 border-white/20 shadow-md max-h-[90vh] flex flex-col focus:outline-none", getModalGradient(selectedCard.category))}>
 
               {/* Modal header image area */}
               <div className="relative h-48 md:h-64 overflow-hidden flex-shrink-0">
