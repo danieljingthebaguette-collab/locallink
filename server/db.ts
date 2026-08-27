@@ -431,8 +431,31 @@ const futureDate = (daysFromNow: number, time: string) => {
   return `${d.toISOString().slice(0, 10)}T${time}`;
 };
 
-// Declared out here so the town backfill further down can reuse the same
-// values rather than repeating them.
+// What an organizer would actually write under "How to Participate". Kept
+// beside the posts rather than inline in each row, so the backfill further
+// down can reuse them for databases seeded before posts carried steps.
+const SEED_STEPS: Record<string, string[]> = {
+  '1': ['Wear closed-toe shoes and clothes you don\'t mind getting muddy.',
+        'Meet at the main car park by 8:45am — we start on time.',
+        'Gloves, bags and litter-pickers are provided; bring your own water.'],
+  '2': ['Reply to the confirmation email so we know which subject to pair you with.',
+        'Arrive 15 minutes early to sign in at the front desk.',
+        'Bring a laptop or tablet if you have one — a few students share ours.'],
+  '3': ['Let us know which age group you\'d like to help coach.',
+        'Collect your volunteer shirt from the clubhouse on arrival.',
+        'Stay for the wrap-up at the end so we can hand back equipment together.'],
+  '4': ['Sign in at the loading bay entrance, not the main door.',
+        'Wear closed-toe shoes — this is a warehouse floor.',
+        'Shifts run in two-hour blocks; tell the coordinator if you need to leave early.'],
+  '5': ['Bring a notebook — the second half is hands-on planning.',
+        'Let us know in advance if you need any accessibility arrangements.'],
+  '6': ['Bring gardening gloves if you own a pair; we have spares otherwise.',
+        'Park on Elm Street — the plaza car park is closed for the build.',
+        'Come for as long as you can, even if it\'s only an hour.'],
+};
+
+// Declared out here so the town and step backfills further down can reuse the
+// same values rather than repeating them.
 const SEED_OPPS = [
     { id: '1', title: 'Community Clean-up', description: 'Join us for a community clean-up event at Lake Accotink Park. Help make our neighborhood cleaner and greener!', category: 'volunteer', location: 'Lake Accotink Park, Montgomery', town: 'Montgomery/Skillman', date: futureDate(3, '09:00'), duration: 3, spots: 50, spotsRemaining: 12, image: 'https://images.unsplash.com/photo-1618477388954-7852f32655ec?w=800', hostId: 'seed1', hostName: 'EcoWarriors', popularity: 38 },
     { id: '2', title: 'Math Tutoring Session', description: 'Free tutoring for middle school students. Help students excel in mathematics!', category: 'education', location: 'Montgomery Public Library', town: 'Montgomery/Skillman', date: futureDate(6, '14:00'), duration: 2, spots: 20, spotsRemaining: 15, image: 'https://images.unsplash.com/photo-1503676260728-1c00da094a0b?w=800', hostId: 'seed2', hostName: 'MathGenius', popularity: 5 },
@@ -447,18 +470,32 @@ const oppCount = db.prepare('SELECT COUNT(*) as count FROM opportunities').get()
 const alreadySeeded = db.prepare("SELECT id FROM opportunities WHERE id = '1'").get();
 if (!alreadySeeded && oppCount.count === 0) {
   const insertOpp = db.prepare(`
-    INSERT INTO opportunities (id, title, description, category, location, town, date, duration, spots, spotsRemaining, image, hostId, hostName, popularity, createdAt)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO opportunities (id, title, description, category, location, town, date, duration, spots, spotsRemaining, image, hostId, hostName, popularity, steps, createdAt)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   const insertMany = db.transaction(() => {
     const now = new Date().toISOString();
     for (const o of SEED_OPPS) {
-      insertOpp.run(o.id, o.title, o.description, o.category, o.location, o.town, o.date, o.duration, o.spots, o.spotsRemaining, o.image, o.hostId, o.hostName, o.popularity, now);
+      insertOpp.run(o.id, o.title, o.description, o.category, o.location, o.town, o.date, o.duration, o.spots, o.spotsRemaining, o.image, o.hostId, o.hostName, o.popularity, JSON.stringify(SEED_STEPS[o.id] ?? []), now);
     }
   });
   insertMany();
 }
+
+// Same story as the towns: the sample posts were seeded before they carried
+// steps, so an existing database has them empty and the modal's "See more"
+// never appears. Only fills rows that are still empty -- never overwrites
+// steps an organizer has since written.
+const setSeedSteps = db.prepare(
+  "UPDATE opportunities SET steps = ? WHERE id = ? AND hostId = ? AND (steps IS NULL OR steps = '' OR steps = '[]')"
+);
+db.transaction(() => {
+  for (const o of SEED_OPPS) {
+    const steps = SEED_STEPS[o.id];
+    if (steps) setSeedSteps.run(JSON.stringify(steps), o.id, o.hostId);
+  }
+})();
 
 // The sample posts predate the town column, so a database seeded earlier has
 // four of them sitting with no town -- which the board's town filter drops.

@@ -135,6 +135,9 @@ export default function Home() {
   // Edit post state
   const [showEditForm, setShowEditForm] = useState(false);
   const [showDiscardEdits, setShowDiscardEdits] = useState(false);
+  // Collapsed by default, and reset per post -- expanding one shouldn't leave
+  // the next one you open already unrolled.
+  const [stepsExpanded, setStepsExpanded] = useState(false);
   const scrolled = useScrolled();
   // Signed-out visitors still see the Create Post strip (it prompts sign-up);
   // signed-in volunteers don't, because for them it goes nowhere.
@@ -352,7 +355,7 @@ export default function Home() {
   const closeModalNow = () => {
     setSelectedCard(null); setShowReportModal(false); setReportReason(''); setReportNote(''); setShowEditForm(false);
     setShowInterestedList(false); setInterestedVolunteers(null); setShowInterestBurst(false);
-    setShowDiscardEdits(false);
+    setShowDiscardEdits(false); setStepsExpanded(false);
   };
 
   const handleCloseModal = () => {
@@ -1356,6 +1359,48 @@ export default function Home() {
                   <h3 className="text-sm font-bold tracking-widest uppercase opacity-75">About This Opportunity</h3>
                   <p className="text-white/95 leading-relaxed text-base">{selectedCard.description}</p>
 
+                  {/* The organization's own steps, folded in behind "See more"
+                      rather than sitting in a card of their own. They belong
+                      with the description -- both answer "what is this?" -- but
+                      unrolled they pushed the Interested button off the screen,
+                      so they stay collapsed until asked for. */}
+                  {selectedCard.steps && selectedCard.steps.length > 0 && (
+                    <div className="pt-1">
+                      <button
+                        onClick={() => setStepsExpanded(v => !v)}
+                        aria-expanded={stepsExpanded}
+                        className="inline-flex items-center gap-1.5 text-sm font-semibold text-white/85 hover:text-white underline underline-offset-4 decoration-white/40 hover:decoration-white transition-colors">
+                        {stepsExpanded ? 'Show less' : 'See more'}
+                        <ChevronDown className={cn('w-3.5 h-3.5 transition-transform duration-200', stepsExpanded && 'rotate-180')} />
+                      </button>
+
+                      <AnimatePresence initial={false}>
+                        {stepsExpanded && (
+                          <motion.div
+                            initial={{ height: 0, opacity: 0 }}
+                            animate={{ height: 'auto', opacity: 1 }}
+                            exit={{ height: 0, opacity: 0 }}
+                            transition={{ duration: 0.24, ease: EASE_OUT }}
+                            className="overflow-hidden">
+                            <p className="text-xs font-bold tracking-widest uppercase opacity-75 pt-4 pb-2.5">
+                              How to take part
+                            </p>
+                            <ol className="space-y-2.5">
+                              {selectedCard.steps.map((step, i) => (
+                                <li key={i} className="flex items-start gap-3">
+                                  <span className="flex-shrink-0 w-6 h-6 rounded-full bg-white/20 text-white text-xs font-bold flex items-center justify-center tabular-nums mt-0.5">
+                                    {i + 1}
+                                  </span>
+                                  <span className="text-white/95 text-sm leading-relaxed">{step}</span>
+                                </li>
+                              ))}
+                            </ol>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
+                  )}
+
                   {/* Both links, when each exists — they answer different questions.
                       The organization's site is "who are these people"; the signup
                       page is "what do I have to do before turning up". Shown here
@@ -1386,30 +1431,6 @@ export default function Home() {
                     </div>
                   )}
                 </motion.div>
-
-                {/* How to participate — the organization's own steps, shown here
-                    informationally. No gate, no checkbox: there's no roster this
-                    confirms you onto, just the org's own instructions for anyone
-                    deciding whether to go. */}
-                {selectedCard.steps && selectedCard.steps.length > 0 && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 12 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.24, duration: 0.32, ease: EASE_OUT }}
-                    className="bg-white/15 rounded-2xl p-6 border border-white/20 space-y-3">
-                    <h3 className="text-sm font-bold tracking-widest uppercase opacity-75">How to Participate</h3>
-                    <ol className="space-y-2.5">
-                      {selectedCard.steps.map((step, i) => (
-                        <li key={i} className="flex items-start gap-3">
-                          <span className="flex-shrink-0 w-6 h-6 rounded-full bg-white/20 text-white text-xs font-bold flex items-center justify-center tabular-nums mt-0.5">
-                            {i + 1}
-                          </span>
-                          <span className="text-white/95 text-sm leading-relaxed">{step}</span>
-                        </li>
-                      ))}
-                    </ol>
-                  </motion.div>
-                )}
 
                 {/* Tags */}
                 {selectedCard.tags && selectedCard.tags.length > 0 && (
