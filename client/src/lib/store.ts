@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { type Opportunity, type AppUser, type Category } from './mockData';
-import { getMatchScore } from './categoryUtils';
+import { getMatchScore, getFilterCategory } from './categoryUtils';
 
 const API = '/api';
 
@@ -318,7 +318,10 @@ export const useOpportunitiesStore = create<OpportunitiesState>((set, get) => ({
     let filtered = [...opportunities];
 
     if (currentCategory !== 'all') {
-      filtered = filtered.filter(opp => opp.category === currentCategory);
+      // Matched through getFilterCategory rather than compared directly, so a
+      // post published under the old category set still answers to a chip.
+      // Nothing is rewritten -- the card keeps showing its original label.
+      filtered = filtered.filter(opp => getFilterCategory(opp.category) === currentCategory);
     }
 
     // 'all' includes townless posts (created before the town field existed)

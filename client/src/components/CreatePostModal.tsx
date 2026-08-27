@@ -3,7 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { cn, getLocationError, getExternalSignupUrlError, LIMITS, getLengthError } from '@/lib/utils';
 import {
   X, Upload, ChevronRight, Loader2, Trash2, FileText, RotateCcw,
-  Handshake, BookOpen, Activity, Users, Sprout, Calendar, Repeat, AlertTriangle, Info,
+  BookOpen, Sprout, PartyPopper, HeartHandshake, Laptop,
+  Calendar, Repeat, AlertTriangle, Info,
   type LucideIcon,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -13,18 +14,22 @@ import { useToast } from '@/hooks/use-toast';
 import { useModalA11y } from '@/hooks/use-modal-a11y';
 import { useAuthStore, useOpportunitiesStore } from '@/lib/store';
 import ConfirmBubble from '@/components/ConfirmBubble';
-import { type Category, TOWNS, FIELD_TAGS } from '@/lib/mockData';
+import { type Category, type ActivityCategory, TOWNS, FIELD_TAGS } from '@/lib/mockData';
 import { useLocation } from 'wouter';
 
 // ── Questionnaire config ─────────────────────────────────────────────
 // Icons are components, not emoji: emoji render as a different picture on every
 // OS, so the same board looked different on Windows and Mac.
-const POST_TYPES: { id: Category; label: string; Icon: LucideIcon; desc: string }[] = [
-  { id: 'volunteer',   label: 'Volunteer Hours',      Icon: Handshake, desc: 'Give your time to help others' },
-  { id: 'education',   label: 'Education',            Icon: BookOpen,  desc: 'Teach, tutor, or share knowledge' },
-  { id: 'fitness',     label: 'Fitness & Recreation', Icon: Activity,  desc: 'Coaching, tournaments, activities' },
-  { id: 'community',   label: 'Community',            Icon: Users,     desc: 'Local events and neighbourhood help' },
-  { id: 'environment', label: 'Environment',          Icon: Sprout,    desc: 'Conservation and green initiatives' },
+// Every option is something a volunteer DOES, so none of them can quietly mean
+// "this is volunteering" and swallow the rest -- which is exactly what the old
+// "Volunteer Hours" option did on a site where that is true of every post.
+// What the work is *for* is asked separately, on the tags step.
+const POST_TYPES: { id: ActivityCategory; label: string; Icon: LucideIcon; desc: string }[] = [
+  { id: 'hands-on',  label: 'Hands-On',           Icon: Sprout,         desc: 'Cleanups, planting, building, sorting, packing' },
+  { id: 'teaching',  label: 'Teaching & Mentoring', Icon: BookOpen,     desc: 'Tutoring, coaching, advising, workshops' },
+  { id: 'events',    label: 'Events & Hosting',   Icon: PartyPopper,    desc: 'Festivals, races, setup, greeting, registration' },
+  { id: 'care',      label: 'Care & Company',     Icon: HeartHandshake, desc: 'Seniors, hospitals, animal shelters, visiting' },
+  { id: 'backstage', label: 'Behind the Scenes',  Icon: Laptop,         desc: 'Admin, design, data, social media — often remote' },
 ];
 
 // Shared with the onboarding questionnaire -- see mockData.ts.
@@ -453,7 +458,14 @@ export default function CreatePostModal({ open, onClose }: Props) {
                   <div className="flex items-start justify-between">
                     <div>
                       <p className="text-xs font-bold tracking-widest uppercase text-muted-foreground mb-1">Step 1 of 3</p>
-                      <h2 className="text-2xl font-heading font-bold text-foreground">What are you offering?</h2>
+                      {/* Asks about the work, not the topic. "Volunteer" is not an
+                          option because it is the premise of the whole site --
+                          the subtitle carries that so the question doesn't have to. */}
+                      <h2 className="text-2xl font-heading font-bold text-foreground">What will volunteers be doing?</h2>
+                      <p className="text-sm text-muted-foreground mt-1.5 max-w-md">
+                        Every post here is a volunteer opportunity — this is about the kind of
+                        work. You'll pick what it's for next.
+                      </p>
                     </div>
                     <button onClick={requestClose} aria-label="Close" className="p-2 rounded-md hover:bg-secondary transition-all -mt-1 -mr-1">
                       <X className="w-5 h-5 text-muted-foreground" />

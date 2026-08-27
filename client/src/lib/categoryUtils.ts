@@ -1,9 +1,21 @@
-import { Category } from './mockData';
+import { Category, ActivityCategory, LegacyCategory, ACTIVITY_CATEGORIES } from './mockData';
 
 // Flat fills, not gradients. These stand in for a post's photo, so their whole
 // job is to say which category it is -- a same-hue ramp added nothing except
 // the look of a generated site.
+// Each legacy category hands its colour to the activity that replaced it --
+// education/teaching keep the teal, environment/hands-on keep the green,
+// fitness/events keep the coral, community/care keep the purple, and the old
+// catch-all's blue goes to backstage. That is why no palette value changed:
+// during the changeover a green card still means roughly the same thing
+// whether it is labelled ENVIRONMENT or HANDS-ON.
 const CATEGORY_COLOR_MAP: Record<Category, string> = {
+  'hands-on': 'bg-cat-environment',
+  'teaching': 'bg-cat-edu',
+  'events': 'bg-cat-sports',
+  'care': 'bg-cat-community',
+  'backstage': 'bg-cat-vol',
+  // legacy
   'volunteer': 'bg-cat-vol',
   'education': 'bg-cat-edu',
   'fitness': 'bg-cat-sports',
@@ -11,21 +23,82 @@ const CATEGORY_COLOR_MAP: Record<Category, string> = {
   'environment': 'bg-cat-environment',
 };
 
-const CATEGORY_MODAL_MAP: Record<Category, string> = {
-  'volunteer': 'bg-cat-vol',
-  'education': 'bg-cat-edu',
-  'fitness': 'bg-cat-sports',
-  'community': 'bg-cat-community',
-  'environment': 'bg-cat-environment',
-};
+const CATEGORY_MODAL_MAP: Record<Category, string> = CATEGORY_COLOR_MAP;
 
 const CATEGORY_BORDER_MAP: Record<Category, string> = {
+  'hands-on': 'border-cat-environment',
+  'teaching': 'border-cat-edu',
+  'events': 'border-cat-sports',
+  'care': 'border-cat-community',
+  'backstage': 'border-cat-vol',
+  // legacy
   'volunteer': 'border-cat-vol',
   'education': 'border-cat-edu',
   'fitness': 'border-cat-sports',
   'community': 'border-cat-community',
   'environment': 'border-cat-environment',
 };
+
+/**
+ * Which activity filter a legacy post answers to. Nothing is written back --
+ * the post keeps its own label on the card -- but without this an existing
+ * post would match no filter chip at all and only ever surface under "All",
+ * which on a board that is mostly legacy posts reads as a broken filter.
+ *
+ * 'volunteer' is a genuine guess: it was the catch-all, so its posts could be
+ * anything. Hands-On is the likeliest home for general help.
+ */
+const LEGACY_TO_ACTIVITY: Record<LegacyCategory, ActivityCategory> = {
+  'environment': 'hands-on',
+  'volunteer': 'hands-on',
+  'education': 'teaching',
+  'fitness': 'events',
+  'community': 'care',
+};
+
+/** The activity a post filters under, whichever taxonomy it was published in. */
+export const getFilterCategory = (category: Category): ActivityCategory =>
+  (LEGACY_TO_ACTIVITY as Record<string, ActivityCategory>)[category] ?? (category as ActivityCategory);
+
+const CATEGORY_LABELS: Record<Category, string> = {
+  'hands-on': 'Hands-On',
+  'teaching': 'Teaching & Mentoring',
+  'events': 'Events & Hosting',
+  'care': 'Care & Company',
+  'backstage': 'Behind the Scenes',
+  // legacy -- unchanged, so an existing post reads exactly as it was published
+  'volunteer': 'Volunteer',
+  'education': 'Education',
+  'fitness': 'Fitness',
+  'community': 'Community',
+  'environment': 'Environment',
+};
+
+/**
+ * Faint tinted-chip variant of the category colour, for the admin list. It
+ * replaces an if-chain that named only the five legacy categories, so every
+ * new one fell through its final else and came out green.
+ *
+ * Written out as whole literal class strings on purpose: Tailwind generates
+ * CSS by scanning source for complete class names, so a composed
+ * `bg-${x}/10` compiles to nothing at all and the chip renders unstyled.
+ */
+const CATEGORY_TINT_MAP: Record<Category, string> = {
+  'hands-on':  'bg-cat-environment/10 text-cat-environment',
+  'teaching':  'bg-cat-edu/10 text-cat-edu',
+  'events':    'bg-cat-sports/10 text-cat-sports',
+  'care':      'bg-cat-community/10 text-cat-community',
+  'backstage': 'bg-cat-vol/10 text-cat-vol',
+  // legacy
+  'volunteer':   'bg-cat-vol/10 text-cat-vol',
+  'education':   'bg-cat-edu/10 text-cat-edu',
+  'fitness':     'bg-cat-sports/10 text-cat-sports',
+  'community':   'bg-cat-community/10 text-cat-community',
+  'environment': 'bg-cat-environment/10 text-cat-environment',
+};
+
+export const getCategoryTint = (category: Category): string =>
+  CATEGORY_TINT_MAP[category] ?? 'bg-primary/10 text-primary';
 
 export const getCategoryBorder = (category: Category): string => {
   return CATEGORY_BORDER_MAP[category] || 'border-primary';
@@ -39,8 +112,28 @@ export const getModalGradient = (category: Category): string => {
   return CATEGORY_MODAL_MAP[category] || 'bg-primary';
 };
 
+/**
+ * Options for a category <select> when editing an existing post: the five
+ * activities, plus the post's own legacy category when it still has one.
+ *
+ * Without the second part the dropdown holds no option matching the post's
+ * actual value, so the browser renders the first one as selected and the
+ * control confidently displays a category the post is not in -- while leaving
+ * the real value untouched underneath if nobody opens it.
+ */
+export const getEditCategoryOptions = (current: Category): { value: Category; label: string }[] => {
+  const opts: { value: Category; label: string }[] =
+    ACTIVITY_CATEGORIES.map(v => ({ value: v, label: getCategoryLabel(v) }));
+  if (!ACTIVITY_CATEGORIES.includes(current as ActivityCategory)) {
+    opts.push({ value: current, label: `${getCategoryLabel(current)} (original)` });
+  }
+  return opts;
+};
+
 export const getCategoryLabel = (category: Category): string => {
-  return category.charAt(0).toUpperCase() + category.slice(1);
+  // Was charAt(0).toUpperCase() + slice(1), which would render 'hands-on' as
+  // "Hands-on" and 'backstage' as "Backstage" rather than "Behind the Scenes".
+  return CATEGORY_LABELS[category] ?? category;
 };
 
 /**

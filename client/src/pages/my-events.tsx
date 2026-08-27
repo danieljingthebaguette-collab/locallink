@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { useAuthStore, useOpportunitiesStore } from '@/lib/store';
-import { getCategoryLabel } from '@/lib/categoryUtils';
+import { getCategoryLabel, getEditCategoryOptions, getCategoryColor } from '@/lib/categoryUtils';
 import { CATEGORIES, type Category, type Opportunity } from '@/lib/mockData';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -37,13 +37,10 @@ async function uploadImage(file: File): Promise<string | null> {
   } catch { return null; }
 }
 
-const CATEGORY_BG: Record<string, string> = {
-  volunteer: 'bg-cat-vol',
-  education: 'bg-cat-edu',
-  fitness: 'bg-cat-sports',
-  community: 'bg-cat-community',
-  environment: 'bg-cat-environment',
-};
+// Was a local copy of the colour map that listed only the five legacy
+// categories, so a post in any of the new ones fell through to bg-primary and
+// showed up the wrong colour here while being correct everywhere else. One map,
+// in categoryUtils, is the only way that stays true.
 
 
 function isPast(dateStr: string) {
@@ -341,7 +338,7 @@ export default function MyEvents() {
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex-1 space-y-2">
                         <div className="flex flex-wrap gap-2 items-center">
-                          <span className={cn('px-3 py-1 rounded-md text-xs font-bold text-white inline-block', CATEGORY_BG[opp.category] || 'bg-primary')}>
+                          <span className={cn('px-3 py-1 rounded-md text-xs font-bold text-white inline-block', getCategoryColor(opp.category))}>
                             {getCategoryLabel(opp.category)}
                           </span>
                           {opp.status === 'pending' && (
@@ -448,7 +445,7 @@ export default function MyEvents() {
                               onChange={(e) => setEditForm({ ...editForm, category: e.target.value as Category })}
                               className="w-full h-10 rounded-xl border border-input bg-background px-3 text-sm"
                             >
-                              {CATEGORIES.filter(c => c.value !== 'all').map(c => (
+                              {getEditCategoryOptions(editForm.category).map(c => (
                                 <option key={c.value} value={c.value}>{c.label}</option>
                               ))}
                             </select>
@@ -623,7 +620,7 @@ function EventCard({
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1 space-y-2">
           <div className="flex flex-wrap gap-2 items-center">
-            <span className={cn('px-3 py-1 rounded-md text-xs font-bold text-white inline-block', CATEGORY_BG[opp.category] || 'bg-primary')}>
+            <span className={cn('px-3 py-1 rounded-md text-xs font-bold text-white inline-block', getCategoryColor(opp.category))}>
               {getCategoryLabel(opp.category)}
             </span>
           </div>

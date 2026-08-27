@@ -1,4 +1,28 @@
-export type Category = 'volunteer' | 'education' | 'fitness' | 'community' | 'environment';
+/**
+ * What volunteers will actually be doing. Every option is a verb, which is the
+ * whole point: the old set asked "what are you offering?" and listed
+ * "Volunteer Hours" beside four topics, so on a volunteering site one option
+ * was true of every post and absorbed nearly all of them. Removing it alone
+ * would only have moved the catch-all to Community — a list stops collecting
+ * everything in one bucket when no option is broader than the rest, not when
+ * the broadest one is deleted.
+ *
+ * Cause now lives entirely in FIELD_TAGS, so the two axes stop competing:
+ * a river cleanup is Hands-On, tagged Environment.
+ */
+export type ActivityCategory = 'hands-on' | 'teaching' | 'events' | 'care' | 'backstage';
+
+/**
+ * The categories posts used before the change. Nothing was migrated — existing
+ * posts keep the label they were published with — so every colour, label and
+ * filter lookup still has to answer for these.
+ */
+export type LegacyCategory = 'volunteer' | 'education' | 'fitness' | 'community' | 'environment';
+
+export type Category = ActivityCategory | LegacyCategory;
+
+/** Only these can be chosen for a new post; the legacy ones are read-only history. */
+export const ACTIVITY_CATEGORIES: ActivityCategory[] = ['hands-on', 'teaching', 'events', 'care', 'backstage'];
 
 // Fixed town list for post tagging and board filtering — the single source of
 // truth for every town dropdown. Mirrored server-side as VALID_TOWNS in
@@ -153,11 +177,16 @@ export const AVAILABILITY_OPTIONS: { id: string; label: string }[] = [
   { id: 'weekend', label: 'Weekends' },
 ];
 
+/**
+ * Board filter chips. Short labels, not the full category names — these sit in
+ * a row that has to survive a phone screen, and the longer form is on the card
+ * itself anyway.
+ */
 export const CATEGORIES: { value: Category | 'all'; label: string }[] = [
   { value: 'all', label: 'All' },
-  { value: 'volunteer', label: 'Volunteer' },
-  { value: 'education', label: 'Education' },
-  { value: 'fitness', label: 'Fitness' },
-  { value: 'community', label: 'Community' },
-  { value: 'environment', label: 'Environment' },
+  { value: 'hands-on', label: 'Hands-On' },
+  { value: 'teaching', label: 'Teaching' },
+  { value: 'events', label: 'Events' },
+  { value: 'care', label: 'Care' },
+  { value: 'backstage', label: 'Backstage' },
 ];

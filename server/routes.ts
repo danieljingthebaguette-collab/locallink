@@ -142,7 +142,14 @@ function getLengthError(field: keyof typeof LIMITS, value: unknown): string | nu
 
 // Allowed enum values — validated server-side to prevent garbage data
 const VALID_SPOTS_TYPES  = ['limited', 'unlimited', 'none'] as const;
-const VALID_CATEGORIES   = ['volunteer', 'education', 'fitness', 'environment', 'community'] as const;
+// The five activity categories a new post can use, plus the five it used to be
+// able to. The old ones stay accepted because existing posts still carry them
+// and would otherwise fail validation the moment anyone edited one.
+// Mirrors ActivityCategory / LegacyCategory in client/src/lib/mockData.ts.
+const VALID_CATEGORIES   = [
+  'hands-on', 'teaching', 'events', 'care', 'backstage',
+  'volunteer', 'education', 'fitness', 'environment', 'community',
+] as const;
 const VALID_PINNED_SIZES = ['small', 'medium', 'large'] as const;
 // Mirrors TOWNS in client/src/lib/mockData.ts — keep the two lists in sync
 const VALID_TOWNS = [

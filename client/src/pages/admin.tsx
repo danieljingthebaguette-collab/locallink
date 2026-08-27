@@ -10,6 +10,7 @@ import { VerifiedBadge } from '@/components/VerifiedBadge';
 import { Ban, CheckCircle2, TrendingUp, Scale, ClipboardCheck, XCircle } from 'lucide-react';
 import type { AppUser, Opportunity } from '@/lib/mockData';
 import { AVAILABILITY_OPTIONS, CATEGORIES, TOWNS, type Category } from '@/lib/mockData';
+import { getEditCategoryOptions, getCategoryTint, getCategoryLabel } from '@/lib/categoryUtils';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -942,13 +943,9 @@ function OpportunitiesTab({
                   <div className="flex items-center gap-2 mb-1">
                     <span className={cn(
                       'px-2 py-0.5 rounded-md text-[10px] font-medium uppercase tracking-wide',
-                      opp.category === 'volunteer' ? 'bg-cat-vol/10 text-cat-vol' :
-                      opp.category === 'education' ? 'bg-cat-edu/10 text-cat-edu' :
-                      opp.category === 'fitness' ? 'bg-cat-sports/10 text-cat-sports' :
-                      opp.category === 'community' ? 'bg-cat-community/10 text-cat-community' :
-                      'bg-cat-environment/10 text-cat-environment'
+                      getCategoryTint(opp.category)
                     )}>
-                      {opp.category}
+                      {getCategoryLabel(opp.category)}
                     </span>
                     <span className="text-xs text-muted-foreground">by {opp.hostName}</span>
                   </div>
@@ -1014,7 +1011,7 @@ function OpportunitiesTab({
                     <select value={editForm.category}
                       onChange={e => setEditForm({ ...editForm, category: e.target.value as Category })}
                       className="h-9 rounded-xl border border-input bg-background px-3 text-sm">
-                      {CATEGORIES.filter(c => c.value !== 'all').map(c => (
+                      {getEditCategoryOptions(editForm.category).map(c => (
                         <option key={c.value} value={c.value}>{c.label}</option>
                       ))}
                     </select>
