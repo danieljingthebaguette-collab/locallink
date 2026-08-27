@@ -99,32 +99,35 @@
 
     --radius: 0.375rem;
 
-    /* Category colours stay distinct -- they encode which category a post is
-       in, so they carry meaning and are not decoration. They are pulled well
-       back from full saturation though: the previous set was a six-hue neon
-       rainbow that fought the blue and made the board look like a toy. */
+    /* Category colours encode which category a post is in, so they carry
+       meaning and are not decoration.
+
+       These are the original values, restored on request after the redesign
+       had muted all five and moved Education from teal to amber. One thing to
+       know if you are reading this later: Education (160) and Environment
+       (145) sit 15 degrees apart at nearly the same lightness, so on the card
+       border -- which is the only legend the board has -- they read as close
+       to the same green, and more so for red-green colour blindness. That is
+       the reason the amber existed. Keeping the original look is a fair call;
+       just don't reach for the border alone to tell those two apart. */
     /* Sports */
-    --cat-sports: 12 62% 48%;
+    --cat-sports: 10 90% 60%;
     --cat-sports-fg: 0 0% 100%;
 
-    /* Education -- amber, not the teal it used to be. The border is the
-       category legend, and teal sat 22 degrees from Environment's green, so
-       the two were near-indistinguishable at a glance. Amber puts real
-       daylight between them and differs in lightness too, which keeps the
-       legend working for red-green colour blindness. */
-    --cat-edu: 38 74% 44%;
+    /* Education */
+    --cat-edu: 160 84% 39%;
     --cat-edu-fg: 0 0% 100%;
 
     /* Volunteer */
-    --cat-vol: 225 58% 48%;
+    --cat-vol: 217 91% 60%;
     --cat-vol-fg: 0 0% 100%;
 
     /* Community */
-    --cat-community: 268 38% 48%;
+    --cat-community: 270 75% 55%;
     --cat-community-fg: 0 0% 100%;
 
     /* Environment */
-    --cat-environment: 146 44% 33%;
+    --cat-environment: 145 80% 40%;
     --cat-environment-fg: 0 0% 100%;
   }
 
