@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'wouter';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { cn, getLocationError, getExternalSignupUrlError, getRelativeDay } from '@/lib/utils';
-import { Plus, MapPin, Users, Clock, Search, Loader2, Heart, Flag, X, Share2, Edit3, Save, ChevronDown, Star, Trash2, Repeat, Globe, ExternalLink, Sparkles, ClipboardList } from 'lucide-react';
+import { Plus, MapPin, Users, Clock, Search, Loader2, Heart, Flag, X, Share2, Edit3, Save, ChevronDown, Star, Trash2, Repeat, Globe, ExternalLink, Sparkles, ClipboardList, Calendar, User, Info, Tag } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -1234,7 +1234,7 @@ export default function Home() {
                   className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   {/* Location — full width on mobile, 1 col on desktop */}
                   <div className="col-span-2 md:col-span-1 bg-white/15 rounded-2xl p-3 md:p-4 border border-white/20">
-                    <p className="text-xs font-bold tracking-widest uppercase opacity-75 mb-1.5">Location</p>
+                    <p className="text-xs font-bold tracking-widest uppercase opacity-75 mb-1.5 inline-flex items-center gap-1.5"><MapPin className="w-3 h-3" /> Location</p>
                     {selectedCard.location?.trim() ? (
                       <a
                         href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(selectedCard.location)}`}
@@ -1270,19 +1270,19 @@ export default function Home() {
                       </>
                     ) : (
                       <>
-                        <p className="text-xs font-bold tracking-widest uppercase opacity-75 mb-1.5">Date & Time</p>
+                        <p className="text-xs font-bold tracking-widest uppercase opacity-75 mb-1.5 inline-flex items-center gap-1.5"><Calendar className="w-3 h-3" /> Date & Time</p>
                         <p className="text-sm md:text-base font-semibold">{formatDate(selectedCard.date)} · {formatTime(selectedCard.date)}</p>
                       </>
                     )}
                   </div>
                   {/* Duration */}
                   <div className="bg-white/15 rounded-2xl p-3 md:p-4 border border-white/20">
-                    <p className="text-xs font-bold tracking-widest uppercase opacity-75 mb-1.5">Duration</p>
+                    <p className="text-xs font-bold tracking-widest uppercase opacity-75 mb-1.5 inline-flex items-center gap-1.5"><Clock className="w-3 h-3" /> Duration</p>
                     <p className="text-sm md:text-base font-semibold">{selectedCard.duration} hours</p>
                   </div>
                   {/* Expected Spots — planned capacity, not a live countdown */}
                   <div className="bg-white/15 rounded-2xl p-3 md:p-4 border border-white/20">
-                    <p className="text-xs font-bold tracking-widest uppercase opacity-75 mb-1.5">Expected Spots</p>
+                    <p className="text-xs font-bold tracking-widest uppercase opacity-75 mb-1.5 inline-flex items-center gap-1.5"><Users className="w-3 h-3" /> Expected Spots</p>
                     <p className="text-sm md:text-base font-semibold">
                       {selectedCard.spotsType === 'limited' && (selectedCard.spots ?? 0) > 0
                         ? `~${selectedCard.spots}`
@@ -1300,7 +1300,7 @@ export default function Home() {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.17, duration: 0.32, ease: EASE_OUT }}>
                   <div className="relative bg-white/15 rounded-2xl p-3 md:p-4 border border-white/20">
-                    <p className="text-xs font-bold tracking-widest uppercase opacity-75 mb-1.5">Host</p>
+                    <p className="text-xs font-bold tracking-widest uppercase opacity-75 mb-1.5 inline-flex items-center gap-1.5"><User className="w-3 h-3" /> Host</p>
                     <div className="flex items-center gap-3 pr-8">
                       {/* Host avatar — skeleton while loading, then image or initial */}
                       <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0 bg-white/20 flex items-center justify-center ring-2 ring-white/30">
@@ -1356,7 +1356,7 @@ export default function Home() {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.22, duration: 0.32, ease: EASE_OUT }}
                   className="bg-white/15 rounded-2xl p-6 border border-white/20 space-y-3">
-                  <h3 className="text-sm font-bold tracking-widest uppercase opacity-75">About This Opportunity</h3>
+                  <h3 className="text-sm font-bold tracking-widest uppercase opacity-75 inline-flex items-center gap-1.5"><Info className="w-3.5 h-3.5" /> About This Opportunity</h3>
                   <p className="text-white/95 leading-relaxed text-base">{selectedCard.description}</p>
 
                   {/* The organization's own prep instructions, folded in
@@ -1451,7 +1451,7 @@ export default function Home() {
                     transition={{ delay: 0.26, duration: 0.3, ease: EASE_OUT }}
                     className="flex flex-wrap gap-2">
                     {selectedCard.tags.map(tag => (
-                      <span key={tag} className="px-3 py-1 bg-white/20 border border-white/30 rounded-md text-xs font-semibold">{tag}</span>
+                      <span key={tag} className="px-3 py-1 bg-white/20 border border-white/30 rounded-md text-xs font-semibold inline-flex items-center gap-1"><Tag className="w-3 h-3" />{tag}</span>
                     ))}
                   </motion.div>
                 )}
