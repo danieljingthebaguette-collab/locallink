@@ -870,7 +870,9 @@ export default function Home() {
                         line went in. The 8px this frees vertically is the difference. */}
                     <div className={cn(
                       "relative h-full flex flex-col justify-between z-10 text-white",
-                      showFullDetail ? "p-6" : "p-5"
+                      // p-6 only once the card is actually the bigger tile, which is
+                      // an md: thing. On a phone it is the same 200px box as the rest.
+                      showFullDetail ? "p-5 md:p-6" : "p-5"
                     )}>
                       {/* TOP — always visible, separator sits right below the tags */}
                       <div className="space-y-2 border-b border-white/20 pb-3">
@@ -902,7 +904,11 @@ export default function Home() {
                             own to push the host line out through the bottom. */}
                         <h3 className={cn(
                           "font-heading font-bold leading-tight break-words",
-                          showFullDetail ? getTitleSize(effectivePopularity)
+                          // The big title is also an md: thing. text-3xl in a 200px
+                          // phone tile ate the rows under it.
+                          showFullDetail
+                            ? cn("text-xl line-clamp-2 md:line-clamp-none",
+                                 effectivePopularity >= 30 ? "md:text-3xl" : "md:text-xl")
                             : isWideCard ? "text-xl line-clamp-2"
                             : "text-base line-clamp-2"
                         )}>{opp.title}</h3>
@@ -963,8 +969,14 @@ export default function Home() {
                             spots — 2x1 and 2x2 (a 1x1 has no room; its row was being
                                     clipped by the tile before it was removed) */}
                       <div className="space-y-1.5 pt-2.5">
+                          {/* hidden below md, because below md there is no 2x2. The
+                              grid spans are all md: prefixed, so on a phone every card
+                              is the same 200px single-column tile while showFullDetail
+                              keeps keying off popularity -- which meant a popular post
+                              rendered its desktop content into a phone-sized tile and
+                              clipped the bottom off. */}
                           {showFullDetail && (
-                            <p className="text-sm line-clamp-2 opacity-95 font-medium">{opp.description}</p>
+                            <p className="text-sm line-clamp-2 opacity-95 font-medium hidden md:block">{opp.description}</p>
                           )}
                           <button
                             onClick={e => { e.stopPropagation(); navigate(`/org/${opp.hostId}`); }}
