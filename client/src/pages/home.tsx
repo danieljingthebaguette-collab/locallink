@@ -865,7 +865,13 @@ export default function Home() {
                     ) : (
                       <div className={cn("absolute inset-0", getCategoryColor(opp.category))} />
                     )}
-                    <div className="relative h-full p-6 flex flex-col justify-between z-10 text-white">
+                    {/* p-5 rather than p-6 below the 2x2: the smaller tiles have a
+                        fixed height and were finishing 2-6px past it once the host
+                        line went in. The 8px this frees vertically is the difference. */}
+                    <div className={cn(
+                      "relative h-full flex flex-col justify-between z-10 text-white",
+                      showFullDetail ? "p-6" : "p-5"
+                    )}>
                       {/* TOP — always visible, separator sits right below the tags */}
                       <div className="space-y-2 border-b border-white/20 pb-3">
                         <div className="flex items-center gap-2 flex-wrap">
@@ -900,10 +906,20 @@ export default function Home() {
                             </motion.span>
                           )}
                         </div>
-                        <h3 className={cn("font-heading font-bold leading-tight break-words", getTitleSize(effectivePopularity))}>{opp.title}</h3>
+                        {/* Clamped on the two smaller tiles. A 1x1 is 200px tall and an
+                            unclamped text-xl title was taking 84px of it -- enough on its
+                            own to push the host line out through the bottom. */}
+                        <h3 className={cn(
+                          "font-heading font-bold leading-tight break-words",
+                          showFullDetail ? getTitleSize(effectivePopularity)
+                            : isWideCard ? "text-xl line-clamp-2"
+                            : "text-base line-clamp-2"
+                        )}>{opp.title}</h3>
                         {opp.tags && opp.tags.length > 0 && (
                           <div className="flex flex-wrap gap-1 pt-1">
-                            {opp.tags.slice(0, 2).map(tag => (
+                            {/* One tag on the 1x1: two of them wrapped onto a second row
+                                and cost 46px, which that tile does not have to give. */}
+                            {opp.tags.slice(0, isWideCard ? 2 : 1).map(tag => (
                               <span key={tag} className="text-[10px] font-semibold bg-white/20 px-2 py-0.5 rounded-md">{tag}</span>
                             ))}
                           </div>
@@ -953,8 +969,23 @@ export default function Home() {
                             <Clock className="w-3 h-3" /><span>{opp.duration}h</span>
                           </div>
                         </div>
-                      ) : isWideCard ? (
-                        <div className="space-y-2 pt-3">
+                      ) : (
+                        <div className="space-y-1.5 pt-2.5">
+                          {/* Who is running it, on both smaller tiles. Compact form:
+                              a 4x4 avatar and no "by", because on the 1x1 this is the
+                              only line under the divider and every pixel is spoken for. */}
+                          <button
+                            onClick={e => { e.stopPropagation(); navigate(`/org/${opp.hostId}`); }}
+                            className="text-[11px] opacity-70 font-medium hover:opacity-100 hover:underline transition-opacity text-left flex items-center gap-1.5 min-w-0 max-w-full"
+                          >
+                            {hostAvatars[opp.hostId] ? (
+                              <img src={hostAvatars[opp.hostId]!} alt="" className="w-4 h-4 rounded-full object-cover ring-1 ring-white/40 flex-shrink-0" />
+                            ) : (
+                              <span className="w-4 h-4 rounded-full bg-white/25 flex items-center justify-center text-[8px] font-bold flex-shrink-0">{opp.hostName.charAt(0).toUpperCase()}</span>
+                            )}
+                            <span className="truncate">{opp.hostName}</span>
+                          </button>
+                          {isWideCard && (
                           <div className="flex items-center justify-between">
                             {availabilityDisplay ? (
                               <div className="flex items-center gap-1.5">
@@ -973,15 +1004,18 @@ export default function Home() {
                               );
                             })()}
                           </div>
-                          <div className="flex items-center gap-2 text-xs opacity-80 min-w-0">
-                            <MapPin className="w-3 h-3 flex-shrink-0" />
-                            <span className="truncate">{opp.location.split(',')[0]}</span>
-                            <span className="opacity-60">&bull;</span>
-                            <Clock className="w-3 h-3 flex-shrink-0" />
-                            <span className="flex-shrink-0">{opp.duration}h</span>
-                          </div>
+                          )}
+                          {isWideCard && (
+                            <div className="flex items-center gap-2 text-xs opacity-80 min-w-0">
+                              <MapPin className="w-3 h-3 flex-shrink-0" />
+                              <span className="truncate">{opp.location.split(',')[0]}</span>
+                              <span className="opacity-60">&bull;</span>
+                              <Clock className="w-3 h-3 flex-shrink-0" />
+                              <span className="flex-shrink-0">{opp.duration}h</span>
+                            </div>
+                          )}
                         </div>
-                      ) : null}
+                      )}
                     </div>
                   </motion.div>
                 );
