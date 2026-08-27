@@ -216,10 +216,23 @@ function requireAuth(req: AuthRequest, res: Response, next: NextFunction) {
     // which every caller then has to somehow explain to someone who has no
     // idea their account is gone. One extra indexed lookup, on every
     // authenticated request, closes it here instead of at each insert.
-    const exists = db.prepare('SELECT 1 FROM users WHERE id = ?').get(payload.userId);
-    if (!exists) return res.status(401).json({ error: 'Invalid or expired token' });
+    const user = db.prepare('SELECT banned, isAdmin FROM users WHERE id = ?').get(payload.userId) as
+      { banned: number; isAdmin: number } | undefined;
+    if (!user) return res.status(401).json({ error: 'Invalid or expired token' });
+    // A ban has to bite now, not in 30 days. Login already refuses a banned
+    // account, but a token issued before the ban stays valid on its own
+    // signature — so without this, banning someone who is already signed in
+    // does nothing at all until that token expires, and they keep posting.
+    // 401, not 403, on purpose: every caller in the client already treats a
+    // 401 as "this session is dead, log out", and none of them handle a 403.
+    // Returning 403 here would leave a banned user staring at dead buttons
+    // instead of being bounced to the login screen — where logging in gives
+    // them the real suspended message and the appeal form.
+    if (user.banned) return res.status(401).json({ error: 'Your account has been suspended.' });
     req.userId = payload.userId;
-    req.isAdmin = payload.isAdmin;
+    // Read admin off the row rather than the token for the same reason: a
+    // 30-day token would otherwise keep granting admin after the flag is gone.
+    req.isAdmin = !!user.isAdmin;
     next();
   } catch {
     return res.status(401).json({ error: 'Invalid or expired token' });
@@ -899,6 +912,14 @@ router.post('/api/opportunities/:id/signup', requireAuth, async (req: AuthReques
 
     const opp = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(oppId) as any;
     if (!opp) return res.status(404).json({ error: 'Opportunity not found' });
+
+    // The modal swaps the interest button for "This event has ended", but that
+    // was the only thing stopping this — a direct call still registered
+    // interest, and the org got a notification and an email about someone
+    // joining an event that already happened. Recurring posts never end.
+    if (!opp.isRecurring && new Date(opp.date) < new Date()) {
+      return res.status(400).json({ error: 'This event has already ended' });
+    }
 
     const existing = db.prepare('SELECT id FROM signups WHERE opportunityId = ? AND userId = ?').get(oppId, userId);
     if (existing) return res.status(409).json({ error: 'Already interested' });

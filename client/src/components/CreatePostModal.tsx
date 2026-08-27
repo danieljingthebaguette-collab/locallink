@@ -308,7 +308,11 @@ export default function CreatePostModal({ open, onClose }: Props) {
       else if (new Date(formData.date) <= new Date()) errors.date = 'Date must be in the future';
     }
     if (spotsType === 'limited' && formData.spots < 1) errors.spots = 'At least 1 spot required';
-    if (formData.duration < 0.5) errors.duration = 'Minimum 0.5 hrs';
+    // Written as !(x >= 0.5) rather than (x < 0.5) so a cleared field catches
+    // too: parseFloat('') is NaN, and NaN < 0.5 is false, so the old form let
+    // an empty duration through to the server and came back "Missing required
+    // fields" with nothing pointing at the box that caused it.
+    if (!(formData.duration >= 0.5)) errors.duration = 'Enter at least 0.5 hours';
     const nonEmptySteps = steps.filter(s => s.trim());
     if (nonEmptySteps.length === 0) errors.steps = 'At least one step is required';
     if (steps.some(s => s.trim() === '')) errors.steps = 'All steps must be filled in';
@@ -318,7 +322,19 @@ export default function CreatePostModal({ open, onClose }: Props) {
   const handleCreate = async () => {
     const errors = validateDetails();
     setFormErrors(errors);
-    if (Object.keys(errors).length > 0) return;
+    if (Object.keys(errors).length > 0) {
+      // Publish sits at the bottom of a long scrolling form, and the field
+      // that blocked it is often far above — a missing photo is at the very
+      // top. Without this, clicking Publish looked like it did nothing at
+      // all: no toast, no movement, the only marker off-screen. Every error
+      // marks itself data-post-error, so the first one in DOM order is the
+      // first one on the form.
+      requestAnimationFrame(() => {
+        document.querySelector('[data-post-error]')
+          ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      });
+      return;
+    }
 
     setCreating(true);
     let imageUrl: string | undefined;
@@ -578,7 +594,7 @@ export default function CreatePostModal({ open, onClose }: Props) {
                         </button>
                       </>
                     ) : (
-                      <div className={cn(
+                      <div data-post-error={formErrors.image || undefined} className={cn(
                         "absolute inset-0 flex flex-col items-center justify-center gap-3 transition-colors",
                         formErrors.image
                           ? "bg-red-900/40 ring-2 ring-inset ring-red-400"
@@ -611,7 +627,7 @@ export default function CreatePostModal({ open, onClose }: Props) {
                         value={formData.title}
                         onChange={e => { setFormData({ ...formData, title: e.target.value }); setFormErrors({ ...formErrors, title: '' }); }}
                         className={cn("rounded-2xl bg-white/90 text-slate-900 font-semibold border-0 h-12", formErrors.title && "ring-2 ring-red-400")} />
-                      {formErrors.title && <p className="text-red-200 text-xs mt-1">{formErrors.title}</p>}
+                      {formErrors.title && <p data-post-error className="text-red-200 text-xs mt-1">{formErrors.title}</p>}
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -621,7 +637,7 @@ export default function CreatePostModal({ open, onClose }: Props) {
                           value={formData.description}
                           onChange={e => { setFormData({ ...formData, description: e.target.value }); setFormErrors({ ...formErrors, description: '' }); }}
                           className={cn("rounded-xl bg-white/80 text-slate-900 border-0 text-sm resize-none min-h-[90px]", formErrors.description && "ring-2 ring-red-400")} />
-                        {formErrors.description && <p className="text-red-200 text-xs">{formErrors.description}</p>}
+                        {formErrors.description && <p data-post-error className="text-red-200 text-xs">{formErrors.description}</p>}
                       </div>
 
                       <div className="bg-white/15 rounded-2xl p-4 border border-white/20 space-y-3">
@@ -631,7 +647,7 @@ export default function CreatePostModal({ open, onClose }: Props) {
                             value={formData.location}
                             onChange={e => { setFormData({ ...formData, location: e.target.value }); setFormErrors({ ...formErrors, location: '' }); }}
                             className={cn("rounded-xl bg-white/80 text-slate-900 border-0 text-sm h-9", formErrors.location && "ring-2 ring-red-400")} />
-                          {formErrors.location && <p className="text-red-200 text-xs">{formErrors.location}</p>}
+                          {formErrors.location && <p data-post-error className="text-red-200 text-xs">{formErrors.location}</p>}
                           {/* No geocoding — the human is the address validator. Show them
                               exactly what volunteers will see so mistakes surface pre-publish. */}
                           {formData.location.trim().length >= 5 && (
@@ -658,7 +674,7 @@ export default function CreatePostModal({ open, onClose }: Props) {
                             <option value="">Select a town…</option>
                             {TOWNS.map(t => <option key={t} value={t}>{t}</option>)}
                           </select>
-                          {formErrors.town && <p className="text-red-200 text-xs">{formErrors.town}</p>}
+                          {formErrors.town && <p data-post-error className="text-red-200 text-xs">{formErrors.town}</p>}
                         </div>
 
                         {/* ── Schedule type toggle ── */}
@@ -690,7 +706,7 @@ export default function CreatePostModal({ open, onClose }: Props) {
                                 value={formData.date}
                                 onChange={e => { setFormData({ ...formData, date: e.target.value }); setFormErrors({ ...formErrors, date: '' }); }}
                                 className={cn("rounded-xl bg-white/80 text-slate-900 border-0 text-sm h-9", formErrors.date && "ring-2 ring-red-400")} />
-                              {formErrors.date && <p className="text-red-200 text-xs mt-1">{formErrors.date}</p>}
+                              {formErrors.date && <p data-post-error className="text-red-200 text-xs mt-1">{formErrors.date}</p>}
                             </div>
                           )}
 
@@ -731,9 +747,10 @@ export default function CreatePostModal({ open, onClose }: Props) {
                       <div className="bg-white/15 rounded-2xl p-4 border border-white/20 space-y-2">
                         <label htmlFor="createpostmodal-duration-hours" className="text-xs font-bold tracking-widest uppercase opacity-75 block">Duration (hours)</label>
                         <Input id="createpostmodal-duration-hours" type="number" min={0.5} max={24} step={0.5}
-                          value={formData.duration}
-                          onChange={e => setFormData({ ...formData, duration: parseFloat(e.target.value) })}
-                          className="rounded-xl bg-white/80 text-slate-900 border-0 text-sm h-9" />
+                          value={Number.isNaN(formData.duration) ? '' : formData.duration}
+                          onChange={e => { const v = parseFloat(e.target.value); setFormData({ ...formData, duration: v }); setFormErrors({ ...formErrors, duration: '' }); }}
+                          className={cn("rounded-xl bg-white/80 text-slate-900 border-0 text-sm h-9", formErrors.duration && "ring-2 ring-red-400")} />
+                        {formErrors.duration && <p data-post-error className="text-red-200 text-xs">{formErrors.duration}</p>}
                       </div>
                       <div className="bg-white/15 rounded-2xl p-4 border border-white/20 space-y-2">
                         <label className="flex items-start gap-2.5 mb-3 cursor-pointer">
@@ -761,6 +778,7 @@ export default function CreatePostModal({ open, onClose }: Props) {
                             onChange={e => setFormData({ ...formData, spots: parseInt(e.target.value) || 0 })}
                             className={cn("rounded-xl bg-white/80 text-slate-900 border-0 text-sm h-9", formErrors.spots && "ring-2 ring-red-400")} />
                         )}
+                        {formErrors.spots && <p data-post-error className="text-red-200 text-xs">{formErrors.spots}</p>}
                         {spotsType === 'unlimited' && <p className="text-white/70 text-xs">Open to all</p>}
                         {spotsType === 'none' && <p className="text-white/70 text-xs">Not specified</p>}
                       </div>
@@ -816,7 +834,7 @@ export default function CreatePostModal({ open, onClose }: Props) {
                           </div>
                         ))}
                       </div>
-                      {formErrors.steps && <p className="text-red-200 text-xs">{formErrors.steps}</p>}
+                      {formErrors.steps && <p data-post-error className="text-red-200 text-xs">{formErrors.steps}</p>}
                       <div className="flex gap-2 items-start bg-white/10 rounded-xl p-3">
                         <Info className="w-3.5 h-3.5 text-white/70 mt-0.5 flex-shrink-0" />
                         <p className="text-white/70 text-xs leading-relaxed">
@@ -853,7 +871,7 @@ export default function CreatePostModal({ open, onClose }: Props) {
                           No
                         </button>
                       </div>
-                      {formErrors.hasSignupPage && <p className="text-red-200 text-xs">{formErrors.hasSignupPage}</p>}
+                      {formErrors.hasSignupPage && <p data-post-error className="text-red-200 text-xs">{formErrors.hasSignupPage}</p>}
 
                       {hasSignupPage === true && (
                         <div className="space-y-2 pt-1">
@@ -864,7 +882,7 @@ export default function CreatePostModal({ open, onClose }: Props) {
                             value={formData.externalSignupUrl}
                             onChange={e => { setFormData({ ...formData, externalSignupUrl: e.target.value }); setFormErrors({ ...formErrors, externalSignupUrl: '' }); }}
                             className={cn("rounded-xl bg-white/80 text-slate-900 border-0 text-sm h-9", formErrors.externalSignupUrl && "ring-2 ring-red-400")} />
-                          {formErrors.externalSignupUrl && <p className="text-red-200 text-xs">{formErrors.externalSignupUrl}</p>}
+                          {formErrors.externalSignupUrl && <p data-post-error className="text-red-200 text-xs">{formErrors.externalSignupUrl}</p>}
                         </div>
                       )}
                       {hasSignupPage === false && (
