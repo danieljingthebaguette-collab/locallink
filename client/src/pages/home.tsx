@@ -808,7 +808,13 @@ export default function Home() {
                   opp.pinnedSize === 'small'  ?  0 :
                   Math.max(opp.popularity, opp.signups.length);
                 const large = isLargeCard(effectivePopularity);
-                const hasImage = opp.image && large;
+                // Show the photo at every card size. It used to be gated on `large`
+                // (popularity >= 15), which meant a brand-new post — always 0 — showed
+                // as a flat colour block no matter what the organizer uploaded, even
+                // though a photo is required to publish. The card already layers the
+                // image and its gradient behind the text identically at every size, so
+                // there was nothing size-specific about it to begin with.
+                const hasImage = !!opp.image;
                 const alreadyInterested = isInterested(opp);
                 const availabilityDisplay = getAvailabilityDisplay(opp);
                 // Recurring posts are never "past"; their open/closed state is time-computed
