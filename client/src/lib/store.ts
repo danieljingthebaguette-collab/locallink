@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { type Opportunity, type AppUser, type Category } from './mockData';
+import { countInterestMatches } from './categoryUtils';
 
 const API = '/api';
 
@@ -278,13 +279,13 @@ interface OpportunitiesState {
   searchQuery: string;
   currentCategory: Category | 'all';
   currentTown: string; // one of TOWNS or 'all'
-  sortBy: 'newest' | 'oldest' | 'soonest' | 'popular';
+  sortBy: 'newest' | 'oldest' | 'soonest' | 'popular' | 'match';
   loading: boolean;
   loaded: boolean;
   setSearchQuery: (q: string) => void;
   setCategory: (cat: Category | 'all') => void;
   setTown: (town: string) => void;
-  setSortBy: (sort: 'newest' | 'oldest' | 'soonest' | 'popular') => void;
+  setSortBy: (sort: 'newest' | 'oldest' | 'soonest' | 'popular' | 'match') => void;
   getFiltered: () => Opportunity[];
   fetchOpportunities: () => Promise<void>;
   fetchMyPosts: () => Promise<void>;
@@ -351,6 +352,20 @@ export const useOpportunitiesStore = create<OpportunitiesState>((set, get) => ({
       filtered.sort((a, b) => effectiveDate(a) - effectiveDate(b));
     } else if (sortBy === 'popular') {
       filtered.sort((a, b) => b.popularity - a.popularity);
+    } else if (sortBy === 'match') {
+      // Ranks by how many of the volunteer's stated interests a post hits, then
+      // by soonest, so equally-relevant posts surface the one they can act on
+      // first. Falls back to a plain recency sort when nobody has answered the
+      // questionnaire -- never leaves the board in an arbitrary order.
+      const interests = useAuthStore.getState().currentUser?.onboardingInterests ?? null;
+      if (!interests || interests.length === 0) {
+        filtered.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      } else {
+        filtered.sort((a, b) => {
+          const diff = countInterestMatches(b, interests) - countInterestMatches(a, interests);
+          return diff !== 0 ? diff : new Date(a.date).getTime() - new Date(b.date).getTime();
+        });
+      }
     }
 
     // Sort order: open future → closed future → past

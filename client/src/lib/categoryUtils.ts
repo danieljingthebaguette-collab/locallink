@@ -42,3 +42,29 @@ export const getModalGradient = (category: Category): string => {
 export const getCategoryLabel = (category: Category): string => {
   return category.charAt(0).toUpperCase() + category.slice(1);
 };
+
+/**
+ * How many of a volunteer's stated interests a post matches.
+ *
+ * The onboarding questionnaire promises "opportunities that actually fit", and
+ * until now nothing read the answers back -- they were written to the database
+ * and forgotten. This is the read side of that promise.
+ *
+ * Field tags and interests come from the same FIELD_TAGS list by design, so
+ * matching is a plain set intersection rather than anything fuzzy. Category is
+ * counted too, since someone who said "Education" should match education posts
+ * that carry no tags at all.
+ */
+export function countInterestMatches(
+  opp: { tags?: string[] | null; category: Category },
+  interests: string[] | null | undefined,
+): number {
+  if (!interests || interests.length === 0) return 0;
+  const wanted = new Set(interests.map(i => i.toLowerCase()));
+  let n = 0;
+  for (const tag of opp.tags ?? []) {
+    if (wanted.has(tag.toLowerCase())) n++;
+  }
+  if (wanted.has(getCategoryLabel(opp.category).toLowerCase())) n++;
+  return n;
+}

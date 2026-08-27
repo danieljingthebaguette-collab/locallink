@@ -37,3 +37,31 @@ export function getExternalSignupUrlError(url: string): string | null {
   }
   return null;
 }
+
+/**
+ * "Tomorrow", "This Saturday", "In 12 days" — how far off an event is, in the
+ * terms people actually think in. An absolute date makes you do the arithmetic
+ * yourself; a relative one is why a thing feels close enough to act on. Returns
+ * null past ~3 weeks, where "in 47 days" stops meaning anything useful and the
+ * plain date reads better.
+ *
+ * Deliberately compares calendar days, not elapsed hours, so an event at 9am
+ * tomorrow reads "Tomorrow" rather than "Today" just because it is under 24
+ * hours away.
+ */
+export function getRelativeDay(iso: string, now: Date = new Date()): string | null {
+  const then = new Date(iso);
+  if (Number.isNaN(then.getTime())) return null;
+
+  const startOf = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const days = Math.round((startOf(then) - startOf(now)) / 86_400_000);
+
+  if (days < 0) return null;
+  if (days === 0) return 'Today';
+  if (days === 1) return 'Tomorrow';
+  // Inside the coming week, the weekday name is the most natural handle.
+  if (days < 7) return `This ${then.toLocaleDateString('en-US', { weekday: 'long' })}`;
+  if (days < 14) return 'Next week';
+  if (days <= 21) return `In ${days} days`;
+  return null;
+}

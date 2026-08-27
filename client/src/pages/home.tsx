@@ -1,14 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'wouter';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
-import { cn, getLocationError, getExternalSignupUrlError } from '@/lib/utils';
-import { Plus, MapPin, Users, Clock, Search, Loader2, Heart, Flag, X, Share2, Edit3, Save, ChevronDown, Star, Trash2, Repeat, Globe, ExternalLink } from 'lucide-react';
+import { cn, getLocationError, getExternalSignupUrlError, getRelativeDay } from '@/lib/utils';
+import { Plus, MapPin, Users, Clock, Search, Loader2, Heart, Flag, X, Share2, Edit3, Save, ChevronDown, Star, Trash2, Repeat, Globe, ExternalLink, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { getCardSize, isLargeCard, getTitleSize } from '@/lib/cardUtils';
-import { getCategoryColor, getModalGradient, getCategoryBorder, getCategoryLabel } from '@/lib/categoryUtils';
+import { getCategoryColor, getModalGradient, getCategoryBorder, getCategoryLabel, countInterestMatches } from '@/lib/categoryUtils';
 import { useAuthStore, useOpportunitiesStore, useFavoritesStore, getRecurringStatus } from '@/lib/store';
 import { CATEGORIES, TOWNS, type Category, type Opportunity } from '@/lib/mockData';
 import CreatePostModal from '@/components/CreatePostModal';
@@ -26,11 +26,15 @@ import CropEditor, {
 // Module-level cache so host profile images survive re-renders and modal re-opens
 const hostProfileCache = new Map<string, { profileImage: string | null; orgWebsite: string | null }>();
 
-const SORT_OPTIONS: { value: 'newest' | 'oldest' | 'soonest' | 'popular'; label: string }[] = [
+const SORT_OPTIONS: { value: 'newest' | 'oldest' | 'soonest' | 'popular' | 'match'; label: string }[] = [
   { value: 'newest',  label: 'Newest' },
   { value: 'oldest',  label: 'Oldest' },
   { value: 'soonest', label: 'Soonest' },
   { value: 'popular', label: 'Popular' },
+  // Only offered to someone who has actually stated interests -- see the
+  // filter at the render site. An empty "For you" would be a worse experience
+  // than not offering it.
+  { value: 'match',   label: 'For you' },
 ];
 
 // Easing curve used throughout — smooth deceleration
@@ -95,6 +99,9 @@ export default function Home() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const { isLoggedIn, currentUser, markWelcomeSeen } = useAuthStore();
+  // Read back what the onboarding questionnaire collected. Organizations never
+  // answer it, so this stays empty for them and every match count falls to 0.
+  const myInterests = currentUser?.onboardingInterests ?? null;
   const {
     setSearchQuery, setCategory, setSortBy, setTown, getFiltered,
     currentCategory, searchQuery, sortBy, currentTown,
@@ -581,7 +588,7 @@ export default function Home() {
                 showSort ? "max-h-20 opacity-100" : "max-h-0 opacity-0 pointer-events-none"
               )}>
                 <div className="flex items-center gap-2 flex-wrap pb-1">
-                  {SORT_OPTIONS.map(opt => (
+                  {SORT_OPTIONS.filter(o => o.value !== 'match' || (myInterests && myInterests.length > 0)).map(opt => (
                     <button key={opt.value} onClick={() => { setSortBy(opt.value); setShowSort(false); }}
                       className={cn("px-3 min-h-[38px] rounded-md text-xs font-semibold transition-all border",
                         sortBy === opt.value
@@ -714,7 +721,7 @@ export default function Home() {
                   whileTap={{ scale: 0.98, transition: { duration: 0.1 } }}
                   onClick={() => setSelectedCard(featuredPost)}
                   className={cn(
-                    "group relative mb-2 rounded-3xl overflow-hidden cursor-pointer border shadow-sm hover:shadow-md transition-shadow duration-300 md:h-[200px]",
+                    "group relative mb-2 rounded-3xl overflow-hidden cursor-pointer border-[6px] shadow-sm hover:shadow-md transition-shadow duration-300 md:h-[200px]",
                     getCategoryBorder(featuredPost.category),
                     (isPast || isClosed) && "grayscale"
                   )}>
@@ -798,6 +805,7 @@ export default function Home() {
                 // Manual host-close always wins; for recurring events schedule also contributes
                 const manualClosed = opp.isAvailable === false || (opp.isAvailable as any) === 0;
                 const isClosed = manualClosed || (recurringStatus ? !recurringStatus.isOpen : false);
+                const matchedInterests = countInterestMatches(opp, myInterests);
                 return (
                   <motion.div
                     key={`${opp.id}-${listKey}`}
@@ -818,7 +826,7 @@ export default function Home() {
                     whileTap={{ scale: 0.97, transition: { duration: 0.1 } }}
                     onClick={() => setSelectedCard(opp)}
                     className={cn(
-                      "group relative rounded-3xl overflow-hidden cursor-pointer border shadow-sm hover:shadow-md transition-shadow duration-300",
+                      "group relative rounded-3xl overflow-hidden cursor-pointer border-[6px] shadow-sm hover:shadow-md transition-shadow duration-300",
                       getCategoryBorder(opp.category), getCardSize(effectivePopularity),
                       // grayscale is a CSS filter — FM doesn't touch filter, so class works fine
                       (isPast || isClosed) && "grayscale"
@@ -836,6 +844,24 @@ export default function Home() {
                       <div className="space-y-2 border-b border-white/20 pb-3">
                         <div className="flex items-center gap-2 flex-wrap">
                           <p className="text-xs font-bold tracking-widest uppercase opacity-80">{getCategoryLabel(opp.category)}</p>
+                          {/* When it is, in the terms people think in. The board
+                              previously showed no date at all, so deciding whether
+                              something was worth opening meant opening it. */}
+                          {!isPast && !isClosed && !opp.isRecurring && (() => {
+                            const rel = getRelativeDay(opp.date);
+                            return rel ? (
+                              <span className="text-[10px] font-bold bg-white/25 text-white px-2 py-0.5 rounded-md inline-flex items-center gap-1">
+                                <Clock className="w-2.5 h-2.5" />{rel}
+                              </span>
+                            ) : null;
+                          })()}
+                          {matchedInterests > 0 && (
+                            <span
+                              title={`Matches ${matchedInterests} of your stated interests`}
+                              className="text-[10px] font-bold bg-white/25 text-white px-2 py-0.5 rounded-md inline-flex items-center gap-1">
+                              <Sparkles className="w-2.5 h-2.5" />FOR YOU
+                            </span>
+                          )}
                           {!!opp.isRecurring && <span className="text-[10px] font-bold bg-blue-500/80 text-white px-2 py-0.5 rounded-md inline-flex items-center gap-1"><Repeat className="w-2.5 h-2.5" />{formatRecurringShort(opp)}</span>}
                           {isPast && !opp.isRecurring && <span className="text-[10px] font-bold bg-white/20 text-white px-2 py-0.5 rounded-md">ENDED</span>}
                           {isClosed && !!opp.isRecurring && <span className="text-[10px] font-bold bg-orange-500/80 text-white px-2 py-0.5 rounded-md">CLOSED</span>}

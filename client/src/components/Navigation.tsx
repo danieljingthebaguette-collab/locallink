@@ -225,9 +225,16 @@ export default function Navigation() {
                           </div>
                           <div className="max-h-72 overflow-y-auto divide-y divide-border">
                             {notifications.length === 0 ? (
-                              <div className="py-8 text-center text-sm text-muted-foreground">
+                              /* Says what the panel is for, not merely that it's
+                                 empty -- three words in a blank box leave you
+                                 unsure whether it's working or broken. */
+                              <div className="py-8 px-6 text-center text-muted-foreground">
                                 <Bell className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                                No notifications yet
+                                <p className="text-sm font-medium text-foreground">No notifications yet</p>
+                                <p className="text-xs mt-1 leading-relaxed">
+                                  You'll hear here when an organization posts an update, when a
+                                  post you made is approved, or when a weekly event opens again.
+                                </p>
                               </div>
                             ) : (
                               notifications.map(n => (

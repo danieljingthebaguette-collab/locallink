@@ -107,8 +107,12 @@
     --cat-sports: 12 62% 48%;
     --cat-sports-fg: 0 0% 100%;
 
-    /* Education */
-    --cat-edu: 168 52% 32%;
+    /* Education -- amber, not the teal it used to be. The border is the
+       category legend, and teal sat 22 degrees from Environment's green, so
+       the two were near-indistinguishable at a glance. Amber puts real
+       daylight between them and differs in lightness too, which keeps the
+       legend working for red-green colour blindness. */
+    --cat-edu: 38 74% 44%;
     --cat-edu-fg: 0 0% 100%;
 
     /* Volunteer */
