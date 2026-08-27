@@ -529,7 +529,9 @@ export default function CreatePostModal({ open, onClose }: Props) {
                     <div>
                       <p className="text-xs font-bold tracking-widest uppercase text-muted-foreground mb-1">Step 2 of 3</p>
                       <h2 className="text-2xl font-heading font-bold text-foreground">What field is this in?</h2>
-                      <p className="text-sm text-muted-foreground mt-1">Select all that apply (optional)</p>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Pick at least one — this is what volunteers filter and search by.
+                      </p>
                     </div>
                     <button onClick={requestClose} aria-label="Close" className="p-2 rounded-md hover:bg-secondary transition-all -mt-1 -mr-1">
                       <X className="w-5 h-5 text-muted-foreground" />
@@ -570,9 +572,23 @@ export default function CreatePostModal({ open, onClose }: Props) {
                     </div>
                   )}
 
-                  <div className="flex gap-3 pt-2">
-                    <Button variant="outline" onClick={() => setCreateStep('type')} className="flex-1 rounded-md font-semibold">← Back</Button>
-                    <Button onClick={() => setCreateStep('details')} className="flex-1 rounded-md font-semibold">Continue →</Button>
+                  {/* Disabled rather than erroring on click: there is one thing to do
+                      on this step and the button says why it can't be pressed, so a
+                      validation message would be telling you what the screen shows. */}
+                  <div className="space-y-2 pt-2">
+                    {selectedTags.length === 0 && (
+                      <p className="text-xs text-muted-foreground">Pick a field above to continue.</p>
+                    )}
+                    <div className="flex gap-3">
+                      <Button variant="outline" onClick={() => setCreateStep('type')} className="flex-1 rounded-md font-semibold">← Back</Button>
+                      <Button
+                        onClick={() => setCreateStep('details')}
+                        disabled={selectedTags.length === 0}
+                        className="flex-1 rounded-md font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Continue →
+                      </Button>
+                    </div>
                   </div>
                 </motion.div>
               )}

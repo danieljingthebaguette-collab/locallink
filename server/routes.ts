@@ -855,6 +855,12 @@ router.post('/api/opportunities', requireAuth, (req: AuthRequest, res: Response)
       const lengthError = getLengthError(field, value);
       if (lengthError) return res.status(400).json({ error: lengthError });
     }
+    // At least one field, on new posts only. Not enforced on edit: posts that
+    // predate this have none, and requiring it there would make every one of
+    // them uneditable until someone picked a tag they were never asked for.
+    if (!Array.isArray(tags) || tags.length === 0) {
+      return res.status(400).json({ error: 'Pick at least one field for this post' });
+    }
     if (Array.isArray(steps)) {
       if (steps.length > LIMITS.steps) {
         return res.status(400).json({ error: `Keep this to ${LIMITS.steps} steps or fewer` });

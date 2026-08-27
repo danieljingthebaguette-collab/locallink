@@ -876,17 +876,9 @@ export default function Home() {
                       <div className="space-y-2 border-b border-white/20 pb-3">
                         <div className="flex items-center gap-2 flex-wrap">
                           <p className="text-xs font-bold tracking-widest uppercase opacity-80">{getCategoryLabel(opp.category)}</p>
-                          {/* When it is, in the terms people think in. The board
-                              previously showed no date at all, so deciding whether
-                              something was worth opening meant opening it. */}
-                          {!isPast && !isClosed && !opp.isRecurring && (() => {
-                            const rel = getRelativeDay(opp.date);
-                            return rel ? (
-                              <span className="text-[10px] font-bold bg-white/25 text-white px-2 py-0.5 rounded-md inline-flex items-center gap-1">
-                                <Clock className="w-2.5 h-2.5" />{rel}
-                              </span>
-                            ) : null;
-                          })()}
+                          {/* The relative-day chip that used to sit here moved into the
+                              where/when/how-long row below, so "when" is stated once
+                              rather than twice. This row is now status only. */}
                           {matchScore > 0 && (
                             <span
                               title="Matches what you told us you're looking for"
@@ -894,7 +886,6 @@ export default function Home() {
                               <Sparkles className="w-2.5 h-2.5" />FOR YOU
                             </span>
                           )}
-                          {!!opp.isRecurring && <span className="text-[10px] font-bold bg-blue-500/80 text-white px-2 py-0.5 rounded-md inline-flex items-center gap-1"><Repeat className="w-2.5 h-2.5" />{formatRecurringShort(opp)}</span>}
                           {isPast && !opp.isRecurring && <span className="text-[10px] font-bold bg-white/20 text-white px-2 py-0.5 rounded-md">ENDED</span>}
                           {isClosed && !!opp.isRecurring && <span className="text-[10px] font-bold bg-orange-500/80 text-white px-2 py-0.5 rounded-md">CLOSED</span>}
                           {alreadyInterested && (
@@ -915,7 +906,9 @@ export default function Home() {
                             : isWideCard ? "text-xl line-clamp-2"
                             : "text-base line-clamp-2"
                         )}>{opp.title}</h3>
-                        {opp.tags && opp.tags.length > 0 ? (
+                        {/* A field is required on new posts, but posts made before that
+                            have none, so this still has to cope with an empty list. */}
+                        {opp.tags && opp.tags.length > 0 && (
                           <div className="flex flex-wrap gap-1 pt-1">
                             {/* One tag on the 1x1: two of them wrapped onto a second row
                                 and cost 46px, which that tile does not have to give. */}
@@ -923,21 +916,41 @@ export default function Home() {
                               <span key={tag} className="text-[10px] font-semibold bg-white/20 px-2 py-0.5 rounded-md">{tag}</span>
                             ))}
                           </div>
-                        ) : (
-                          /* Untagged posts are the majority, and with this row simply
-                             absent the card had one less line than its neighbours --
-                             which justify-between then turned into a gap in the middle
-                             rather than a shorter card. Where and how long fill the
-                             slot, so every tile carries the same number of rows and
-                             the space goes to something worth reading. */
-                          <div className="flex items-center gap-1.5 pt-1 text-[11px] opacity-80 min-w-0">
-                            <MapPin className="w-3 h-3 flex-shrink-0" />
-                            <span className="truncate">{opp.location.split(',')[0]}</span>
-                            <span className="opacity-60 flex-shrink-0">&bull;</span>
-                            <Clock className="w-3 h-3 flex-shrink-0" />
-                            <span className="flex-shrink-0">{opp.duration}h</span>
-                          </div>
                         )}
+                        {/* Where, when, how long — on every card, at every size.
+                            This is also the only place "when" is stated now: the
+                            loose relative-day and recurring chips that used to sit
+                            up beside the category said the same thing a second time,
+                            and getRelativeDay returns null past 21 days, so a post
+                            a month out had no date on it at all. Recurring posts
+                            keep the Repeat icon here instead of a calendar. */}
+                        {/* Wraps rather than truncates. On a 1x1 all three of these on
+                            one line squeezed "Montgomery Public Library" down to "M",
+                            which is worse than no location at all; wrapping gives it
+                            its own line there and changes nothing on the wider tiles,
+                            where all three still fit across. */}
+                        <div className="flex items-center gap-x-1.5 gap-y-0.5 flex-wrap pt-1 text-[11px] opacity-80 min-w-0">
+                          <MapPin className="w-3 h-3 flex-shrink-0" />
+                          <span className="truncate max-w-full">{opp.location.split(',')[0]}</span>
+                          <span className="opacity-60 flex-shrink-0">&bull;</span>
+                          {opp.isRecurring ? (
+                            <>
+                              <Repeat className="w-3 h-3 flex-shrink-0" />
+                              <span className="flex-shrink-0">{formatRecurringShort(opp)}</span>
+                            </>
+                          ) : (
+                            <>
+                              <Calendar className="w-3 h-3 flex-shrink-0" />
+                              <span className="flex-shrink-0">
+                                {getRelativeDay(opp.date)
+                                  ?? new Date(opp.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                              </span>
+                            </>
+                          )}
+                          <span className="opacity-60 flex-shrink-0">&bull;</span>
+                          <Clock className="w-3 h-3 flex-shrink-0" />
+                          <span className="flex-shrink-0">{opp.duration}h</span>
+                        </div>
                       </div>
                       {/* BOTTOM — one block for every tile size, not a branch per size.
                           The 2x2 used to have its own copy of this and had drifted:
