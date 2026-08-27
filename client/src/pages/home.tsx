@@ -915,7 +915,7 @@ export default function Home() {
                             : isWideCard ? "text-xl line-clamp-2"
                             : "text-base line-clamp-2"
                         )}>{opp.title}</h3>
-                        {opp.tags && opp.tags.length > 0 && (
+                        {opp.tags && opp.tags.length > 0 ? (
                           <div className="flex flex-wrap gap-1 pt-1">
                             {/* One tag on the 1x1: two of them wrapped onto a second row
                                 and cost 46px, which that tile does not have to give. */}
@@ -923,7 +923,22 @@ export default function Home() {
                               <span key={tag} className="text-[10px] font-semibold bg-white/20 px-2 py-0.5 rounded-md">{tag}</span>
                             ))}
                           </div>
-                        )}
+                        ) : !showFullDetail ? (
+                          /* Untagged posts are the majority, and with this row simply
+                             absent the card had one less line than its neighbours --
+                             which justify-between then turned into a gap in the middle
+                             rather than a shorter card. Where and how long fill the
+                             slot, so every tile carries the same number of rows and
+                             the space goes to something worth reading. The 2x2 is
+                             excluded because it already shows both further down. */
+                          <div className="flex items-center gap-1.5 pt-1 text-[11px] opacity-80 min-w-0">
+                            <MapPin className="w-3 h-3 flex-shrink-0" />
+                            <span className="truncate">{opp.location.split(',')[0]}</span>
+                            <span className="opacity-60 flex-shrink-0">&bull;</span>
+                            <Clock className="w-3 h-3 flex-shrink-0" />
+                            <span className="flex-shrink-0">{opp.duration}h</span>
+                          </div>
+                        ) : null}
                       </div>
                       {/* BOTTOM, by tile size:
                           2x2 — description, host, spots, location and duration.
