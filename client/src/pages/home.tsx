@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { useModalA11y } from '@/hooks/use-modal-a11y';
-import { getCardSize, isFullDetailCard, getTitleSize } from '@/lib/cardUtils';
+import { getCardSize, isFullDetailCard, isLargeCard, getTitleSize } from '@/lib/cardUtils';
 import { getCategoryColor, getModalGradient, getCategoryBorder, getCategoryLabel, getMatchScore } from '@/lib/categoryUtils';
 import { useAuthStore, useOpportunitiesStore, useFavoritesStore, getRecurringStatus } from '@/lib/store';
 import { CATEGORIES, TOWNS, type Category, type Opportunity } from '@/lib/mockData';
@@ -811,6 +811,10 @@ export default function Home() {
                 // location / duration footer. The 2x1 and 1x1 stop at category,
                 // title, tags and the recurring slot.
                 const showFullDetail = isFullDetailCard(effectivePopularity);
+                // Three tiers, not two: the 2x2 carries the description and host,
+                // the 2x1 is wide enough for spots plus a location/duration line
+                // but not the description, and the 1x1 stops at spots.
+                const isWideCard = isLargeCard(effectivePopularity);
                 // Show the photo at every card size. It used to be gated on `large`
                 // (popularity >= 15), which meant a brand-new post — always 0 — showed
                 // as a flat colour block no matter what the organizer uploaded, even
@@ -905,8 +909,12 @@ export default function Home() {
                           </div>
                         )}
                       </div>
-                      {/* BOTTOM — 2x2 only: description + host + location/duration.
-                          2x1 and 1x1: spots + interest bar, nothing else. */}
+                      {/* BOTTOM, by tile size:
+                          2x2 — description, host, spots, location and duration.
+                          2x1 — spots, location and duration. No description.
+                          1x1 — nothing. It is one grid cell, and the spots row it
+                                used to carry overflowed the tile by ~9px and was
+                                clipped away by overflow-hidden anyway. */}
                       {showFullDetail ? (
                         <div className="space-y-3 pt-3">
                           <p className="text-sm line-clamp-2 opacity-95 font-medium">{opp.description}</p>
@@ -945,26 +953,35 @@ export default function Home() {
                             <Clock className="w-3 h-3" /><span>{opp.duration}h</span>
                           </div>
                         </div>
-                      ) : (
-                        <div className="flex items-center justify-between pt-3">
-                          {availabilityDisplay ? (
-                            <div className="flex items-center gap-1.5">
-                              <Users className="w-3.5 h-3.5 opacity-75" />
-                              <span className="text-xs font-bold">{availabilityDisplay}</span>
-                            </div>
-                          ) : <span />}
-                          {/* Interest heat bar — width grows as more people show interest */}
-                          {opp.signups.length > 0 && (() => {
-                            const cap = opp.spots > 0 && opp.spotsType === 'limited' ? opp.spots : 30;
-                            const pct = Math.min((opp.signups.length / cap) * 100, 100);
-                            return (
-                              <div className="w-12 h-1.5 rounded-full bg-white/20 overflow-hidden">
-                                <div className="h-full rounded-full bg-green-400/80 transition-all duration-700" style={{ width: `${pct}%` }} />
+                      ) : isWideCard ? (
+                        <div className="space-y-2 pt-3">
+                          <div className="flex items-center justify-between">
+                            {availabilityDisplay ? (
+                              <div className="flex items-center gap-1.5">
+                                <Users className="w-3.5 h-3.5 opacity-75" />
+                                <span className="text-xs font-bold">{availabilityDisplay}</span>
                               </div>
-                            );
-                          })()}
+                            ) : <span />}
+                            {/* Interest heat bar — width grows as more people show interest */}
+                            {opp.signups.length > 0 && (() => {
+                              const cap = opp.spots > 0 && opp.spotsType === 'limited' ? opp.spots : 30;
+                              const pct = Math.min((opp.signups.length / cap) * 100, 100);
+                              return (
+                                <div className="w-12 h-1.5 rounded-full bg-white/20 overflow-hidden">
+                                  <div className="h-full rounded-full bg-green-400/80 transition-all duration-700" style={{ width: `${pct}%` }} />
+                                </div>
+                              );
+                            })()}
+                          </div>
+                          <div className="flex items-center gap-2 text-xs opacity-80 min-w-0">
+                            <MapPin className="w-3 h-3 flex-shrink-0" />
+                            <span className="truncate">{opp.location.split(',')[0]}</span>
+                            <span className="opacity-60">&bull;</span>
+                            <Clock className="w-3 h-3 flex-shrink-0" />
+                            <span className="flex-shrink-0">{opp.duration}h</span>
+                          </div>
                         </div>
-                      )}
+                      ) : null}
                     </div>
                   </motion.div>
                 );
