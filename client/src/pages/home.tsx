@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { useModalA11y } from '@/hooks/use-modal-a11y';
-import { getCardSize, isLargeCard, getTitleSize } from '@/lib/cardUtils';
+import { getCardSize, isFullDetailCard, getTitleSize } from '@/lib/cardUtils';
 import { getCategoryColor, getModalGradient, getCategoryBorder, getCategoryLabel, getMatchScore } from '@/lib/categoryUtils';
 import { useAuthStore, useOpportunitiesStore, useFavoritesStore, getRecurringStatus } from '@/lib/store';
 import { CATEGORIES, TOWNS, type Category, type Opportunity } from '@/lib/mockData';
@@ -807,7 +807,10 @@ export default function Home() {
                   opp.pinnedSize === 'medium' ? 15 :
                   opp.pinnedSize === 'small'  ?  0 :
                   Math.max(opp.popularity, opp.signups.length);
-                const large = isLargeCard(effectivePopularity);
+                // Only the full 2x2 tile carries the description and the host /
+                // location / duration footer. The 2x1 and 1x1 stop at category,
+                // title, tags and the recurring slot.
+                const showFullDetail = isFullDetailCard(effectivePopularity);
                 // Show the photo at every card size. It used to be gated on `large`
                 // (popularity >= 15), which meant a brand-new post — always 0 — showed
                 // as a flat colour block no matter what the organizer uploaded, even
@@ -902,8 +905,9 @@ export default function Home() {
                           </div>
                         )}
                       </div>
-                      {/* BOTTOM — large cards: full info + host; small cards: spots + interested */}
-                      {large ? (
+                      {/* BOTTOM — 2x2 only: description + host + location/duration.
+                          2x1 and 1x1: spots + interest bar, nothing else. */}
+                      {showFullDetail ? (
                         <div className="space-y-3 pt-3">
                           <p className="text-sm line-clamp-2 opacity-95 font-medium">{opp.description}</p>
                           <button

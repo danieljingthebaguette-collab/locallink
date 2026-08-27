@@ -22,6 +22,21 @@ export const isLargeCard = (popularity: number): boolean => {
   return popularity >= CARD_SIZE_THRESHOLDS.LARGE;
 };
 
+/**
+ * Whether a card is the full 2x2 tile, and so has the room to carry the
+ * description, host, location and duration.
+ *
+ * Deliberately not isLargeCard: that one is true from LARGE upward, which
+ * lumps the 2x1 in with the 2x2. A 2x1 is half the height, so the description
+ * it was being given had to be clamped to two lines and pushed the location
+ * and duration off the bottom edge. The board reads better when the smaller
+ * two tiles answer only "what is this and when" -- category, title, tags, and
+ * the recurring slot -- and leave the detail to the post itself.
+ */
+export const isFullDetailCard = (popularity: number): boolean => {
+  return popularity >= CARD_SIZE_THRESHOLDS.VERY_LARGE;
+};
+
 export const getTitleSize = (popularity: number): string => {
   return popularity >= CARD_SIZE_THRESHOLDS.VERY_LARGE ? 'text-3xl' : 'text-xl';
 };
