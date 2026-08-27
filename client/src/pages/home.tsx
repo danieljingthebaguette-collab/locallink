@@ -927,10 +927,9 @@ export default function Home() {
                       </div>
                       {/* BOTTOM, by tile size:
                           2x2 — description, host, spots, location and duration.
-                          2x1 — spots, location and duration. No description.
-                          1x1 — nothing. It is one grid cell, and the spots row it
-                                used to carry overflowed the tile by ~9px and was
-                                clipped away by overflow-hidden anyway. */}
+                          2x1 — host and spots.
+                          1x1 — host only. Where and how long stay on the post
+                                itself; only the 2x2 has the room to preview them. */}
                       {showFullDetail ? (
                         <div className="space-y-3 pt-3">
                           <p className="text-sm line-clamp-2 opacity-95 font-medium">{opp.description}</p>
@@ -1004,15 +1003,6 @@ export default function Home() {
                               );
                             })()}
                           </div>
-                          )}
-                          {isWideCard && (
-                            <div className="flex items-center gap-2 text-xs opacity-80 min-w-0">
-                              <MapPin className="w-3 h-3 flex-shrink-0" />
-                              <span className="truncate">{opp.location.split(',')[0]}</span>
-                              <span className="opacity-60">&bull;</span>
-                              <Clock className="w-3 h-3 flex-shrink-0" />
-                              <span className="flex-shrink-0">{opp.duration}h</span>
-                            </div>
                           )}
                         </div>
                       )}
