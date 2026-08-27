@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'wouter';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { cn, getLocationError, getExternalSignupUrlError, getRelativeDay } from '@/lib/utils';
-import { Plus, MapPin, Users, Clock, Search, Loader2, Heart, Flag, X, Share2, Edit3, Save, ChevronDown, Star, Trash2, Repeat, Globe, ExternalLink, Sparkles, ClipboardList, Calendar, User, Info, Tag } from 'lucide-react';
+import { Plus, MapPin, Users, Clock, Search, Loader2, Heart, Flag, X, Share2, Edit3, Save, ChevronDown, Star, Trash2, Repeat, Globe, ExternalLink, Sparkles, ClipboardList, Calendar, User, Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -1234,7 +1234,7 @@ export default function Home() {
                   className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   {/* Location — full width on mobile, 1 col on desktop */}
                   <div className="col-span-2 md:col-span-1 bg-white/15 rounded-2xl p-3 md:p-4 border border-white/20">
-                    <p className="text-xs font-bold tracking-widest uppercase opacity-75 mb-1.5 inline-flex items-center gap-1.5"><MapPin className="w-3 h-3" /> Location</p>
+                    <p className="text-xs font-bold tracking-widest uppercase opacity-75 mb-1.5">Location</p>
                     {selectedCard.location?.trim() ? (
                       <a
                         href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(selectedCard.location)}`}
@@ -1451,7 +1451,7 @@ export default function Home() {
                     transition={{ delay: 0.26, duration: 0.3, ease: EASE_OUT }}
                     className="flex flex-wrap gap-2">
                     {selectedCard.tags.map(tag => (
-                      <span key={tag} className="px-3 py-1 bg-white/20 border border-white/30 rounded-md text-xs font-semibold inline-flex items-center gap-1"><Tag className="w-3 h-3" />{tag}</span>
+                      <span key={tag} className="px-3 py-1 bg-white/20 border border-white/30 rounded-md text-xs font-semibold">{tag}</span>
                     ))}
                   </motion.div>
                 )}
