@@ -716,9 +716,52 @@ function UsersTab({
                   </button>
                   {expandedUserId === user.id && (
                     <div className="mt-3 pt-3 border-t border-border space-y-2.5">
+                      {/* Ordered by what an admin actually scans for first:
+                          when they can help, how experienced they already
+                          are, then what kind of work they're drawn to. Towns
+                          is real data too, just the least decision-relevant
+                          of the six, so it sits last rather than first. */}
+                      {!!user.onboardingAvailability?.length && (
+                        <div>
+                          <p className="text-[10px] font-bold tracking-widest uppercase text-muted-foreground mb-1">Available</p>
+                          <div className="flex flex-wrap gap-1">
+                            {user.onboardingAvailability.map(id => (
+                              <span key={id} className="px-2 py-0.5 rounded-md bg-secondary text-xs">
+                                {AVAILABILITY_OPTIONS.find(o => o.id === id)?.label || id}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {(user.onboardingHoursSoFar != null || user.onboardingGoalHours != null || user.onboardingGoalEvents != null) && (
+                        <div>
+                          <p className="text-[10px] font-bold tracking-widest uppercase text-muted-foreground mb-1">Hours</p>
+                          <div className="flex gap-4 flex-wrap text-xs text-foreground">
+                            {user.onboardingHoursSoFar != null && <span>{user.onboardingHoursSoFar} hrs done before</span>}
+                            {/* One "Goal" label covering both answers, not one
+                                per field -- two separate spans each writing
+                                their own "Goal:" was why it showed up twice
+                                when someone answered both. */}
+                            {(user.onboardingGoalHours != null || user.onboardingGoalEvents != null) && (
+                              <span>
+                                Goal this year: {[
+                                  user.onboardingGoalHours != null ? `${user.onboardingGoalHours} hrs` : null,
+                                  user.onboardingGoalEvents != null ? `${user.onboardingGoalEvents} events` : null,
+                                ].filter(Boolean).join(', ')}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      {!!user.onboardingMajors && (
+                        <div>
+                          <p className="text-[10px] font-bold tracking-widest uppercase text-muted-foreground mb-1">Major / field of study</p>
+                          <p className="text-xs text-foreground">{user.onboardingMajors}</p>
+                        </div>
+                      )}
                       {!!user.onboardingInterests?.length && (
                         <div>
-                          <p className="text-[10px] font-bold tracking-widest uppercase text-muted-foreground mb-1">Interests</p>
+                          <p className="text-[10px] font-bold tracking-widest uppercase text-muted-foreground mb-1">Kind of work they enjoy</p>
                           <div className="flex flex-wrap gap-1">
                             {user.onboardingInterests.map(tag => (
                               <span key={tag} className="px-2 py-0.5 rounded-md bg-secondary text-xs">{tag}</span>
@@ -734,31 +777,6 @@ function UsersTab({
                               <span key={t} className="px-2 py-0.5 rounded-md bg-secondary text-xs">{t}</span>
                             ))}
                           </div>
-                        </div>
-                      )}
-                      {!!user.onboardingAvailability?.length && (
-                        <div>
-                          <p className="text-[10px] font-bold tracking-widest uppercase text-muted-foreground mb-1">Available</p>
-                          <div className="flex flex-wrap gap-1">
-                            {user.onboardingAvailability.map(id => (
-                              <span key={id} className="px-2 py-0.5 rounded-md bg-secondary text-xs">
-                                {AVAILABILITY_OPTIONS.find(o => o.id === id)?.label || id}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                      {!!user.onboardingMajors && (
-                        <div>
-                          <p className="text-[10px] font-bold tracking-widest uppercase text-muted-foreground mb-1">Majors / fields</p>
-                          <p className="text-xs text-foreground">{user.onboardingMajors}</p>
-                        </div>
-                      )}
-                      {(user.onboardingHoursSoFar != null || user.onboardingGoalHours != null || user.onboardingGoalEvents != null) && (
-                        <div className="flex gap-4 flex-wrap text-xs text-muted-foreground">
-                          {user.onboardingHoursSoFar != null && <span>{user.onboardingHoursSoFar} hrs done before</span>}
-                          {user.onboardingGoalHours != null && <span>Goal: {user.onboardingGoalHours} hrs this year</span>}
-                          {user.onboardingGoalEvents != null && <span>Goal: {user.onboardingGoalEvents} events this year</span>}
                         </div>
                       )}
                       {!user.onboardingInterests?.length && !user.onboardingTowns?.length && !user.onboardingAvailability?.length
