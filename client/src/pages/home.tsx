@@ -1359,18 +1359,18 @@ export default function Home() {
                   <h3 className="text-sm font-bold tracking-widest uppercase opacity-75">About This Opportunity</h3>
                   <p className="text-white/95 leading-relaxed text-base">{selectedCard.description}</p>
 
-                  {/* The organization's own steps, folded in behind "See more"
-                      rather than sitting in a card of their own. They belong
-                      with the description -- both answer "what is this?" -- but
-                      unrolled they pushed the Interested button off the screen,
-                      so they stay collapsed until asked for. */}
+                  {/* The organization's own steps, folded in behind "How to
+                      sign up" rather than sitting in a card of their own. They
+                      belong with the description -- both answer "what is
+                      this?" -- but unrolled they pushed the Interested button
+                      off the screen, so they stay collapsed until asked for. */}
                   {selectedCard.steps && selectedCard.steps.length > 0 && (
                     <div className="pt-1">
                       <button
                         onClick={() => setStepsExpanded(v => !v)}
                         aria-expanded={stepsExpanded}
                         className="inline-flex items-center gap-1.5 text-sm font-semibold text-white/85 hover:text-white underline underline-offset-4 decoration-white/40 hover:decoration-white transition-colors">
-                        {stepsExpanded ? 'Show less' : 'See more'}
+                        {stepsExpanded ? 'Show less' : 'How to sign up'}
                         <ChevronDown className={cn('w-3.5 h-3.5 transition-transform duration-200', stepsExpanded && 'rotate-180')} />
                       </button>
 
