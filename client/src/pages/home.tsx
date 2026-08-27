@@ -548,7 +548,7 @@ export default function Home() {
                   <button key={cat.value} onClick={() => setCategory(cat.value as Category | 'all')}
                     aria-pressed={active}
                     className={cn(
-                      "relative px-4 py-2 rounded-md text-sm font-medium border transition-colors duration-150",
+                      "relative px-4 py-2 rounded-full text-sm font-medium border transition-colors duration-150",
                       active
                         ? "text-background border-transparent"
                         : "bg-background text-foreground border-border hover:border-foreground/50")}>
@@ -559,7 +559,7 @@ export default function Home() {
                         // padding and search height shrink on scroll, and without
                         // this the indicator animates that drift too.
                         layoutDependency={currentCategory}
-                        className="absolute inset-0 rounded-md bg-foreground"
+                        className="absolute inset-0 rounded-full bg-foreground"
                         transition={{ type: 'spring', stiffness: 380, damping: 32 }}
                       />
                     )}
@@ -599,7 +599,7 @@ export default function Home() {
                 <div className="flex items-center gap-2 flex-wrap pb-1">
                   {SORT_OPTIONS.filter(o => o.value !== 'match' || (myInterests && myInterests.length > 0)).map(opt => (
                     <button key={opt.value} onClick={() => { setSortBy(opt.value); setShowSort(false); }}
-                      className={cn("px-3 min-h-[38px] rounded-md text-xs font-semibold transition-all border",
+                      className={cn("px-3 min-h-[38px] rounded-full text-xs font-semibold transition-all border",
                         sortBy === opt.value
                           ? "bg-foreground text-background border-foreground"
                           : "bg-background text-foreground border-border hover:border-foreground/50")}>
