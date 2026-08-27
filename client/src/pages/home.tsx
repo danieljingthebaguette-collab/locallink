@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'wouter';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { cn, getLocationError, getExternalSignupUrlError, getRelativeDay } from '@/lib/utils';
-import { Plus, MapPin, Users, Clock, Search, Loader2, Heart, Flag, X, Share2, Edit3, Save, ChevronDown, Star, Trash2, Repeat, Globe, ExternalLink, Sparkles } from 'lucide-react';
+import { Plus, MapPin, Users, Clock, Search, Loader2, Heart, Flag, X, Share2, Edit3, Save, ChevronDown, Star, Trash2, Repeat, Globe, ExternalLink, Sparkles, ClipboardList } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -1359,18 +1359,29 @@ export default function Home() {
                   <h3 className="text-sm font-bold tracking-widest uppercase opacity-75">About This Opportunity</h3>
                   <p className="text-white/95 leading-relaxed text-base">{selectedCard.description}</p>
 
-                  {/* The organization's own steps, folded in behind "How to
-                      sign up" rather than sitting in a card of their own. They
-                      belong with the description -- both answer "what is
-                      this?" -- but unrolled they pushed the Interested button
-                      off the screen, so they stay collapsed until asked for. */}
+                  {/* The organization's own prep instructions, folded in
+                      rather than sitting in a card of their own -- both this
+                      and the description answer "what is this?", but unrolled
+                      they pushed the Interested button off the screen, so they
+                      stay collapsed until asked for.
+
+                      Named "What to Expect", not "sign up": this toggle reveals
+                      the organizer's own logistics (what to wear, where to
+                      meet), and a post with an external registration link shows
+                      a "Sign-up page" button right below this. Both saying
+                      "sign up" made it look like the toggle *was* that step,
+                      when it's unrelated information sitting next to it. The
+                      icon and step count exist for the same reason -- so what's
+                      behind the fold is legible before it's opened, not just
+                      after. */}
                   {selectedCard.steps && selectedCard.steps.length > 0 && (
                     <div className="pt-1">
                       <button
                         onClick={() => setStepsExpanded(v => !v)}
                         aria-expanded={stepsExpanded}
                         className="inline-flex items-center gap-1.5 text-sm font-semibold text-white/85 hover:text-white underline underline-offset-4 decoration-white/40 hover:decoration-white transition-colors">
-                        {stepsExpanded ? 'Show less' : 'How to sign up'}
+                        <ClipboardList className="w-3.5 h-3.5" />
+                        {stepsExpanded ? 'Show less' : `What to Expect (${selectedCard.steps.length} ${selectedCard.steps.length === 1 ? 'step' : 'steps'})`}
                         <ChevronDown className={cn('w-3.5 h-3.5 transition-transform duration-200', stepsExpanded && 'rotate-180')} />
                       </button>
 
