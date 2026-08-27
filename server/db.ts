@@ -479,7 +479,15 @@ const SEED_OPPS = [
 // Seed data if tables are empty
 const oppCount = db.prepare('SELECT COUNT(*) as count FROM opportunities').get() as any;
 const alreadySeeded = db.prepare("SELECT id FROM opportunities WHERE id = '1'").get();
-if (!alreadySeeded && oppCount.count === 0) {
+// Opt-in, and deliberately so. The existing "only when the table is empty"
+// guard is a guess about intent read off the data, and it guesses wrong on a
+// brand-new production database — which is empty for exactly as long as it
+// takes the first real organization to post. That would drop six invented
+// orgs with @example.com addresses onto a live site alongside real ones.
+// The live site is not a place to find out. Set SEED_SAMPLE_DATA=1 locally
+// when you want a populated board to develop against; production never does.
+const wantsSampleData = process.env.SEED_SAMPLE_DATA === '1';
+if (wantsSampleData && !alreadySeeded && oppCount.count === 0) {
   const insertOpp = db.prepare(`
     INSERT INTO opportunities (id, title, description, category, location, town, date, duration, spots, spotsRemaining, image, hostId, hostName, popularity, steps, createdAt)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
