@@ -558,7 +558,15 @@ const insertSeedOrg = db.prepare(`
   VALUES (?, ?, ?, 'NO_LOGIN', 0, 1, 'organization', ?, ?, ?, 1, 0, ?, ?)
 `);
 
+// Gated on the same flag as the seeder above, and it has to be. This backfill
+// creates an org account for any seed org found hosting a post — and a
+// database seeded by an OLDER build already has those six posts sitting in it,
+// so on the live site this fired on its own and put six @example.com
+// organizations next to the real ones. Caught by replaying a deploy against a
+// copy of the production schema; the guard below is not enough by itself,
+// because "is this org hosting something" is true there.
 db.transaction(() => {
+  if (!wantsSampleData) return;
   const now = new Date().toISOString();
   for (const o of SEED_ORGS) {
     if (!seedOrgIsHosting.get(o.id) || seedOrgExists.get(o.id)) continue;
