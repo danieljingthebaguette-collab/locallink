@@ -9,7 +9,7 @@ import { useAuthStore, useAdminStore, useOpportunitiesStore, type JoinLink } fro
 import { VerifiedBadge } from '@/components/VerifiedBadge';
 import { Ban, CheckCircle2, TrendingUp, Scale, ClipboardCheck, XCircle } from 'lucide-react';
 import type { AppUser, Opportunity } from '@/lib/mockData';
-import { CATEGORIES, TOWNS, type Category } from '@/lib/mockData';
+import { AVAILABILITY_OPTIONS, CATEGORIES, TOWNS, type Category } from '@/lib/mockData';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -26,6 +26,7 @@ import {
   Save,
   X,
   ChevronUp,
+  ChevronDown,
   Loader2,
   Flag,
   MessageSquare,
@@ -33,6 +34,7 @@ import {
   Copy,
   BadgeCheck,
   Calendar,
+  Sparkles,
 } from 'lucide-react';
 
 type Tab = 'overview' | 'users' | 'opportunities' | 'verify' | 'reports' | 'feedback' | 'appeals' | 'join-links';
@@ -546,6 +548,10 @@ function UsersTab({
   const [searchQuery, setSearchQuery] = useState('');
   const [confirmDeleteUser, setConfirmDeleteUser] = useState<AppUser | null>(null);
   const [confirmSuspendUser, setConfirmSuspendUser] = useState<AppUser | null>(null);
+  // Collapsed by default, one at a time -- a list of users is scanned, not
+  // read top to bottom, so preferences only take up room once actually asked
+  // for. Same reasoning as the "What to Expect" fold on a post.
+  const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
 
   // Debounce search — avoids filtering on every keystroke
   useEffect(() => {
@@ -694,6 +700,75 @@ function UsersTab({
                   </div>
                 )}
               </div>
+
+              {/* Organizations and admins never answer the questionnaire, and
+                  a volunteer who hasn't completed it has nothing to show --
+                  the toggle only appears where there's something behind it. */}
+              {user.accountType === 'volunteer' && user.onboardingCompletedAt && (
+                <>
+                  <button
+                    onClick={() => setExpandedUserId(id => id === user.id ? null : user.id)}
+                    className="mt-3 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    {expandedUserId === user.id ? 'Hide' : 'View'} preferences
+                    <ChevronDown className={cn('w-3.5 h-3.5 transition-transform duration-200', expandedUserId === user.id && 'rotate-180')} />
+                  </button>
+                  {expandedUserId === user.id && (
+                    <div className="mt-3 pt-3 border-t border-border space-y-2.5">
+                      {!!user.onboardingInterests?.length && (
+                        <div>
+                          <p className="text-[10px] font-bold tracking-widest uppercase text-muted-foreground mb-1">Interests</p>
+                          <div className="flex flex-wrap gap-1">
+                            {user.onboardingInterests.map(tag => (
+                              <span key={tag} className="px-2 py-0.5 rounded-md bg-secondary text-xs">{tag}</span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {!!user.onboardingTowns?.length && (
+                        <div>
+                          <p className="text-[10px] font-bold tracking-widest uppercase text-muted-foreground mb-1">Towns</p>
+                          <div className="flex flex-wrap gap-1">
+                            {user.onboardingTowns.map(t => (
+                              <span key={t} className="px-2 py-0.5 rounded-md bg-secondary text-xs">{t}</span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {!!user.onboardingAvailability?.length && (
+                        <div>
+                          <p className="text-[10px] font-bold tracking-widest uppercase text-muted-foreground mb-1">Available</p>
+                          <div className="flex flex-wrap gap-1">
+                            {user.onboardingAvailability.map(id => (
+                              <span key={id} className="px-2 py-0.5 rounded-md bg-secondary text-xs">
+                                {AVAILABILITY_OPTIONS.find(o => o.id === id)?.label || id}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {!!user.onboardingMajors && (
+                        <div>
+                          <p className="text-[10px] font-bold tracking-widest uppercase text-muted-foreground mb-1">Majors / fields</p>
+                          <p className="text-xs text-foreground">{user.onboardingMajors}</p>
+                        </div>
+                      )}
+                      {(user.onboardingHoursSoFar != null || user.onboardingGoalHours != null || user.onboardingGoalEvents != null) && (
+                        <div className="flex gap-4 flex-wrap text-xs text-muted-foreground">
+                          {user.onboardingHoursSoFar != null && <span>{user.onboardingHoursSoFar} hrs done before</span>}
+                          {user.onboardingGoalHours != null && <span>Goal: {user.onboardingGoalHours} hrs this year</span>}
+                          {user.onboardingGoalEvents != null && <span>Goal: {user.onboardingGoalEvents} events this year</span>}
+                        </div>
+                      )}
+                      {!user.onboardingInterests?.length && !user.onboardingTowns?.length && !user.onboardingAvailability?.length
+                        && !user.onboardingMajors && user.onboardingHoursSoFar == null && user.onboardingGoalHours == null && user.onboardingGoalEvents == null && (
+                        <p className="text-xs text-muted-foreground italic">Completed the questionnaire without answering anything.</p>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           ))}
         </div>

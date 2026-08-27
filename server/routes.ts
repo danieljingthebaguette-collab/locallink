@@ -1169,10 +1169,20 @@ router.delete('/api/favorites/:orgId', requireAuth, (req: AuthRequest, res: Resp
 
 router.get('/api/admin/users', requireAdmin, (_req: Request, res: Response) => {
   try {
+    // Onboarding columns included so admins can see what a volunteer said they
+    // want -- onboardingFields() parses them the same way every other
+    // user-facing response does, rather than a second ad-hoc shape here.
     const users = db.prepare(
-      'SELECT id, username, email, isAdmin, accountType, banned, verified, createdAt FROM users ORDER BY createdAt DESC'
+      `SELECT id, username, email, isAdmin, accountType, banned, verified, createdAt,
+              onboardingHoursSoFar, onboardingInterests, onboardingMajors,
+              onboardingGoalHours, onboardingGoalEvents, onboardingTowns,
+              onboardingAvailability, onboardingCompletedAt
+       FROM users ORDER BY createdAt DESC`
     ).all();
-    return res.json((users as any[]).map(u => ({ ...u, isAdmin: !!u.isAdmin, banned: !!u.banned, verified: !!u.verified })));
+    return res.json((users as any[]).map(u => ({
+      ...u, isAdmin: !!u.isAdmin, banned: !!u.banned, verified: !!u.verified,
+      ...onboardingFields(u),
+    })));
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
