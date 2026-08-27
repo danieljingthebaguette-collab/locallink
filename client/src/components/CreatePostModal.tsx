@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { cn, getLocationError, getExternalSignupUrlError, LIMITS, getLengthError } from '@/lib/utils';
 import {
   X, Upload, ChevronRight, Loader2, Trash2, FileText, RotateCcw,
-  Handshake, BookOpen, Activity, Users, Sprout, Calendar, Repeat, AlertTriangle,
+  Handshake, BookOpen, Activity, Users, Sprout, Calendar, Repeat, AlertTriangle, Info,
   type LucideIcon,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -610,7 +610,7 @@ export default function CreatePostModal({ open, onClose }: Props) {
                       <Input id="createpostmodal-post-title" placeholder="Give your opportunity a name..." maxLength={LIMITS.title}
                         value={formData.title}
                         onChange={e => { setFormData({ ...formData, title: e.target.value }); setFormErrors({ ...formErrors, title: '' }); }}
-                        className={cn("rounded-2xl bg-white/90 text-foreground font-semibold border-0 h-12", formErrors.title && "ring-2 ring-red-400")} />
+                        className={cn("rounded-2xl bg-white/90 text-slate-900 font-semibold border-0 h-12", formErrors.title && "ring-2 ring-red-400")} />
                       {formErrors.title && <p className="text-red-200 text-xs mt-1">{formErrors.title}</p>}
                     </div>
 
@@ -620,7 +620,7 @@ export default function CreatePostModal({ open, onClose }: Props) {
                         <Textarea id="createpostmodal-description" placeholder="Describe this opportunity..." maxLength={LIMITS.description}
                           value={formData.description}
                           onChange={e => { setFormData({ ...formData, description: e.target.value }); setFormErrors({ ...formErrors, description: '' }); }}
-                          className={cn("rounded-xl bg-white/80 text-foreground border-0 text-sm resize-none min-h-[90px]", formErrors.description && "ring-2 ring-red-400")} />
+                          className={cn("rounded-xl bg-white/80 text-slate-900 border-0 text-sm resize-none min-h-[90px]", formErrors.description && "ring-2 ring-red-400")} />
                         {formErrors.description && <p className="text-red-200 text-xs">{formErrors.description}</p>}
                       </div>
 
@@ -630,7 +630,7 @@ export default function CreatePostModal({ open, onClose }: Props) {
                           <Input id="createpostmodal-location" placeholder="Full address or place name — shown as a map link" maxLength={LIMITS.location}
                             value={formData.location}
                             onChange={e => { setFormData({ ...formData, location: e.target.value }); setFormErrors({ ...formErrors, location: '' }); }}
-                            className={cn("rounded-xl bg-white/80 text-foreground border-0 text-sm h-9", formErrors.location && "ring-2 ring-red-400")} />
+                            className={cn("rounded-xl bg-white/80 text-slate-900 border-0 text-sm h-9", formErrors.location && "ring-2 ring-red-400")} />
                           {formErrors.location && <p className="text-red-200 text-xs">{formErrors.location}</p>}
                           {/* No geocoding — the human is the address validator. Show them
                               exactly what volunteers will see so mistakes surface pre-publish. */}
@@ -654,7 +654,7 @@ export default function CreatePostModal({ open, onClose }: Props) {
                           <select id="createpostmodal-town"
                             value={formData.town}
                             onChange={e => { setFormData({ ...formData, town: e.target.value }); setFormErrors({ ...formErrors, town: '' }); }}
-                            className={cn("w-full rounded-xl bg-white/80 text-foreground border-0 text-sm h-9 px-3", formErrors.town && "ring-2 ring-red-400")}>
+                            className={cn("w-full rounded-xl bg-white/80 text-slate-900 border-0 text-sm h-9 px-3", formErrors.town && "ring-2 ring-red-400")}>
                             <option value="">Select a town…</option>
                             {TOWNS.map(t => <option key={t} value={t}>{t}</option>)}
                           </select>
@@ -689,7 +689,7 @@ export default function CreatePostModal({ open, onClose }: Props) {
                               <Input type="datetime-local" min={todayStr}
                                 value={formData.date}
                                 onChange={e => { setFormData({ ...formData, date: e.target.value }); setFormErrors({ ...formErrors, date: '' }); }}
-                                className={cn("rounded-xl bg-white/80 text-foreground border-0 text-sm h-9", formErrors.date && "ring-2 ring-red-400")} />
+                                className={cn("rounded-xl bg-white/80 text-slate-900 border-0 text-sm h-9", formErrors.date && "ring-2 ring-red-400")} />
                               {formErrors.date && <p className="text-red-200 text-xs mt-1">{formErrors.date}</p>}
                             </div>
                           )}
@@ -716,7 +716,7 @@ export default function CreatePostModal({ open, onClose }: Props) {
                                 <Input type="time"
                                   value={recurringTime}
                                   onChange={e => setRecurringTime(e.target.value)}
-                                  className="rounded-xl bg-white/80 text-foreground border-0 text-sm h-9 flex-1" />
+                                  className="rounded-xl bg-white/80 text-slate-900 border-0 text-sm h-9 flex-1" />
                               </div>
                               <p className="text-white/60 text-xs">
                                 Opens every Monday at midnight — closes at {recurringTime} on {DAY_FULL[recurringDay]} — reopens the following Monday.
@@ -733,7 +733,7 @@ export default function CreatePostModal({ open, onClose }: Props) {
                         <Input id="createpostmodal-duration-hours" type="number" min={0.5} max={24} step={0.5}
                           value={formData.duration}
                           onChange={e => setFormData({ ...formData, duration: parseFloat(e.target.value) })}
-                          className="rounded-xl bg-white/80 text-foreground border-0 text-sm h-9" />
+                          className="rounded-xl bg-white/80 text-slate-900 border-0 text-sm h-9" />
                       </div>
                       <div className="bg-white/15 rounded-2xl p-4 border border-white/20 space-y-2">
                         <label className="flex items-start gap-2.5 mb-3 cursor-pointer">
@@ -759,7 +759,7 @@ export default function CreatePostModal({ open, onClose }: Props) {
                           <Input type="number" min={1} max={1000}
                             value={formData.spots}
                             onChange={e => setFormData({ ...formData, spots: parseInt(e.target.value) || 0 })}
-                            className={cn("rounded-xl bg-white/80 text-foreground border-0 text-sm h-9", formErrors.spots && "ring-2 ring-red-400")} />
+                            className={cn("rounded-xl bg-white/80 text-slate-900 border-0 text-sm h-9", formErrors.spots && "ring-2 ring-red-400")} />
                         )}
                         {spotsType === 'unlimited' && <p className="text-white/70 text-xs">Open to all</p>}
                         {spotsType === 'none' && <p className="text-white/70 text-xs">Not specified</p>}
@@ -802,7 +802,7 @@ export default function CreatePostModal({ open, onClose }: Props) {
                                 setSteps(updated);
                                 setFormErrors({ ...formErrors, steps: '' });
                               }}
-                              className="rounded-xl bg-white/80 text-foreground border-0 text-sm h-9 flex-1"
+                              className="rounded-xl bg-white/80 text-slate-900 border-0 text-sm h-9 flex-1"
                             />
                             {steps.length > 1 && (
                               <button
@@ -817,6 +817,12 @@ export default function CreatePostModal({ open, onClose }: Props) {
                         ))}
                       </div>
                       {formErrors.steps && <p className="text-red-200 text-xs">{formErrors.steps}</p>}
+                      <div className="flex gap-2 items-start bg-white/10 rounded-xl p-3">
+                        <Info className="w-3.5 h-3.5 text-white/70 mt-0.5 flex-shrink-0" />
+                        <p className="text-white/70 text-xs leading-relaxed">
+                          <span className="font-semibold text-white/90">Cover the whole path</span>, not just "sign up here" — what does a volunteer actually need to do between signing up and showing up? e.g. "Fill out our waiver form," "Wear closed-toe shoes," "Check in at the front desk when you arrive."
+                        </p>
+                      </div>
                     </div>
 
                     {/* External signup. Asked as a question with no default rather
@@ -857,7 +863,7 @@ export default function CreatePostModal({ open, onClose }: Props) {
                           <Input id="createpostmodal-field" placeholder="https://your-site.org/signup"
                             value={formData.externalSignupUrl}
                             onChange={e => { setFormData({ ...formData, externalSignupUrl: e.target.value }); setFormErrors({ ...formErrors, externalSignupUrl: '' }); }}
-                            className={cn("rounded-xl bg-white/80 text-foreground border-0 text-sm h-9", formErrors.externalSignupUrl && "ring-2 ring-red-400")} />
+                            className={cn("rounded-xl bg-white/80 text-slate-900 border-0 text-sm h-9", formErrors.externalSignupUrl && "ring-2 ring-red-400")} />
                           {formErrors.externalSignupUrl && <p className="text-red-200 text-xs">{formErrors.externalSignupUrl}</p>}
                         </div>
                       )}

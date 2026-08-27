@@ -409,7 +409,7 @@ export default function Account() {
                         clearFieldError('username');
                       }}
                       className={cn(
-                        'pl-12 h-12 border-2 rounded-xl bg-white',
+                        'pl-12 h-12 border-2 rounded-xl bg-white text-slate-900',
                         fieldErrors.username ? 'border-red-400' : 'border-border'
                       )}
                     />
@@ -435,7 +435,7 @@ export default function Account() {
                       setUnverifiedEmail(null);
                     }}
                     className={cn(
-                      'pl-12 h-12 border-2 rounded-xl bg-white',
+                      'pl-12 h-12 border-2 rounded-xl bg-white text-slate-900',
                       fieldErrors.email ? 'border-red-400' : 'border-border'
                     )}
                   />
@@ -459,7 +459,7 @@ export default function Account() {
                       clearFieldError('password');
                     }}
                     className={cn(
-                      'pl-12 h-12 border-2 rounded-xl bg-white',
+                      'pl-12 h-12 border-2 rounded-xl bg-white text-slate-900',
                       fieldErrors.password ? 'border-red-400' : 'border-border'
                     )}
                     onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}

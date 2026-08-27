@@ -94,7 +94,7 @@ export default function ForgotPassword() {
                     }}
                     onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
                     className={cn(
-                      'pl-12 h-12 border-2 rounded-xl bg-white',
+                      'pl-12 h-12 border-2 rounded-xl bg-white text-slate-900',
                       emailError ? 'border-red-400' : 'border-border'
                     )}
                   />

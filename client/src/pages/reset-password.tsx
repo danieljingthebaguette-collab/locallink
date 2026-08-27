@@ -152,7 +152,7 @@ export default function ResetPassword() {
                       if (fieldErrors.newPassword) setFieldErrors((prev) => ({ ...prev, newPassword: undefined }));
                     }}
                     className={cn(
-                      'pl-12 h-12 border-2 rounded-xl bg-white',
+                      'pl-12 h-12 border-2 rounded-xl bg-white text-slate-900',
                       fieldErrors.newPassword ? 'border-red-400' : 'border-border'
                     )}
                   />
@@ -177,7 +177,7 @@ export default function ResetPassword() {
                     }}
                     onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
                     className={cn(
-                      'pl-12 h-12 border-2 rounded-xl bg-white',
+                      'pl-12 h-12 border-2 rounded-xl bg-white text-slate-900',
                       fieldErrors.confirmPassword ? 'border-red-400' : 'border-border'
                     )}
                   />

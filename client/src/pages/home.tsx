@@ -1087,14 +1087,14 @@ export default function Home() {
                         value={editForm.title}
                         onChange={e => setEditForm(f => ({ ...f, title: e.target.value }))}
                         placeholder="Title"
-                        className="w-full rounded-xl bg-white/80 text-foreground border-0 text-sm h-9 px-3"
+                        className="w-full rounded-xl bg-white/80 text-slate-900 border-0 text-sm h-9 px-3"
                       />
                       <textarea
                         value={editForm.description}
                         onChange={e => setEditForm(f => ({ ...f, description: e.target.value }))}
                         placeholder="Description"
                         rows={3}
-                        className="w-full rounded-xl bg-white/80 text-foreground border-0 text-sm px-3 py-2 resize-none"
+                        className="w-full rounded-xl bg-white/80 text-slate-900 border-0 text-sm px-3 py-2 resize-none"
                       />
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                         <div>
@@ -1102,7 +1102,7 @@ export default function Home() {
                             value={editForm.location}
                             onChange={e => setEditForm(f => ({ ...f, location: e.target.value }))}
                             placeholder="Location"
-                            className="w-full rounded-xl bg-white/80 text-foreground border-0 text-sm h-9 px-3"
+                            className="w-full rounded-xl bg-white/80 text-slate-900 border-0 text-sm h-9 px-3"
                           />
                           {editForm.location.trim().length >= 5 && (
                             <p className="text-white/70 text-[11px] mt-1">
@@ -1120,7 +1120,7 @@ export default function Home() {
                         <select
                           value={editForm.town}
                           onChange={e => setEditForm(f => ({ ...f, town: e.target.value }))}
-                          className="rounded-xl bg-white/80 text-foreground border-0 text-sm h-9 px-3"
+                          className="rounded-xl bg-white/80 text-slate-900 border-0 text-sm h-9 px-3"
                         >
                           <option value="">No town set</option>
                           {TOWNS.map(t => <option key={t} value={t}>{t}</option>)}
@@ -1131,7 +1131,7 @@ export default function Home() {
                             <select
                               value={editForm.recurringDay ?? 1}
                               onChange={e => setEditForm(f => ({ ...f, recurringDay: parseInt(e.target.value) }))}
-                              className="flex-1 rounded-xl bg-white/80 text-foreground border-0 text-sm h-9 px-2"
+                              className="flex-1 rounded-xl bg-white/80 text-slate-900 border-0 text-sm h-9 px-2"
                             >
                               {['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'].map((d, i) => (
                                 <option key={d} value={i}>{d}</option>
@@ -1141,7 +1141,7 @@ export default function Home() {
                               type="time"
                               value={editForm.recurringTime ?? '09:00'}
                               onChange={e => setEditForm(f => ({ ...f, recurringTime: e.target.value }))}
-                              className="w-28 rounded-xl bg-white/80 text-foreground border-0 text-sm h-9 px-2"
+                              className="w-28 rounded-xl bg-white/80 text-slate-900 border-0 text-sm h-9 px-2"
                             />
                           </div>
                         ) : (
@@ -1150,7 +1150,7 @@ export default function Home() {
                             type="datetime-local"
                             value={editForm.date}
                             onChange={e => setEditForm(f => ({ ...f, date: e.target.value }))}
-                            className="rounded-xl bg-white/80 text-foreground border-0 text-sm h-9 px-3"
+                            className="rounded-xl bg-white/80 text-slate-900 border-0 text-sm h-9 px-3"
                           />
                         )}
                         <input
@@ -1158,7 +1158,7 @@ export default function Home() {
                           value={editForm.duration}
                           onChange={e => setEditForm(f => ({ ...f, duration: parseFloat(e.target.value) || 0.5 }))}
                           placeholder="Duration (hrs)"
-                          className="rounded-xl bg-white/80 text-foreground border-0 text-sm h-9 px-3"
+                          className="rounded-xl bg-white/80 text-slate-900 border-0 text-sm h-9 px-3"
                         />
                       </div>
                       {/* Optional approximate capacity */}
@@ -1176,7 +1176,7 @@ export default function Home() {
                             }));
                           }}
                           placeholder="e.g. 20"
-                          className="rounded-xl bg-white/80 text-foreground border-0 text-sm h-9 px-3 w-28"
+                          className="rounded-xl bg-white/80 text-slate-900 border-0 text-sm h-9 px-3 w-28"
                         />
                       </div>
                       {/* External signup — org's own registration page, if they use one */}
@@ -1190,7 +1190,7 @@ export default function Home() {
                           onChange={e => { setEditForm(f => ({ ...f, externalSignupUrl: e.target.value })); setSignupUrlEditError(''); }}
                           placeholder="https://your-site.org/signup"
                           className={cn(
-                            "w-full rounded-xl bg-white/80 text-foreground border-0 text-sm h-9 px-3",
+                            "w-full rounded-xl bg-white/80 text-slate-900 border-0 text-sm h-9 px-3",
                             signupUrlEditError && "ring-2 ring-red-400"
                           )}
                         />
@@ -1614,7 +1614,7 @@ export default function Home() {
                         <select
                           value={reportReason}
                           onChange={e => setReportReason(e.target.value)}
-                          className="w-full rounded-xl bg-white/80 text-foreground border-0 text-sm h-9 px-3">
+                          className="w-full rounded-xl bg-white/80 text-slate-900 border-0 text-sm h-9 px-3">
                           <option value="">Select a reason...</option>
                           <option value="spam">Spam or misleading</option>
                           <option value="inappropriate">Inappropriate content</option>
@@ -1625,7 +1625,7 @@ export default function Home() {
                           placeholder="Additional details (optional)"
                           value={reportNote}
                           onChange={e => setReportNote(e.target.value)}
-                          className="rounded-xl bg-white/80 text-foreground border-0 text-sm resize-none min-h-[60px]"
+                          className="rounded-xl bg-white/80 text-slate-900 border-0 text-sm resize-none min-h-[60px]"
                         />
                         <button
                           onClick={handleReport}
