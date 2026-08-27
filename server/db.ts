@@ -395,6 +395,17 @@ try {
   db.exec('ALTER TABLE users ADD COLUMN onboardingCompletedAt TEXT DEFAULT NULL');
 }
 
+// Migrate: two more questionnaire answers, added after the six above already
+// shipped -- a separate idempotent block rather than folding into the one
+// above, since that one's guard column (onboardingCompletedAt) already
+// exists on every database that predates this change.
+try {
+  db.prepare('SELECT onboardingTowns FROM users LIMIT 1').get();
+} catch {
+  db.exec('ALTER TABLE users ADD COLUMN onboardingTowns TEXT DEFAULT NULL');
+  db.exec('ALTER TABLE users ADD COLUMN onboardingAvailability TEXT DEFAULT NULL');
+}
+
 // One-time backfill: tag pre-field posts with a town ONLY when the location or
 // title plainly contains a listed town's name — anything ambiguous stays null
 // for a human to set via the edit form. Idempotent (guarded by town IS NULL);

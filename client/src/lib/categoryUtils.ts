@@ -44,27 +44,80 @@ export const getCategoryLabel = (category: Category): string => {
 };
 
 /**
- * How many of a volunteer's stated interests a post matches.
+ * Which of the questionnaire's three coarse time buckets a post falls into --
+ * weekday daytime, weekday evening, or weekend. Not a real calendar: just
+ * enough to answer "would this actually fit someone's schedule" without
+ * asking them to fill in a full week grid.
  *
- * The onboarding questionnaire promises "opportunities that actually fit", and
- * until now nothing read the answers back -- they were written to the database
- * and forgotten. This is the read side of that promise.
+ * A recurring post's own weekly slot is what's checked, not "today" -- it
+ * happens every week, so there's no single date to derive a bucket from. A
+ * one-time post uses its actual date and hour. Mirrors the exact three ids
+ * in VALID_AVAILABILITY on the server and AVAILABILITY_OPTIONS in
+ * mockData.ts; all three must stay in sync.
+ */
+export function getPostTimeBucket(
+  opp: { date: string; isRecurring?: boolean; recurringDay?: number; recurringTime?: string },
+): 'weekday-day' | 'weekday-evening' | 'weekend' | null {
+  let dayOfWeek: number;
+  let hour: number;
+  if (opp.isRecurring && opp.recurringDay !== undefined && opp.recurringTime) {
+    dayOfWeek = opp.recurringDay;
+    hour = Number(opp.recurringTime.split(':')[0]);
+  } else {
+    const d = new Date(opp.date);
+    if (Number.isNaN(d.getTime())) return null;
+    dayOfWeek = d.getDay();
+    hour = d.getHours();
+  }
+  if (dayOfWeek === 0 || dayOfWeek === 6) return 'weekend';
+  return hour >= 17 ? 'weekday-evening' : 'weekday-day';
+}
+
+/** Everything the onboarding questionnaire can now say a volunteer prefers. */
+export interface VolunteerPrefs {
+  interests?: string[] | null;
+  towns?: string[] | null;
+  availability?: string[] | null;
+}
+
+/**
+ * How well a post matches a volunteer's stated preferences.
+ *
+ * The onboarding questionnaire promises "opportunities that actually fit",
+ * which for a long time was a promise nothing kept -- the answers were
+ * written to the database and never read back. This is that read side,
+ * covering all three preferences the questionnaire now collects.
  *
  * Field tags and interests come from the same FIELD_TAGS list by design, so
- * matching is a plain set intersection rather than anything fuzzy. Category is
- * counted too, since someone who said "Education" should match education posts
- * that carry no tags at all.
+ * matching is a plain set intersection rather than anything fuzzy. Category
+ * is counted too, since someone who said "Education" should match education
+ * posts that carry no tags at all. Town and availability are each worth one
+ * point on a match, same weight as a single tag -- none of the three signals
+ * is treated as more decisive than the others.
  */
-export function countInterestMatches(
-  opp: { tags?: string[] | null; category: Category },
-  interests: string[] | null | undefined,
+export function getMatchScore(
+  opp: { tags?: string[] | null; category: Category; town?: string | null; date: string; isRecurring?: boolean; recurringDay?: number; recurringTime?: string },
+  prefs: VolunteerPrefs,
 ): number {
-  if (!interests || interests.length === 0) return 0;
-  const wanted = new Set(interests.map(i => i.toLowerCase()));
   let n = 0;
-  for (const tag of opp.tags ?? []) {
-    if (wanted.has(tag.toLowerCase())) n++;
+
+  const interests = prefs.interests;
+  if (interests && interests.length > 0) {
+    const wanted = new Set(interests.map(i => i.toLowerCase()));
+    for (const tag of opp.tags ?? []) {
+      if (wanted.has(tag.toLowerCase())) n++;
+    }
+    if (wanted.has(getCategoryLabel(opp.category).toLowerCase())) n++;
   }
-  if (wanted.has(getCategoryLabel(opp.category).toLowerCase())) n++;
+
+  if (prefs.towns && prefs.towns.length > 0 && opp.town && prefs.towns.includes(opp.town)) {
+    n++;
+  }
+
+  if (prefs.availability && prefs.availability.length > 0) {
+    const bucket = getPostTimeBucket(opp);
+    if (bucket && prefs.availability.includes(bucket)) n++;
+  }
+
   return n;
 }

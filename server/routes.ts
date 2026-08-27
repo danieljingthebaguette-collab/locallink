@@ -89,6 +89,8 @@ function onboardingFields(user: any) {
     onboardingMajors: user.onboardingMajors || null,
     onboardingGoalHours: user.onboardingGoalHours ?? null,
     onboardingGoalEvents: user.onboardingGoalEvents ?? null,
+    onboardingTowns: safeJsonParse<string[]>(user.onboardingTowns, []),
+    onboardingAvailability: safeJsonParse<string[]>(user.onboardingAvailability, []),
     onboardingCompletedAt: user.onboardingCompletedAt || null,
   };
 }
@@ -586,7 +588,7 @@ router.put('/api/auth/profile', requireAuth, async (req: AuthRequest, res: Respo
     }
 
     const updated = db.prepare(
-      'SELECT id, username, email, isAdmin, emailVerified, accountType, notifyOnInterest, notifyOnReopen, profileImage, orgDescription, orgWebsite, orgEmail, orgPhone, emailReminders, hasSeenWelcome, verified, createdAt, onboardingHoursSoFar, onboardingInterests, onboardingMajors, onboardingGoalHours, onboardingGoalEvents, onboardingCompletedAt FROM users WHERE id = ?'
+      'SELECT id, username, email, isAdmin, emailVerified, accountType, notifyOnInterest, notifyOnReopen, profileImage, orgDescription, orgWebsite, orgEmail, orgPhone, emailReminders, hasSeenWelcome, verified, createdAt, onboardingHoursSoFar, onboardingInterests, onboardingMajors, onboardingGoalHours, onboardingGoalEvents, onboardingTowns, onboardingAvailability, onboardingCompletedAt FROM users WHERE id = ?'
     ).get(userId) as any;
     return res.json({
       ...updated,
@@ -612,6 +614,10 @@ router.put('/api/auth/profile', requireAuth, async (req: AuthRequest, res: Respo
 // and hitting Save (even mostly blank) stops the prompt from reappearing —
 // only Skip leaves it owed.
 const MAX_ONBOARDING_TEXT = 200;
+// Mirrors getPostTimeBucket in client/src/lib/categoryUtils.ts -- keep the
+// three ids in sync, since a mismatch would make an availability answer
+// silently never match anything.
+const VALID_AVAILABILITY = ['weekday-day', 'weekday-evening', 'weekend'] as const;
 
 router.post('/api/me/onboarding', requireAuth, (req: AuthRequest, res: Response) => {
   try {
@@ -623,7 +629,7 @@ router.post('/api/me/onboarding', requireAuth, (req: AuthRequest, res: Response)
       return res.status(403).json({ error: 'The questionnaire is for volunteer accounts.' });
     }
 
-    const { hoursSoFar, interests, majors, goalHours, goalEvents } = req.body || {};
+    const { hoursSoFar, interests, majors, goalHours, goalEvents, towns, availability } = req.body || {};
 
     const numOrNull = (v: unknown): number | null => {
       if (v === undefined || v === null || v === '') return null;
@@ -637,14 +643,25 @@ router.post('/api/me/onboarding', requireAuth, (req: AuthRequest, res: Response)
       ? interests.filter((t: unknown) => typeof t === 'string' && (VALID_FIELD_TAGS as readonly string[]).includes(t))
       : [];
     const cleanMajors = typeof majors === 'string' ? majors.trim().slice(0, MAX_ONBOARDING_TEXT) : null;
+    // Same whitelisting logic as interests, against the two lists a post
+    // itself is already constrained to -- an answer here can never name a
+    // town or time slot that no post could actually have.
+    const cleanTowns = Array.isArray(towns)
+      ? towns.filter((t: unknown) => typeof t === 'string' && (VALID_TOWNS as readonly string[]).includes(t))
+      : [];
+    const cleanAvailability = Array.isArray(availability)
+      ? availability.filter((a: unknown) => typeof a === 'string' && (VALID_AVAILABILITY as readonly string[]).includes(a))
+      : [];
 
     const now = new Date().toISOString();
     db.prepare(
       `UPDATE users SET onboardingHoursSoFar = ?, onboardingInterests = ?, onboardingMajors = ?,
-       onboardingGoalHours = ?, onboardingGoalEvents = ?, onboardingCompletedAt = ? WHERE id = ?`
+       onboardingGoalHours = ?, onboardingGoalEvents = ?, onboardingTowns = ?, onboardingAvailability = ?,
+       onboardingCompletedAt = ? WHERE id = ?`
     ).run(
       numOrNull(hoursSoFar), JSON.stringify(cleanInterests), cleanMajors || null,
-      numOrNull(goalHours), numOrNull(goalEvents), now, req.userId
+      numOrNull(goalHours), numOrNull(goalEvents), JSON.stringify(cleanTowns), JSON.stringify(cleanAvailability),
+      now, req.userId
     );
 
     // Someone can complete it from the Profile reminder card or a fresh
@@ -655,7 +672,7 @@ router.post('/api/me/onboarding', requireAuth, (req: AuthRequest, res: Response)
     db.prepare("UPDATE notifications SET read = 1 WHERE id = ?").run(`onboarding-reminder-${req.userId}`);
 
     const updated = db.prepare(
-      'SELECT onboardingHoursSoFar, onboardingInterests, onboardingMajors, onboardingGoalHours, onboardingGoalEvents, onboardingCompletedAt FROM users WHERE id = ?'
+      'SELECT onboardingHoursSoFar, onboardingInterests, onboardingMajors, onboardingGoalHours, onboardingGoalEvents, onboardingTowns, onboardingAvailability, onboardingCompletedAt FROM users WHERE id = ?'
     ).get(req.userId) as any;
     return res.json(onboardingFields(updated));
   } catch (err: any) {

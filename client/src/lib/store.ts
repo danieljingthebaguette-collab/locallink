@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { type Opportunity, type AppUser, type Category } from './mockData';
-import { countInterestMatches } from './categoryUtils';
+import { getMatchScore } from './categoryUtils';
 
 const API = '/api';
 
@@ -65,7 +65,7 @@ interface AuthState {
   logout: () => void;
   loadUser: () => void;
   markWelcomeSeen: () => Promise<void>;
-  submitOnboarding: (data: { hoursSoFar?: number | null; interests?: string[]; majors?: string; goalHours?: number | null; goalEvents?: number | null }) => Promise<{ success: boolean; error?: string }>;
+  submitOnboarding: (data: { hoursSoFar?: number | null; interests?: string[]; majors?: string; goalHours?: number | null; goalEvents?: number | null; towns?: string[]; availability?: string[] }) => Promise<{ success: boolean; error?: string }>;
   requestOnboardingReminder: () => Promise<void>;
 }
 
@@ -353,16 +353,19 @@ export const useOpportunitiesStore = create<OpportunitiesState>((set, get) => ({
     } else if (sortBy === 'popular') {
       filtered.sort((a, b) => b.popularity - a.popularity);
     } else if (sortBy === 'match') {
-      // Ranks by how many of the volunteer's stated interests a post hits, then
-      // by soonest, so equally-relevant posts surface the one they can act on
-      // first. Falls back to a plain recency sort when nobody has answered the
-      // questionnaire -- never leaves the board in an arbitrary order.
-      const interests = useAuthStore.getState().currentUser?.onboardingInterests ?? null;
-      if (!interests || interests.length === 0) {
+      // Ranks by how well a post matches everything the questionnaire now
+      // collects -- interests, preferred towns, availability -- then by
+      // soonest, so equally-relevant posts surface the one they can act on
+      // first. Falls back to a plain recency sort when nobody has answered
+      // any of the three -- never leaves the board in an arbitrary order.
+      const user = useAuthStore.getState().currentUser;
+      const prefs = { interests: user?.onboardingInterests ?? null, towns: user?.onboardingTowns ?? null, availability: user?.onboardingAvailability ?? null };
+      const hasAnyPrefs = !!((prefs.interests && prefs.interests.length) || (prefs.towns && prefs.towns.length) || (prefs.availability && prefs.availability.length));
+      if (!hasAnyPrefs) {
         filtered.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
       } else {
         filtered.sort((a, b) => {
-          const diff = countInterestMatches(b, interests) - countInterestMatches(a, interests);
+          const diff = getMatchScore(b, prefs) - getMatchScore(a, prefs);
           return diff !== 0 ? diff : new Date(a.date).getTime() - new Date(b.date).getTime();
         });
       }

@@ -9,7 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { useModalA11y } from '@/hooks/use-modal-a11y';
 import { getCardSize, isLargeCard, getTitleSize } from '@/lib/cardUtils';
-import { getCategoryColor, getModalGradient, getCategoryBorder, getCategoryLabel, countInterestMatches } from '@/lib/categoryUtils';
+import { getCategoryColor, getModalGradient, getCategoryBorder, getCategoryLabel, getMatchScore } from '@/lib/categoryUtils';
 import { useAuthStore, useOpportunitiesStore, useFavoritesStore, getRecurringStatus } from '@/lib/store';
 import { CATEGORIES, TOWNS, type Category, type Opportunity } from '@/lib/mockData';
 import CreatePostModal from '@/components/CreatePostModal';
@@ -103,6 +103,9 @@ export default function Home() {
   // Read back what the onboarding questionnaire collected. Organizations never
   // answer it, so this stays empty for them and every match count falls to 0.
   const myInterests = currentUser?.onboardingInterests ?? null;
+  const myTowns = currentUser?.onboardingTowns ?? null;
+  const myAvailability = currentUser?.onboardingAvailability ?? null;
+  const hasAnyPrefs = !!((myInterests && myInterests.length) || (myTowns && myTowns.length) || (myAvailability && myAvailability.length));
   const {
     setSearchQuery, setCategory, setSortBy, setTown, getFiltered,
     currentCategory, searchQuery, sortBy, currentTown,
@@ -597,7 +600,7 @@ export default function Home() {
                 showSort ? "max-h-20 opacity-100" : "max-h-0 opacity-0 pointer-events-none"
               )}>
                 <div className="flex items-center gap-2 flex-wrap pb-1">
-                  {SORT_OPTIONS.filter(o => o.value !== 'match' || (myInterests && myInterests.length > 0)).map(opt => (
+                  {SORT_OPTIONS.filter(o => o.value !== 'match' || hasAnyPrefs).map(opt => (
                     <button key={opt.value} onClick={() => { setSortBy(opt.value); setShowSort(false); }}
                       className={cn("px-3 min-h-[38px] rounded-md text-xs font-semibold transition-all border",
                         sortBy === opt.value
@@ -814,7 +817,7 @@ export default function Home() {
                 // Manual host-close always wins; for recurring events schedule also contributes
                 const manualClosed = opp.isAvailable === false || (opp.isAvailable as any) === 0;
                 const isClosed = manualClosed || (recurringStatus ? !recurringStatus.isOpen : false);
-                const matchedInterests = countInterestMatches(opp, myInterests);
+                const matchScore = getMatchScore(opp, { interests: myInterests, towns: myTowns, availability: myAvailability });
                 return (
                   <motion.div
                     key={`${opp.id}-${listKey}`}
@@ -864,9 +867,9 @@ export default function Home() {
                               </span>
                             ) : null;
                           })()}
-                          {matchedInterests > 0 && (
+                          {matchScore > 0 && (
                             <span
-                              title={`Matches ${matchedInterests} of your stated interests`}
+                              title="Matches what you told us you're looking for"
                               className="text-[10px] font-bold bg-white/25 text-white px-2 py-0.5 rounded-md inline-flex items-center gap-1">
                               <Sparkles className="w-2.5 h-2.5" />FOR YOU
                             </span>

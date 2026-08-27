@@ -79,6 +79,8 @@ export interface AppUser {
   onboardingMajors?: string | null;
   onboardingGoalHours?: number | null;
   onboardingGoalEvents?: number | null;
+  onboardingTowns?: string[] | null;
+  onboardingAvailability?: string[] | null;
   onboardingCompletedAt?: string | null;
 }
 
@@ -138,6 +140,18 @@ export const FIELD_TAGS = [
   'Chronic Illness',
   'Econ. Empowerment',
 ] as const;
+
+// The onboarding questionnaire's availability answer. Three buckets, not a
+// full weekly calendar -- coarse enough to actually be worth filling in, and
+// matched against a post's own schedule by getPostTimeBucket in
+// categoryUtils.ts. Mirrored server-side as VALID_AVAILABILITY in routes.ts;
+// the id strings must stay identical across all three places, or an answer
+// here silently stops matching anything.
+export const AVAILABILITY_OPTIONS: { id: string; label: string }[] = [
+  { id: 'weekday-day', label: 'Weekday daytime' },
+  { id: 'weekday-evening', label: 'Weekday evenings' },
+  { id: 'weekend', label: 'Weekends' },
+];
 
 export const CATEGORIES: { value: Category | 'all'; label: string }[] = [
   { value: 'all', label: 'All' },

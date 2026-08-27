@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
-import { X, Loader2, Sparkles } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Loader2, Search, Sparkles, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { useAuthStore } from '@/lib/store';
-import { FIELD_TAGS } from '@/lib/mockData';
+import { AVAILABILITY_OPTIONS, FIELD_TAGS, TOWNS } from '@/lib/mockData';
 import { cn } from '@/lib/utils';
 
 // Shown once per browser session to any volunteer who hasn't completed it —
@@ -22,15 +22,29 @@ import { cn } from '@/lib/utils';
 // Profile reminder card and a bell notification both need to be able to
 // force this back open, and a store both already read is simpler than a
 // custom event to reach into an already-mounted component from elsewhere.
+//
+// Four steps, not one long scroll -- but "every question is optional, skip
+// the rest" still has to survive the trip to a wizard. Continue never checks
+// whether the current step has anything filled in; it just moves forward,
+// same as scrolling past a blank field used to. The only thing a step count
+// buys is guided pacing, not gating.
+type Step = 0 | 1 | 2 | 3;
+const STEP_COUNT = 4;
+const STEP_TITLES = ['About you', 'What you enjoy', 'Where & when', 'Your goals'];
+
 export default function OnboardingQuestionnaire({ suppressed }: { suppressed?: boolean }) {
   const { toast } = useToast();
   const {
     isLoggedIn, currentUser, submitOnboarding,
     onboardingPromptDismissed: dismissed, hideOnboardingPrompt, requestOnboardingReminder,
   } = useAuthStore();
+  const [step, setStep] = useState<Step>(0);
   const [hoursSoFar, setHoursSoFar] = useState('');
   const [interests, setInterests] = useState<string[]>([]);
+  const [tagSearch, setTagSearch] = useState('');
   const [majors, setMajors] = useState('');
+  const [towns, setTowns] = useState<string[]>([]);
+  const [availability, setAvailability] = useState<string[]>([]);
   const [goalHours, setGoalHours] = useState('');
   const [goalEvents, setGoalEvents] = useState('');
   const [saving, setSaving] = useState(false);
@@ -38,6 +52,12 @@ export default function OnboardingQuestionnaire({ suppressed }: { suppressed?: b
   const open = !suppressed && !dismissed && isLoggedIn
     && currentUser?.accountType === 'volunteer'
     && !currentUser?.onboardingCompletedAt;
+
+  // Always reopens on step 1 -- nothing is saved until the final Save, so
+  // there is no half-finished state worth returning someone to.
+  useEffect(() => {
+    if (open) setStep(0);
+  }, [open]);
 
   // Leaving via any exit -- Skip, Escape, the backdrop -- both dismisses
   // the modal and leaves the standing reminders (Profile card, bell) in
@@ -61,6 +81,14 @@ export default function OnboardingQuestionnaire({ suppressed }: { suppressed?: b
   const toggleInterest = (tag: string) => {
     setInterests(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]);
   };
+  const toggleTown = (town: string) => {
+    setTowns(prev => prev.includes(town) ? prev.filter(t => t !== town) : [...prev, town]);
+  };
+  const toggleAvailability = (id: string) => {
+    setAvailability(prev => prev.includes(id) ? prev.filter(a => a !== id) : [...prev, id]);
+  };
+
+  const filteredTags = FIELD_TAGS.filter(t => t.toLowerCase().includes(tagSearch.toLowerCase()));
 
   const handleSave = async () => {
     setSaving(true);
@@ -68,6 +96,8 @@ export default function OnboardingQuestionnaire({ suppressed }: { suppressed?: b
       hoursSoFar: hoursSoFar.trim() ? Number(hoursSoFar) : null,
       interests,
       majors: majors.trim(),
+      towns,
+      availability,
       goalHours: goalHours.trim() ? Number(goalHours) : null,
       goalEvents: goalEvents.trim() ? Number(goalEvents) : null,
     });
@@ -79,6 +109,13 @@ export default function OnboardingQuestionnaire({ suppressed }: { suppressed?: b
     }
   };
 
+  const chipClass = (active: boolean) => cn(
+    'px-3 py-1.5 rounded-md text-xs font-semibold border transition-colors',
+    active
+      ? 'bg-primary text-primary-foreground border-primary'
+      : 'bg-background text-foreground border-border hover:border-primary/50'
+  );
+
   return (
     <div
       className="fixed inset-0 z-[75] bg-black/50 flex items-end sm:items-center justify-center p-4"
@@ -88,7 +125,7 @@ export default function OnboardingQuestionnaire({ suppressed }: { suppressed?: b
       aria-labelledby="onboarding-title"
     >
       <div
-        className="w-full max-w-lg rounded-3xl bg-card border border-border shadow-md p-6 md:p-8 max-h-[85vh] overflow-y-auto relative"
+        className="w-full max-w-lg rounded-3xl bg-card border border-border shadow-md p-6 md:p-8 max-h-[85vh] overflow-y-auto relative flex flex-col"
         onClick={e => e.stopPropagation()}
       >
         <button
@@ -110,101 +147,180 @@ export default function OnboardingQuestionnaire({ suppressed }: { suppressed?: b
           answer what you'd like and skip the rest.
         </p>
 
-        <div className="mt-6 space-y-5">
-          <div>
-            <label htmlFor="onboarding-hours" className="text-xs font-bold tracking-widest uppercase text-muted-foreground mb-2 block">
-              Volunteer hours you've done before
-            </label>
-            <Input
-              id="onboarding-hours"
-              type="number"
-              min={0}
-              placeholder="0"
-              value={hoursSoFar}
-              onChange={e => setHoursSoFar(e.target.value)}
-              className="rounded-xl h-11 w-32"
-            />
+        {/* Step indicator -- same "Step X of Y" + dot-progress convention the
+            post-creation form already uses, so this doesn't introduce a third
+            way of showing progress in the app. */}
+        <div className="mt-5 flex items-center gap-3">
+          <div className="flex items-center gap-1.5">
+            {Array.from({ length: STEP_COUNT }, (_, i) => (
+              <div key={i} className={cn('h-1.5 rounded-full transition-all duration-300',
+                i === step ? 'w-6 bg-primary' : 'w-3 bg-border')} />
+            ))}
           </div>
+          <span className="text-xs font-bold tracking-widest uppercase text-muted-foreground">
+            Step {step + 1} of {STEP_COUNT} — {STEP_TITLES[step]}
+          </span>
+        </div>
 
-          <div>
-            <label className="text-xs font-bold tracking-widest uppercase text-muted-foreground mb-2 block">
-              What kinds of things do you enjoy?
-            </label>
-            <div className="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto pr-1">
-              {FIELD_TAGS.map(tag => {
-                const active = interests.includes(tag);
-                return (
+        <div className="mt-5 space-y-5 flex-1">
+          {step === 0 && (
+            <>
+              <div>
+                <label htmlFor="onboarding-hours" className="text-xs font-bold tracking-widest uppercase text-muted-foreground mb-2 block">
+                  Volunteer hours you've done before
+                </label>
+                <Input
+                  id="onboarding-hours"
+                  type="number"
+                  min={0}
+                  placeholder="0"
+                  value={hoursSoFar}
+                  onChange={e => setHoursSoFar(e.target.value)}
+                  className="rounded-xl h-11 w-32"
+                />
+              </div>
+              <div>
+                <label htmlFor="onboarding-majors" className="text-xs font-bold tracking-widest uppercase text-muted-foreground mb-2 block">
+                  Majors or fields you're considering
+                </label>
+                <Textarea
+                  id="onboarding-majors"
+                  placeholder="e.g. biology, education, undecided..."
+                  value={majors}
+                  onChange={e => setMajors(e.target.value)}
+                  className="rounded-xl min-h-[64px] resize-none"
+                  maxLength={200}
+                />
+              </div>
+            </>
+          )}
+
+          {step === 1 && (
+            <div>
+              <label className="text-xs font-bold tracking-widest uppercase text-muted-foreground mb-2 block">
+                What kinds of things do you enjoy?
+              </label>
+              <div className="relative mb-2">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                <Input
+                  placeholder="Search..."
+                  value={tagSearch}
+                  onChange={e => setTagSearch(e.target.value)}
+                  className="rounded-xl h-9 pl-8 text-sm"
+                />
+              </div>
+              <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto pr-1">
+                {filteredTags.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-4 w-full text-center">No matches for "{tagSearch}"</p>
+                ) : filteredTags.map(tag => (
                   <button
                     key={tag}
                     type="button"
                     onClick={() => toggleInterest(tag)}
-                    className={cn(
-                      'px-3 py-1.5 rounded-md text-xs font-semibold border transition-colors',
-                      active
-                        ? 'bg-primary text-primary-foreground border-primary'
-                        : 'bg-background text-foreground border-border hover:border-primary/50'
-                    )}
+                    className={chipClass(interests.includes(tag))}
                   >
                     {tag}
                   </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div>
-            <label htmlFor="onboarding-majors" className="text-xs font-bold tracking-widest uppercase text-muted-foreground mb-2 block">
-              Majors or fields you're considering
-            </label>
-            <Textarea
-              id="onboarding-majors"
-              placeholder="e.g. biology, education, undecided..."
-              value={majors}
-              onChange={e => setMajors(e.target.value)}
-              className="rounded-xl min-h-[64px] resize-none"
-              maxLength={200}
-            />
-          </div>
-
-          <div>
-            <label className="text-xs font-bold tracking-widest uppercase text-muted-foreground mb-2 block">
-              Goals for this year
-            </label>
-            <div className="flex gap-3">
-              <div className="flex-1">
-                <Input
-                  type="number"
-                  min={0}
-                  placeholder="Hours"
-                  value={goalHours}
-                  onChange={e => setGoalHours(e.target.value)}
-                  className="rounded-xl h-11"
-                  aria-label="Hours goal"
-                />
+                ))}
               </div>
-              <div className="flex-1">
-                <Input
-                  type="number"
-                  min={0}
-                  placeholder="Events"
-                  value={goalEvents}
-                  onChange={e => setGoalEvents(e.target.value)}
-                  className="rounded-xl h-11"
-                  aria-label="Events goal"
-                />
+              {interests.length > 0 && (
+                <p className="text-xs text-muted-foreground mt-2">{interests.length} selected</p>
+              )}
+            </div>
+          )}
+
+          {step === 2 && (
+            <>
+              <div>
+                <label className="text-xs font-bold tracking-widest uppercase text-muted-foreground mb-2 block">
+                  Towns that work for you
+                </label>
+                <div className="flex flex-wrap gap-1.5">
+                  {TOWNS.map(town => (
+                    <button
+                      key={town}
+                      type="button"
+                      onClick={() => toggleTown(town)}
+                      className={chipClass(towns.includes(town))}
+                    >
+                      {town}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-bold tracking-widest uppercase text-muted-foreground mb-2 block">
+                  When you're usually free
+                </label>
+                <div className="flex flex-wrap gap-1.5">
+                  {AVAILABILITY_OPTIONS.map(opt => (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => toggleAvailability(opt.id)}
+                      className={chipClass(availability.includes(opt.id))}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+
+          {step === 3 && (
+            <div>
+              <label className="text-xs font-bold tracking-widest uppercase text-muted-foreground mb-2 block">
+                Goals for this year
+              </label>
+              <div className="flex gap-3">
+                <div className="flex-1">
+                  <Input
+                    type="number"
+                    min={0}
+                    placeholder="Hours"
+                    value={goalHours}
+                    onChange={e => setGoalHours(e.target.value)}
+                    className="rounded-xl h-11"
+                    aria-label="Hours goal"
+                  />
+                </div>
+                <div className="flex-1">
+                  <Input
+                    type="number"
+                    min={0}
+                    placeholder="Events"
+                    value={goalEvents}
+                    onChange={e => setGoalEvents(e.target.value)}
+                    className="rounded-xl h-11"
+                    aria-label="Events goal"
+                  />
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
 
-        <div className="mt-7 flex flex-col-reverse sm:flex-row gap-2 sm:justify-end">
-          <Button variant="outline" onClick={skip} disabled={saving} className="rounded-md">
+        <div className="mt-7 flex items-center gap-2">
+          <Button variant="outline" onClick={skip} disabled={saving} className="rounded-md text-muted-foreground">
             Skip for now
           </Button>
-          <Button onClick={handleSave} disabled={saving} className="rounded-md">
-            {saving && <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />}
-            Save
-          </Button>
+          <div className="flex-1" />
+          {step > 0 && (
+            <Button variant="outline" onClick={() => setStep(s => (s - 1) as Step)} disabled={saving} className="rounded-md">
+              <ChevronLeft className="w-4 h-4 mr-1" /> Back
+            </Button>
+          )}
+          {step < STEP_COUNT - 1 ? (
+            <Button onClick={() => setStep(s => (s + 1) as Step)} disabled={saving} className="rounded-md">
+              Continue <ChevronRight className="w-4 h-4 ml-1" />
+            </Button>
+          ) : (
+            <Button onClick={handleSave} disabled={saving} className="rounded-md">
+              {saving && <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />}
+              Save
+            </Button>
+          )}
         </div>
       </div>
     </div>
