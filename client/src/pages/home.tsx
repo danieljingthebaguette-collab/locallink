@@ -923,14 +923,13 @@ export default function Home() {
                               <span key={tag} className="text-[10px] font-semibold bg-white/20 px-2 py-0.5 rounded-md">{tag}</span>
                             ))}
                           </div>
-                        ) : !showFullDetail ? (
+                        ) : (
                           /* Untagged posts are the majority, and with this row simply
                              absent the card had one less line than its neighbours --
                              which justify-between then turned into a gap in the middle
                              rather than a shorter card. Where and how long fill the
                              slot, so every tile carries the same number of rows and
-                             the space goes to something worth reading. The 2x2 is
-                             excluded because it already shows both further down. */
+                             the space goes to something worth reading. */
                           <div className="flex items-center gap-1.5 pt-1 text-[11px] opacity-80 min-w-0">
                             <MapPin className="w-3 h-3 flex-shrink-0" />
                             <span className="truncate">{opp.location.split(',')[0]}</span>
@@ -938,56 +937,22 @@ export default function Home() {
                             <Clock className="w-3 h-3 flex-shrink-0" />
                             <span className="flex-shrink-0">{opp.duration}h</span>
                           </div>
-                        ) : null}
+                        )}
                       </div>
-                      {/* BOTTOM, by tile size:
-                          2x2 — description, host, spots, location and duration.
-                          2x1 — host and spots.
-                          1x1 — host only. Where and how long stay on the post
-                                itself; only the 2x2 has the room to preview them. */}
-                      {showFullDetail ? (
-                        <div className="space-y-3 pt-3">
-                          <p className="text-sm line-clamp-2 opacity-95 font-medium">{opp.description}</p>
-                          <button
-                            onClick={e => { e.stopPropagation(); navigate(`/org/${opp.hostId}`); }}
-                            className="text-xs opacity-70 font-medium hover:opacity-100 hover:underline transition-opacity text-left flex items-center gap-1.5"
-                          >
-                            {hostAvatars[opp.hostId] ? (
-                              <img src={hostAvatars[opp.hostId]!} alt="" className="w-5 h-5 rounded-full object-cover ring-1 ring-white/40" />
-                            ) : (
-                              <span className="w-5 h-5 rounded-full bg-white/25 flex items-center justify-center text-[9px] font-bold">{opp.hostName.charAt(0).toUpperCase()}</span>
-                            )}
-                            by {opp.hostName}
-                          </button>
-                          <div className="flex items-center justify-between pt-3 border-t border-white/20">
-                            {availabilityDisplay ? (
-                              <div className="flex items-center gap-2">
-                                <Users className="w-4 h-4" />
-                                <span className="font-bold text-sm">{availabilityDisplay}</span>
-                              </div>
-                            ) : <span />}
-                            {/* Interest heat bar — width grows as more people show interest */}
-                            {opp.signups.length > 0 && (() => {
-                              const cap = opp.spots > 0 && opp.spotsType === 'limited' ? opp.spots : 30;
-                              const pct = Math.min((opp.signups.length / cap) * 100, 100);
-                              return (
-                                <div className="w-16 h-2 rounded-full bg-white/20 overflow-hidden">
-                                  <div className="h-full rounded-full bg-green-400/80 transition-all duration-700" style={{ width: `${pct}%` }} />
-                                </div>
-                              );
-                            })()}
-                          </div>
-                          <div className="flex items-center gap-2 text-xs opacity-80">
-                            <MapPin className="w-3 h-3" /><span>{opp.location.split(',')[0]}</span>
-                            <span className="mx-1">&bull;</span>
-                            <Clock className="w-3 h-3" /><span>{opp.duration}h</span>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="space-y-1.5 pt-2.5">
-                          {/* Who is running it, on both smaller tiles. Compact form:
-                              a 4x4 avatar and no "by", because on the 1x1 this is the
-                              only line under the divider and every pixel is spoken for. */}
+                      {/* BOTTOM — one block for every tile size, not a branch per size.
+                          The 2x2 used to have its own copy of this and had drifted:
+                          "by Name" against a bare name, a 5x5 avatar against a 4x4, an
+                          extra divider the others didn't have, and location sitting at
+                          the very bottom instead of up in the tag slot. Same skeleton
+                          everywhere now; the size only decides how many rows show.
+                            description — 2x2 only
+                            organization — every size
+                            spots — 2x1 and 2x2 (a 1x1 has no room; its row was being
+                                    clipped by the tile before it was removed) */}
+                      <div className="space-y-1.5 pt-2.5">
+                          {showFullDetail && (
+                            <p className="text-sm line-clamp-2 opacity-95 font-medium">{opp.description}</p>
+                          )}
                           <button
                             onClick={e => { e.stopPropagation(); navigate(`/org/${opp.hostId}`); }}
                             className="text-[11px] opacity-70 font-medium hover:opacity-100 hover:underline transition-opacity text-left flex items-center gap-1.5 min-w-0 max-w-full"
@@ -1019,8 +984,7 @@ export default function Home() {
                             })()}
                           </div>
                           )}
-                        </div>
-                      )}
+                      </div>
                     </div>
                   </motion.div>
                 );
