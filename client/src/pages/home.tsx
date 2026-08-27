@@ -105,7 +105,8 @@ export default function Home() {
   const myInterests = currentUser?.onboardingInterests ?? null;
   const myTowns = currentUser?.onboardingTowns ?? null;
   const myAvailability = currentUser?.onboardingAvailability ?? null;
-  const hasAnyPrefs = !!((myInterests && myInterests.length) || (myTowns && myTowns.length) || (myAvailability && myAvailability.length));
+  const myMajors = currentUser?.onboardingMajors ?? null;
+  const hasAnyPrefs = !!((myInterests && myInterests.length) || (myTowns && myTowns.length) || (myAvailability && myAvailability.length) || (myMajors && myMajors.trim()));
   const {
     setSearchQuery, setCategory, setSortBy, setTown, getFiltered,
     currentCategory, searchQuery, sortBy, currentTown,
@@ -817,7 +818,7 @@ export default function Home() {
                 // Manual host-close always wins; for recurring events schedule also contributes
                 const manualClosed = opp.isAvailable === false || (opp.isAvailable as any) === 0;
                 const isClosed = manualClosed || (recurringStatus ? !recurringStatus.isOpen : false);
-                const matchScore = getMatchScore(opp, { interests: myInterests, towns: myTowns, availability: myAvailability });
+                const matchScore = getMatchScore(opp, { interests: myInterests, towns: myTowns, availability: myAvailability, majors: myMajors });
                 return (
                   <motion.div
                     key={`${opp.id}-${listKey}`}

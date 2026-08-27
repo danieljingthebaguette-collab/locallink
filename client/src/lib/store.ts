@@ -359,8 +359,8 @@ export const useOpportunitiesStore = create<OpportunitiesState>((set, get) => ({
       // first. Falls back to a plain recency sort when nobody has answered
       // any of the three -- never leaves the board in an arbitrary order.
       const user = useAuthStore.getState().currentUser;
-      const prefs = { interests: user?.onboardingInterests ?? null, towns: user?.onboardingTowns ?? null, availability: user?.onboardingAvailability ?? null };
-      const hasAnyPrefs = !!((prefs.interests && prefs.interests.length) || (prefs.towns && prefs.towns.length) || (prefs.availability && prefs.availability.length));
+      const prefs = { interests: user?.onboardingInterests ?? null, towns: user?.onboardingTowns ?? null, availability: user?.onboardingAvailability ?? null, majors: user?.onboardingMajors ?? null };
+      const hasAnyPrefs = !!((prefs.interests && prefs.interests.length) || (prefs.towns && prefs.towns.length) || (prefs.availability && prefs.availability.length) || (prefs.majors && prefs.majors.trim()));
       if (!hasAnyPrefs) {
         filtered.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
       } else {
