@@ -268,16 +268,22 @@ function OverviewTab({ stats, users, opportunities }: { stats: any; users: AppUs
   const [rangeDays, setRangeDays] = useState<7 | 14 | 30 | 365>(14);
   const [analytics, setAnalytics] = useState<{ date: string; signups: number; users: number }[]>([]);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const [analyticsError, setAnalyticsError] = useState(false);
 
   useEffect(() => {
     const token = localStorage.getItem('locallink_token');
     setAnalyticsLoading(true);
+    setAnalyticsError(false);
     fetch(`/api/admin/analytics?days=${rangeDays}`, { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => r.ok ? r.json() : [])
+      // A failure here used to fall back to [], which the chart draws as "No
+      // data for this period" — indistinguishable from a real quiet stretch.
+      // That is how a missing route went unnoticed on the live site, so say
+      // which of the two it actually is.
+      .then(r => { if (!r.ok) throw new Error(String(r.status)); return r.json(); })
       .then((raw: { date: string; signups: number; users: number }[]) => {
         setAnalytics(rangeDays === 365 ? bucketByMonth(raw) : raw);
       })
-      .catch(() => {})
+      .catch(() => { setAnalytics([]); setAnalyticsError(true); })
       .finally(() => setAnalyticsLoading(false));
   }, [rangeDays]);
 
@@ -448,7 +454,11 @@ function OverviewTab({ stats, users, opportunities }: { stats: any; users: AppUs
             </div>
           </div>
         ) : (
-          <div className="flex items-center justify-center h-28 text-sm text-muted-foreground">No data for this period</div>
+          <div className="flex items-center justify-center h-28 text-sm text-muted-foreground text-center px-4">
+            {analyticsError
+              ? "Couldn't load activity — the chart data failed to fetch. Try reloading."
+              : 'No data for this period'}
+          </div>
         )}
 
         {/* Stats row */}

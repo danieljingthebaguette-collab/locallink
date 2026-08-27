@@ -1489,6 +1489,46 @@ router.post('/api/admin/opportunities/:id/deny', requireAdmin, async (req: Reque
   }
 });
 
+// Daily signup/new-user counts behind the Overview chart. Lost in the same
+// cleanup that took /api/admin/stats, and just as quiet about it: the client
+// does `r.ok ? r.json() : []`, so a missing route reaches the chart as an
+// empty array and renders "No data for this period" — which is exactly what a
+// genuinely quiet fortnight looks like.
+router.get('/api/admin/analytics', requireAdmin, (req: Request, res: Response) => {
+  try {
+    const ALLOWED_DAYS = [7, 14, 30, 365];
+    const requested = parseInt(req.query.days as string, 10);
+    const numDays = ALLOWED_DAYS.includes(requested) ? requested : 14;
+
+    const start = new Date();
+    start.setDate(start.getDate() - (numDays - 1));
+    const startStr = start.toISOString().slice(0, 10);
+
+    // One grouped query per table. The original counted with two queries per
+    // day, which is 730 round trips for the 1Y view to get what GROUP BY
+    // returns in one.
+    const toMap = (rows: unknown) =>
+      new Map((rows as { d: string; c: number }[]).map(r => [r.d, r.c]));
+    const signupsByDay = toMap(
+      db.prepare('SELECT date(createdAt) AS d, COUNT(*) AS c FROM signups WHERE date(createdAt) >= ? GROUP BY d').all(startStr)
+    );
+    const usersByDay = toMap(
+      db.prepare('SELECT date(createdAt) AS d, COUNT(*) AS c FROM users WHERE date(createdAt) >= ? GROUP BY d').all(startStr)
+    );
+
+    const days: { date: string; signups: number; users: number }[] = [];
+    for (let i = numDays - 1; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const dateStr = d.toISOString().slice(0, 10);
+      days.push({ date: dateStr, signups: signupsByDay.get(dateStr) ?? 0, users: usersByDay.get(dateStr) ?? 0 });
+    }
+    return res.json(days);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/api/admin/stats', requireAdmin, (_req: Request, res: Response) => {
   try {
     const totalUsers = (db.prepare('SELECT COUNT(*) as count FROM users').get() as any).count;
