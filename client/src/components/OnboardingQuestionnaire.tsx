@@ -81,20 +81,20 @@ export default function OnboardingQuestionnaire({ suppressed }: { suppressed?: b
 
   return (
     <div
-      className="fixed inset-0 z-[75] bg-black/50 backdrop-blur-sm flex items-end sm:items-center justify-center p-4"
+      className="fixed inset-0 z-[75] bg-black/50 flex items-end sm:items-center justify-center p-4"
       onClick={skip}
       role="dialog"
       aria-modal="true"
       aria-labelledby="onboarding-title"
     >
       <div
-        className="w-full max-w-lg rounded-3xl bg-card border border-border shadow-2xl p-6 md:p-8 max-h-[85vh] overflow-y-auto relative"
+        className="w-full max-w-lg rounded-3xl bg-card border border-border shadow-md p-6 md:p-8 max-h-[85vh] overflow-y-auto relative"
         onClick={e => e.stopPropagation()}
       >
         <button
           onClick={skip}
           aria-label="Skip for now"
-          className="absolute top-4 right-4 p-2 rounded-full hover:bg-secondary transition-colors"
+          className="absolute top-4 right-4 p-2 rounded-md hover:bg-secondary transition-colors"
         >
           <X className="w-4 h-4 text-muted-foreground" />
         </button>
@@ -139,7 +139,7 @@ export default function OnboardingQuestionnaire({ suppressed }: { suppressed?: b
                     type="button"
                     onClick={() => toggleInterest(tag)}
                     className={cn(
-                      'px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors',
+                      'px-3 py-1.5 rounded-md text-xs font-semibold border transition-colors',
                       active
                         ? 'bg-primary text-primary-foreground border-primary'
                         : 'bg-background text-foreground border-border hover:border-primary/50'
@@ -198,10 +198,10 @@ export default function OnboardingQuestionnaire({ suppressed }: { suppressed?: b
         </div>
 
         <div className="mt-7 flex flex-col-reverse sm:flex-row gap-2 sm:justify-end">
-          <Button variant="outline" onClick={skip} disabled={saving} className="rounded-full">
+          <Button variant="outline" onClick={skip} disabled={saving} className="rounded-md">
             Skip for now
           </Button>
-          <Button onClick={handleSave} disabled={saving} className="rounded-full">
+          <Button onClick={handleSave} disabled={saving} className="rounded-md">
             {saving && <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />}
             Save
           </Button>

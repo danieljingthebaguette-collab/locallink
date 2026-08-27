@@ -179,7 +179,7 @@ export default function CropEditor({
         />
         {/* Hint */}
         <div className="absolute inset-0 flex items-end justify-center pb-2 pointer-events-none">
-          <span className="text-[9px] text-white bg-black/40 px-2 py-0.5 rounded-full">
+          <span className="text-[9px] text-white bg-black/40 px-2 py-0.5 rounded-md">
             drag to pan · scroll / pinch to zoom
           </span>
         </div>

@@ -81,7 +81,7 @@ export default function Admin() {
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-primary/5 via-background to-background pb-24 font-sans">
+    <div className="min-h-screen bg-background pb-24 font-sans">
       <main className="container mx-auto px-4 py-8">
         {/* Header */}
         <div className="flex items-center gap-3 mb-8">
@@ -101,7 +101,7 @@ export default function Admin() {
               key={tab.value}
               onClick={() => setActiveTab(tab.value)}
               className={cn(
-                'flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-medium transition-all whitespace-nowrap',
+                'flex items-center gap-2 px-4 py-2.5 rounded-md text-sm font-medium transition-all whitespace-nowrap',
                 activeTab === tab.value
                   ? 'bg-foreground text-background shadow-md'
                   : 'bg-card border border-border text-muted-foreground hover:bg-accent'
@@ -110,7 +110,7 @@ export default function Admin() {
               {tab.icon}
               {tab.label}
               {tab.badge !== undefined && tab.badge > 0 && (
-                <span className="ml-1 min-w-[18px] h-[18px] px-1 rounded-full bg-orange-500 text-white text-[10px] font-bold flex items-center justify-center">
+                <span className="ml-1 min-w-[18px] h-[18px] px-1 rounded-md bg-orange-500 text-white text-[10px] font-bold flex items-center justify-center">
                   {tab.badge}
                 </span>
               )}
@@ -324,7 +324,7 @@ function OverviewTab({ stats, users, opportunities }: { stats: any; users: AppUs
                 key={r.days}
                 onClick={() => { setRangeDays(r.days as any); setHoveredDay(null); }}
                 className={cn(
-                  'px-2.5 py-1 rounded-full text-xs font-semibold transition-all border',
+                  'px-2.5 py-1 rounded-md text-xs font-semibold transition-all border',
                   rangeDays === r.days
                     ? 'bg-foreground text-background border-foreground'
                     : 'bg-background text-muted-foreground border-border hover:border-foreground/50 hover:text-foreground'
@@ -453,7 +453,7 @@ function OverviewTab({ stats, users, opportunities }: { stats: any; users: AppUs
         <div className="flex items-center justify-between mt-4 pt-3 border-t border-border/30 gap-3 flex-wrap">
           <div className="flex items-center gap-5">
             <div className="flex items-center gap-1.5">
-              <div className="w-5 h-[2px] rounded-full bg-violet-500/80 flex-shrink-0" />
+              <div className="w-5 h-[2px] rounded-md bg-violet-500/80 flex-shrink-0" />
               <span className="text-xs text-muted-foreground">
                 <span className="font-bold text-foreground text-sm mr-0.5">
                   {hoveredDay ? hoveredDay.signups : totalSignups}
@@ -462,7 +462,7 @@ function OverviewTab({ stats, users, opportunities }: { stats: any; users: AppUs
               </span>
             </div>
             <div className="flex items-center gap-1.5">
-              <div className="w-5 h-[2px] rounded-full bg-sky-400/80 flex-shrink-0" />
+              <div className="w-5 h-[2px] rounded-md bg-sky-400/80 flex-shrink-0" />
               <span className="text-xs text-muted-foreground">
                 <span className="font-bold text-foreground text-sm mr-0.5">
                   {hoveredDay ? hoveredDay.users : totalUsers}
@@ -491,7 +491,7 @@ function OverviewTab({ stats, users, opportunities }: { stats: any; users: AppUs
               </div>
               <div className="flex items-center gap-3 text-xs text-muted-foreground">
                 {user.isAdmin && (
-                  <span className="bg-red-500/10 text-red-500 px-2 py-0.5 rounded-full font-medium">Admin</span>
+                  <span className="bg-red-500/10 text-red-500 px-2 py-0.5 rounded-md font-medium">Admin</span>
                 )}
               </div>
             </div>
@@ -636,13 +636,13 @@ function UsersTab({
                         <VerifiedBadge className="w-4 h-4" />
                       )}
                       {user.isAdmin && (
-                        <span className="bg-red-500/10 text-red-500 px-2 py-0.5 rounded-full text-[10px] font-medium">Admin</span>
+                        <span className="bg-red-500/10 text-red-500 px-2 py-0.5 rounded-md text-[10px] font-medium">Admin</span>
                       )}
                       {user.accountType === 'organization' && (
-                        <span className="bg-primary/10 text-primary px-2 py-0.5 rounded-full text-[10px] font-medium">Org</span>
+                        <span className="bg-primary/10 text-primary px-2 py-0.5 rounded-md text-[10px] font-medium">Org</span>
                       )}
                       {user.banned && (
-                        <span className="bg-amber-500/10 text-amber-600 px-2 py-0.5 rounded-full text-[10px] font-medium">Suspended</span>
+                        <span className="bg-amber-500/10 text-amber-600 px-2 py-0.5 rounded-md text-[10px] font-medium">Suspended</span>
                       )}
                     </div>
                     <p className="text-xs text-muted-foreground truncate">{user.email}</p>
@@ -654,7 +654,7 @@ function UsersTab({
                       <Button
                         size="sm"
                         variant="outline"
-                        className={cn('rounded-full text-xs', user.verified
+                        className={cn('rounded-md text-xs', user.verified
                           ? 'text-sky-600 border-sky-300 hover:bg-sky-50 dark:hover:bg-sky-950'
                           : 'text-muted-foreground border-border hover:bg-accent')}
                         onClick={() => onVerifyUser(user.id)}
@@ -668,7 +668,7 @@ function UsersTab({
                       <Button
                         size="sm"
                         variant="outline"
-                        className="rounded-full text-xs text-green-600 border-green-300 hover:bg-green-50 dark:hover:bg-green-950"
+                        className="rounded-md text-xs text-green-600 border-green-300 hover:bg-green-50 dark:hover:bg-green-950"
                         onClick={() => onUnbanUser(user.id)}
                       >
                         <CheckCircle2 className="w-3 h-3 mr-1" /> Reinstate
@@ -677,7 +677,7 @@ function UsersTab({
                       <Button
                         size="sm"
                         variant="outline"
-                        className="rounded-full text-xs text-amber-600 border-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950"
+                        className="rounded-md text-xs text-amber-600 border-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950"
                         onClick={() => setConfirmSuspendUser(user)}
                       >
                         <Ban className="w-3 h-3 mr-1" /> Suspend
@@ -686,7 +686,7 @@ function UsersTab({
                     <Button
                       size="sm"
                       variant="destructive"
-                      className="rounded-full"
+                      className="rounded-md"
                       onClick={() => setConfirmDeleteUser(user)}
                     >
                       <Trash2 className="w-3 h-3 mr-1" /> Delete
@@ -838,7 +838,7 @@ function OpportunitiesTab({
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
                     <span className={cn(
-                      'px-2 py-0.5 rounded-full text-[10px] font-medium uppercase tracking-wide',
+                      'px-2 py-0.5 rounded-md text-[10px] font-medium uppercase tracking-wide',
                       opp.category === 'volunteer' ? 'bg-cat-vol/10 text-cat-vol' :
                       opp.category === 'education' ? 'bg-cat-edu/10 text-cat-edu' :
                       opp.category === 'fitness' ? 'bg-cat-sports/10 text-cat-sports' :
@@ -867,7 +867,7 @@ function OpportunitiesTab({
                 <Button
                   size="sm"
                   variant="outline"
-                  className="rounded-full text-xs"
+                  className="rounded-md text-xs"
                   onClick={() => editingId === opp.id ? setEditingId(null) : startEdit(opp)}
                 >
                   {editingId === opp.id ? <ChevronUp className="w-3 h-3 mr-1" /> : <Edit3 className="w-3 h-3 mr-1" />}
@@ -876,7 +876,7 @@ function OpportunitiesTab({
                 <Button
                   size="sm"
                   variant="destructive"
-                  className="rounded-full text-xs"
+                  className="rounded-md text-xs"
                   onClick={() => setConfirmDeleteOpp(opp)}
                 >
                   <Trash2 className="w-3 h-3 mr-1" /> Delete
@@ -885,7 +885,7 @@ function OpportunitiesTab({
                   onClick={() => onToggleFeatured(opp.id)}
                   title={opp.isFeatured ? 'Remove from featured' : 'Mark as featured'}
                   className={cn(
-                    'p-1.5 rounded-full transition-colors',
+                    'p-1.5 rounded-md transition-colors',
                     opp.isFeatured
                       ? 'text-yellow-500 bg-yellow-500/10 hover:bg-yellow-500/20'
                       : 'text-muted-foreground hover:bg-secondary'
@@ -976,10 +976,10 @@ function OpportunitiesTab({
                   </div>
                 </div>
                 <div className="flex gap-2">
-                  <Button variant="outline" size="sm" onClick={() => setEditingId(null)} className="flex-1 rounded-full">
+                  <Button variant="outline" size="sm" onClick={() => setEditingId(null)} className="flex-1 rounded-md">
                     <X className="w-3 h-3 mr-1" /> Cancel
                   </Button>
-                  <Button size="sm" onClick={() => handleSaveEdit(opp.id)} disabled={savingEdit} className="flex-1 rounded-full">
+                  <Button size="sm" onClick={() => handleSaveEdit(opp.id)} disabled={savingEdit} className="flex-1 rounded-md">
                     {savingEdit ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Save className="w-3 h-3 mr-1" />}
                     {savingEdit ? 'Saving...' : 'Save Changes'}
                   </Button>
@@ -1052,10 +1052,10 @@ function VerifyTab({
             )}
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap mb-1">
-                <span className="bg-orange-500/10 text-orange-600 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide">
+                <span className="bg-orange-500/10 text-orange-600 px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wide">
                   Pending
                 </span>
-                <span className="bg-muted text-muted-foreground px-2 py-0.5 rounded-full text-[10px] font-medium capitalize">
+                <span className="bg-muted text-muted-foreground px-2 py-0.5 rounded-md text-[10px] font-medium capitalize">
                   {opp.category}
                 </span>
               </div>
@@ -1094,7 +1094,7 @@ function VerifyTab({
                 <Button
                   size="sm"
                   variant="outline"
-                  className="flex-1 rounded-full"
+                  className="flex-1 rounded-md"
                   onClick={() => { setDenyingId(null); setDenyReason(''); }}
                   disabled={processingId === opp.id}
                 >
@@ -1103,7 +1103,7 @@ function VerifyTab({
                 <Button
                   size="sm"
                   variant="destructive"
-                  className="flex-1 rounded-full"
+                  className="flex-1 rounded-md"
                   onClick={() => handleDeny(opp.id)}
                   disabled={processingId === opp.id}
                 >
@@ -1116,7 +1116,7 @@ function VerifyTab({
                 <Button
                   size="sm"
                   variant="outline"
-                  className="flex-1 rounded-full text-red-600 border-red-300 hover:bg-red-50 dark:hover:bg-red-950"
+                  className="flex-1 rounded-md text-red-600 border-red-300 hover:bg-red-50 dark:hover:bg-red-950"
                   onClick={() => setDenyingId(opp.id)}
                   disabled={processingId === opp.id}
                 >
@@ -1124,7 +1124,7 @@ function VerifyTab({
                 </Button>
                 <Button
                   size="sm"
-                  className="flex-1 rounded-full bg-green-600 hover:bg-green-700 text-white"
+                  className="flex-1 rounded-md bg-green-600 hover:bg-green-700 text-white"
                   onClick={() => handleApprove(opp.id)}
                   disabled={processingId === opp.id}
                 >
@@ -1197,13 +1197,13 @@ function ReportsTab({ toast }: { toast: any }) {
                   <p className="font-semibold text-foreground truncate">{r.postTitle}</p>
                   <p className="text-xs text-muted-foreground">Reported by <span className="font-medium">{r.reporterName}</span> · {new Date(r.createdAt).toLocaleDateString()}</p>
                 </div>
-                <span className="text-xs bg-red-500/10 text-red-500 font-semibold px-2.5 py-1 rounded-full whitespace-nowrap flex-shrink-0">
+                <span className="text-xs bg-red-500/10 text-red-500 font-semibold px-2.5 py-1 rounded-md whitespace-nowrap flex-shrink-0">
                   {REASON_LABELS[r.reason] || r.reason}
                 </span>
               </div>
               {r.note && <p className="text-sm text-muted-foreground bg-secondary/50 rounded-xl px-3 py-2">"{r.note}"</p>}
               <div className="flex gap-2 pt-1">
-                <Button variant="outline" size="sm" className="rounded-full text-xs" onClick={() => dismissReport(r.id)}>
+                <Button variant="outline" size="sm" className="rounded-md text-xs" onClick={() => dismissReport(r.id)}>
                   <Trash2 className="w-3 h-3 mr-1" /> Dismiss
                 </Button>
               </div>
@@ -1212,9 +1212,9 @@ function ReportsTab({ toast }: { toast: any }) {
         </div>
         {totalPages > 1 && (
           <div className="flex items-center justify-center gap-2 pt-2">
-            <Button variant="outline" size="sm" className="rounded-full" onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}>← Prev</Button>
+            <Button variant="outline" size="sm" className="rounded-md" onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}>← Prev</Button>
             <span className="text-xs text-muted-foreground">{page + 1} / {totalPages}</span>
-            <Button variant="outline" size="sm" className="rounded-full" onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page === totalPages - 1}>Next →</Button>
+            <Button variant="outline" size="sm" className="rounded-md" onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page === totalPages - 1}>Next →</Button>
           </div>
         )}
         </>
@@ -1299,7 +1299,7 @@ function AppealsTab({ toast, onUnbanUser }: { toast: any; onUnbanUser: (userId: 
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <p className="text-sm font-semibold text-foreground">{a.username}</p>
-                    <span className="bg-amber-500/10 text-amber-600 px-2 py-0.5 rounded-full text-[10px] font-medium">Suspended</span>
+                    <span className="bg-amber-500/10 text-amber-600 px-2 py-0.5 rounded-md text-[10px] font-medium">Suspended</span>
                   </div>
                   <p className="text-xs text-muted-foreground">{a.email} · {new Date(a.createdAt).toLocaleDateString()}</p>
                 </div>
@@ -1311,7 +1311,7 @@ function AppealsTab({ toast, onUnbanUser }: { toast: any; onUnbanUser: (userId: 
               <div className="flex gap-2 pt-1">
                 <Button
                   size="sm"
-                  className="rounded-full text-xs bg-green-600 hover:bg-green-700 flex-1"
+                  className="rounded-md text-xs bg-green-600 hover:bg-green-700 flex-1"
                   onClick={() => approveAppeal(a)}
                 >
                   <CheckCircle2 className="w-3 h-3 mr-1" /> Approve & Reinstate
@@ -1319,7 +1319,7 @@ function AppealsTab({ toast, onUnbanUser }: { toast: any; onUnbanUser: (userId: 
                 <Button
                   size="sm"
                   variant="outline"
-                  className="rounded-full text-xs flex-1"
+                  className="rounded-md text-xs flex-1"
                   onClick={() => dismissAppeal(a.id)}
                 >
                   <X className="w-3 h-3 mr-1" /> Dismiss
@@ -1330,9 +1330,9 @@ function AppealsTab({ toast, onUnbanUser }: { toast: any; onUnbanUser: (userId: 
         </div>
         {appealsTotalPages > 1 && (
           <div className="flex items-center justify-center gap-2 pt-2">
-            <Button variant="outline" size="sm" className="rounded-full" onClick={() => setAppealsPage(p => Math.max(0, p - 1))} disabled={appealsPage === 0}>← Prev</Button>
+            <Button variant="outline" size="sm" className="rounded-md" onClick={() => setAppealsPage(p => Math.max(0, p - 1))} disabled={appealsPage === 0}>← Prev</Button>
             <span className="text-xs text-muted-foreground">{appealsPage + 1} / {appealsTotalPages}</span>
-            <Button variant="outline" size="sm" className="rounded-full" onClick={() => setAppealsPage(p => Math.min(appealsTotalPages - 1, p + 1))} disabled={appealsPage === appealsTotalPages - 1}>Next →</Button>
+            <Button variant="outline" size="sm" className="rounded-md" onClick={() => setAppealsPage(p => Math.min(appealsTotalPages - 1, p + 1))} disabled={appealsPage === appealsTotalPages - 1}>Next →</Button>
           </div>
         )}
         </>
@@ -1378,7 +1378,7 @@ function FeedbackTab({ toast }: { toast: any }) {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h2 className="font-heading font-bold text-lg">Feedback <span className="text-muted-foreground font-normal text-base">({feedback.length})</span></h2>
         {feedback.length > 0 && (
-          <div className="flex items-center gap-1.5 bg-yellow-500/10 text-yellow-600 px-3 py-1.5 rounded-full text-sm font-semibold">
+          <div className="flex items-center gap-1.5 bg-yellow-500/10 text-yellow-600 px-3 py-1.5 rounded-md text-sm font-semibold">
             <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
             {avgRating} avg rating
           </div>
@@ -1405,7 +1405,7 @@ function FeedbackTab({ toast }: { toast: any }) {
                     {f.username ? <span className="font-medium">{f.username}</span> : 'Anonymous'} · {new Date(f.createdAt).toLocaleDateString()}
                   </p>
                 </div>
-                <button onClick={() => deleteFeedback(f.id)} className="p-1.5 rounded-full hover:bg-secondary transition-colors flex-shrink-0">
+                <button onClick={() => deleteFeedback(f.id)} className="p-1.5 rounded-md hover:bg-secondary transition-colors flex-shrink-0">
                   <X className="w-3.5 h-3.5 text-muted-foreground" />
                 </button>
               </div>
@@ -1515,14 +1515,14 @@ function JoinLinksTab({
                 <div className="flex items-center gap-2 flex-wrap">
                   <p className="text-sm font-semibold text-foreground">{link.orgName}</p>
                   {link.claimedAt ? (
-                    <span className="text-[10px] font-bold bg-green-500/15 text-green-600 px-2 py-0.5 rounded-full flex items-center gap-1">
+                    <span className="text-[10px] font-bold bg-green-500/15 text-green-600 px-2 py-0.5 rounded-md flex items-center gap-1">
                       <VerifiedBadge className="w-3 h-3" /> Registered
                     </span>
                   ) : (
-                    <span className="text-[10px] font-bold bg-muted text-muted-foreground px-2 py-0.5 rounded-full">Pending</span>
+                    <span className="text-[10px] font-bold bg-muted text-muted-foreground px-2 py-0.5 rounded-md">Pending</span>
                   )}
                   {link.category && (
-                    <span className="text-[10px] font-semibold bg-primary/10 text-primary px-2 py-0.5 rounded-full capitalize">{link.category}</span>
+                    <span className="text-[10px] font-semibold bg-primary/10 text-primary px-2 py-0.5 rounded-md capitalize">{link.category}</span>
                   )}
                 </div>
                 <p className="text-xs font-mono text-muted-foreground truncate">{BASE}/join/{link.slug}</p>
@@ -1532,14 +1532,14 @@ function JoinLinksTab({
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
                 {!link.claimedAt && (
-                  <Button size="sm" variant="outline" className="rounded-full text-xs" onClick={() => copyLink(link.slug)}>
+                  <Button size="sm" variant="outline" className="rounded-md text-xs" onClick={() => copyLink(link.slug)}>
                     <Copy className="w-3 h-3 mr-1" /> Copy Link
                   </Button>
                 )}
                 <Button
                   size="sm"
                   variant="outline"
-                  className="rounded-full text-xs text-red-500 border-red-200 hover:bg-red-50 dark:hover:bg-red-950"
+                  className="rounded-md text-xs text-red-500 border-red-200 hover:bg-red-50 dark:hover:bg-red-950"
                   onClick={() => onDelete(link.slug)}
                 >
                   <Trash2 className="w-3 h-3" />

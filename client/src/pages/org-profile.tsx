@@ -77,7 +77,7 @@ export default function OrgProfilePage() {
           <Building2 className="w-16 h-16 text-muted-foreground mx-auto opacity-50 mb-4" />
           <h2 className="text-2xl font-heading font-bold text-foreground mb-2">Organization Not Found</h2>
           <p className="text-muted-foreground mb-6">This organization profile doesn't exist or isn't available.</p>
-          <Button onClick={() => navigate('/')} className="rounded-full px-8">← Back to Home</Button>
+          <Button onClick={() => navigate('/')} className="rounded-md px-8">← Back to Home</Button>
         </main>
       </div>
     );
@@ -141,7 +141,7 @@ export default function OrgProfilePage() {
                     onClick={handleFavToggle}
                     disabled={togglingFav}
                     className={cn(
-                      'flex-shrink-0 p-2.5 rounded-full border-2 transition-all',
+                      'flex-shrink-0 p-2.5 rounded-md border-2 transition-all',
                       isFavorited(orgId!)
                         ? 'bg-red-50 border-red-300 text-red-500'
                         : 'bg-secondary border-border text-muted-foreground hover:border-red-300'
@@ -191,7 +191,7 @@ export default function OrgProfilePage() {
                     href={org.orgWebsite.startsWith('http') ? org.orgWebsite : `https://${org.orgWebsite}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-primary/10 text-primary text-sm font-medium hover:bg-primary/20 transition-colors"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary/10 text-primary text-sm font-medium hover:bg-primary/20 transition-colors"
                   >
                     <Globe className="w-3.5 h-3.5" />
                     {org.orgWebsite.replace(/^https?:\/\//, '')}
@@ -200,7 +200,7 @@ export default function OrgProfilePage() {
                 {org.orgEmail && (
                   <a
                     href={`mailto:${org.orgEmail}`}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-secondary text-foreground text-sm font-medium hover:bg-secondary/80 transition-colors"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-secondary text-foreground text-sm font-medium hover:bg-secondary/80 transition-colors"
                   >
                     <Mail className="w-3.5 h-3.5 text-muted-foreground" />
                     {org.orgEmail}
@@ -209,7 +209,7 @@ export default function OrgProfilePage() {
                 {org.orgPhone && (
                   <a
                     href={`tel:${org.orgPhone}`}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-secondary text-foreground text-sm font-medium hover:bg-secondary/80 transition-colors"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-secondary text-foreground text-sm font-medium hover:bg-secondary/80 transition-colors"
                   >
                     <Phone className="w-3.5 h-3.5 text-muted-foreground" />
                     {org.orgPhone}
@@ -278,7 +278,7 @@ function PostCard({ post, idx, formatDate, past = false }: { post: Opportunity; 
       <div className="flex-1 min-w-0">
         <div className="flex items-start justify-between gap-2 mb-1">
           <h3 className="font-semibold text-foreground text-sm leading-tight">{post.title}</h3>
-          <span className={cn('px-2 py-0.5 rounded-full text-[10px] font-bold flex-shrink-0', getCategoryColor(post.category))}>
+          <span className={cn('px-2 py-0.5 rounded-md text-[10px] font-bold flex-shrink-0', getCategoryColor(post.category))}>
             {getCategoryLabel(post.category)}
           </span>
         </div>

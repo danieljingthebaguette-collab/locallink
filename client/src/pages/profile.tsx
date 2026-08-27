@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { useAuthStore, useOpportunitiesStore, useFavoritesStore } from '@/lib/store';
-import { User, Mail, Award, Calendar, LogOut, Loader2, Edit3, Lock, Save, X, Heart, Building2, Handshake, Bell, Camera, Sparkles } from 'lucide-react';
+import { User, Mail, Award, Calendar, LogOut, Loader2, Edit3, Lock, Save, X, Heart, Building2, Handshake, Bell, Camera, Sparkles, AlertTriangle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import ConfirmBubble from '@/components/ConfirmBubble';
 
@@ -70,7 +70,7 @@ export default function Profile() {
           <User className="w-16 h-16 text-muted-foreground mx-auto opacity-50 mb-4" />
           <h2 className="text-2xl font-heading font-bold text-foreground mb-2">Please Login</h2>
           <p className="text-muted-foreground mb-6">You need to be logged in to view your profile.</p>
-          <Button onClick={() => navigate('/account')} className="rounded-full px-8">
+          <Button onClick={() => navigate('/account')} className="rounded-md px-8">
             Login / Sign Up
           </Button>
         </main>
@@ -181,7 +181,7 @@ export default function Profile() {
         <div className="rounded-3xl border border-border bg-card p-8 text-center mb-8 relative">
           <button
             onClick={openEdit}
-            className="absolute top-4 right-4 p-2 rounded-full hover:bg-secondary transition-colors text-muted-foreground"
+            className="absolute top-4 right-4 p-2 rounded-md hover:bg-secondary transition-colors text-muted-foreground"
             title="Edit profile"
           >
             <Edit3 className="w-4 h-4" />
@@ -214,7 +214,7 @@ export default function Profile() {
               )}
               {/* Hover / uploading overlay */}
               <div className={cn(
-                'absolute inset-0 flex flex-col items-center justify-center rounded-full transition-opacity bg-black/40',
+                'absolute inset-0 flex flex-col items-center justify-center rounded-md transition-opacity bg-black/40',
                 avatarUploading ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
               )}>
                 {avatarUploading
@@ -234,7 +234,7 @@ export default function Profile() {
               Member since {new Date(currentUser.createdAt).toLocaleDateString()}
             </p>
             <span className={cn(
-              "text-xs font-semibold px-2 py-0.5 rounded-full inline-flex items-center gap-1",
+              "text-xs font-semibold px-2 py-0.5 rounded-md inline-flex items-center gap-1",
               currentUser.accountType === 'organization'
                 ? "bg-primary/10 text-primary"
                 : "bg-secondary text-muted-foreground"
@@ -254,7 +254,7 @@ export default function Profile() {
                 <Edit3 className="w-5 h-5 text-primary" />
                 Edit Profile
               </h3>
-              <button onClick={() => setEditOpen(false)} className="p-1.5 rounded-full hover:bg-secondary transition-colors">
+              <button onClick={() => setEditOpen(false)} className="p-1.5 rounded-md hover:bg-secondary transition-colors">
                 <X className="w-4 h-4 text-muted-foreground" />
               </button>
             </div>
@@ -323,10 +323,10 @@ export default function Profile() {
             </div>
 
             <div className="flex gap-3 pt-2">
-              <Button variant="outline" onClick={() => setEditOpen(false)} className="flex-1 h-11 rounded-full font-semibold">
+              <Button variant="outline" onClick={() => setEditOpen(false)} className="flex-1 h-11 rounded-md font-semibold">
                 Cancel
               </Button>
-              <Button onClick={handleSave} disabled={saving} className="flex-1 h-11 rounded-full font-semibold">
+              <Button onClick={handleSave} disabled={saving} className="flex-1 h-11 rounded-md font-semibold">
                 {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
                 {saving ? 'Saving...' : 'Save Changes'}
               </Button>
@@ -352,7 +352,7 @@ export default function Profile() {
                   });
                   setOrgEditOpen(o => !o);
                 }}
-                className="p-2 rounded-full hover:bg-secondary transition-colors text-muted-foreground"
+                className="p-2 rounded-md hover:bg-secondary transition-colors text-muted-foreground"
                 title="Edit organization profile"
               >
                 <Edit3 className="w-4 h-4" />
@@ -362,7 +362,7 @@ export default function Profile() {
             {/* Incomplete profile warning */}
             {(!currentUser.orgDescription || !currentUser.orgEmail) && !orgEditOpen && (
               <div className="mb-4 rounded-2xl border-2 border-orange-400/40 bg-orange-500/10 p-4 flex gap-3 items-start">
-                <span className="text-orange-500 text-lg">⚠️</span>
+                <AlertTriangle className="w-4 h-4 text-orange-500 flex-shrink-0 mt-0.5" />
                 <div>
                   <p className="text-sm font-semibold text-orange-600">Profile Incomplete</p>
                   <p className="text-xs text-orange-500/80 mt-0.5">You must complete your organization profile before you can post opportunities.</p>
@@ -440,7 +440,7 @@ export default function Profile() {
                   </div>
                 </div>
                 <div className="flex gap-3 pt-1">
-                  <Button variant="outline" onClick={() => setOrgEditOpen(false)} className="flex-1 h-11 rounded-full font-semibold">
+                  <Button variant="outline" onClick={() => setOrgEditOpen(false)} className="flex-1 h-11 rounded-md font-semibold">
                     Cancel
                   </Button>
                   <Button
@@ -469,7 +469,7 @@ export default function Profile() {
                       }
                     }}
                     disabled={orgSaving}
-                    className="flex-1 h-11 rounded-full font-semibold"
+                    className="flex-1 h-11 rounded-md font-semibold"
                   >
                     {orgSaving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
                     {orgSaving ? 'Saving...' : 'Save Profile'}
@@ -494,7 +494,7 @@ export default function Profile() {
               <p className="text-sm text-muted-foreground leading-relaxed mb-3">
                 Takes under a minute, and helps us show you opportunities that actually fit.
               </p>
-              <Button size="sm" onClick={showOnboardingPrompt} className="rounded-full">
+              <Button size="sm" onClick={showOnboardingPrompt} className="rounded-md">
                 Fill it out
               </Button>
             </div>
@@ -509,14 +509,18 @@ export default function Profile() {
             // instead. Both tiles now read from data this build actually has,
             // with no dependency on verified-hours tracking.
             currentUser.accountType === 'organization'
-              ? { icon: Calendar, label: 'Events Hosted', value: opLoading && !loaded ? '...' : hosted.length, color: 'text-green-500' }
-              : { icon: Heart, label: 'Orgs Favorited', value: favorites.length, color: 'text-emerald-500' },
-            { icon: Award, label: 'Events Interested', value: opLoading && !loaded ? '...' : signedUp.length, color: 'text-purple-500' },
+              ? { icon: Calendar, label: 'Events Hosted', value: opLoading && !loaded ? '...' : hosted.length }
+              : { icon: Heart, label: 'Orgs Favorited', value: favorites.length },
+            { icon: Award, label: 'Events Interested', value: opLoading && !loaded ? '...' : signedUp.length },
           ].map((stat) => (
-            <div key={stat.label} className="rounded-2xl border border-border bg-card p-4 text-center">
-              <stat.icon className={`w-6 h-6 mx-auto mb-2 ${stat.color}`} />
-              <p className="text-xl font-bold text-foreground">{stat.value}</p>
-              <p className="text-[10px] text-muted-foreground font-medium leading-tight mt-1">{stat.label}</p>
+            // No per-tile colour. Green and purple here encoded nothing -- two
+            // counts of the same kind of thing, tinted differently for decoration,
+            // which is exactly the habit that makes a dashboard read as generated.
+            // The number is the data; the icon just labels it.
+            <div key={stat.label} className="rounded-2xl border border-border bg-card p-4 text-left">
+              <stat.icon className="w-4 h-4 mb-3 text-muted-foreground" />
+              <p className="text-2xl font-bold text-foreground tabular-nums leading-none">{stat.value}</p>
+              <p className="text-[11px] text-muted-foreground font-medium leading-tight mt-1.5">{stat.label}</p>
             </div>
           ))}
         </div>
@@ -636,7 +640,7 @@ export default function Profile() {
             <Button
               onClick={() => setShowUpgradeConfirm(true)}
               disabled={upgrading}
-              className="rounded-full px-6 font-semibold"
+              className="rounded-md px-6 font-semibold"
             >
               {upgrading && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
               Switch to an organization account
@@ -671,7 +675,7 @@ export default function Profile() {
                   </div>
                   <button
                     onClick={() => handleUnfavorite(org.id)}
-                    className="p-1.5 rounded-full hover:bg-red-50 transition-colors text-red-400 hover:text-red-500"
+                    className="p-1.5 rounded-md hover:bg-red-50 transition-colors text-red-400 hover:text-red-500"
                     title="Remove from favorites"
                   >
                     <Heart className="w-4 h-4 fill-current" />
@@ -686,7 +690,7 @@ export default function Profile() {
         <Button
           variant="outline"
           onClick={() => { logout(); navigate('/'); }}
-          className="w-full h-11 rounded-full font-semibold text-red-500 border-red-200 hover:bg-red-50"
+          className="w-full h-11 rounded-md font-semibold text-red-500 border-red-200 hover:bg-red-50"
         >
           <LogOut className="w-4 h-4 mr-2" />
           Logout

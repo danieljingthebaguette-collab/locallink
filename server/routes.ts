@@ -122,22 +122,22 @@ const VALID_TOWNS = [
 // Mirrors FIELD_TAGS in client/src/lib/mockData.ts — keep the two lists in
 // sync. Used to whitelist the onboarding questionnaire's interest tags.
 const VALID_FIELD_TAGS = [
-  '🌿 Environment', '🐾 Animals', '🍽️ Food & Hunger', '🏠 Housing',
-  '🏥 Health & Medical', '🚒 Emergency Services', '👴 Senior Services',
-  '📚 Education', '🎨 Arts & Culture', '🏋️ Sports & Fitness',
-  '🛐 Faith & Spiritual', '👧 Youth & Children', '🤝 Social Services',
-  '📱 Technology', '🎓 Tutoring', '💼 Workforce Dev', '🏘️ Civic Engagement',
-  '♿ Disability Services', '🌍 Cultural Diversity', '🧠 Mental Health',
-  '💰 Financial Aid', '⚖️ Legal Aid', '🌾 Agriculture', '🚌 Transportation',
-  '🏫 After-School', '👨‍👩‍👧 Family Support', '🎭 Performing Arts', '📰 Media',
-  '🔬 Science & Research', '🕊️ Conflict Resolution', '🌐 Global Outreach',
-  '🎪 Events & Festivals', '🏺 History & Heritage', '♻️ Sustainability',
-  '🏗️ Community Dev', '📣 Advocacy', '🎒 School Supplies',
-  '🩺 Behavioral Health', '👮 Public Safety', '🧒 Early Childhood',
-  '🏕️ Outdoor Education', '🤱 Maternal Health', '🧑‍🤝‍🧑 Peer Mentorship',
-  '🖥️ Digital Literacy', '🎵 Music', '🛠️ Skilled Trades',
-  '🌱 Urban Gardening', '🐕 Service Animals', '🎗️ Chronic Illness',
-  '🏦 Econ. Empowerment',
+  'Environment', 'Animals', 'Food & Hunger', 'Housing',
+  'Health & Medical', 'Emergency Services', 'Senior Services',
+  'Education', 'Arts & Culture', 'Sports & Fitness',
+  'Faith & Spiritual', 'Youth & Children', 'Social Services',
+  'Technology', 'Tutoring', 'Workforce Dev', 'Civic Engagement',
+  'Disability Services', 'Cultural Diversity', 'Mental Health',
+  'Financial Aid', 'Legal Aid', 'Agriculture', 'Transportation',
+  'After-School', 'Family Support', 'Performing Arts', 'Media',
+  'Science & Research', 'Conflict Resolution', 'Global Outreach',
+  'Events & Festivals', 'History & Heritage', 'Sustainability',
+  'Community Dev', 'Advocacy', 'School Supplies',
+  'Behavioral Health', 'Public Safety', 'Early Childhood',
+  'Outdoor Education', 'Maternal Health', 'Peer Mentorship',
+  'Digital Literacy', 'Music', 'Skilled Trades',
+  'Urban Gardening', 'Service Animals', 'Chronic Illness',
+  'Econ. Empowerment',
 ] as const;
 
 type SpotsType = typeof VALID_SPOTS_TYPES[number];

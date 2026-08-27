@@ -33,7 +33,7 @@ export default function About() {
   const [, navigate] = useLocation();
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-primary/5 via-background to-background pb-24 font-sans">
+    <div className="min-h-screen bg-background pb-24 font-sans">
       <main className="container mx-auto px-4 py-12 max-w-3xl">
 
         {/* Hero */}
@@ -111,7 +111,7 @@ export default function About() {
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-2">
             <a
               href="mailto:linklocal2@gmail.com"
-              className="inline-flex items-center gap-2 bg-primary text-primary-foreground rounded-full px-5 py-2.5 text-sm font-semibold hover:bg-primary/90 transition-colors"
+              className="inline-flex items-center gap-2 bg-primary text-primary-foreground rounded-md px-5 py-2.5 text-sm font-semibold hover:bg-primary/90 transition-colors"
             >
               <Mail className="w-4 h-4" />
               linklocal2@gmail.com
@@ -123,14 +123,14 @@ export default function About() {
               href="https://www.instagram.com/_locallink/"
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 border border-border rounded-full px-5 py-2.5 text-sm font-semibold text-foreground hover:bg-muted transition-colors"
+              className="inline-flex items-center gap-2 border border-border rounded-md px-5 py-2.5 text-sm font-semibold text-foreground hover:bg-muted transition-colors"
             >
               <Instagram className="w-4 h-4" />
               @_locallink
             </a>
             <button
               onClick={() => navigate('/')}
-              className="inline-flex items-center gap-2 border border-border rounded-full px-5 py-2.5 text-sm font-semibold text-foreground hover:bg-muted transition-colors"
+              className="inline-flex items-center gap-2 border border-border rounded-md px-5 py-2.5 text-sm font-semibold text-foreground hover:bg-muted transition-colors"
             >
               <Globe className="w-4 h-4" />
               Visit LocalLink

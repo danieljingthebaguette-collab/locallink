@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { cn, getLocationError, getExternalSignupUrlError } from '@/lib/utils';
 import {
   X, Upload, ChevronRight, Loader2, Trash2, FileText, RotateCcw,
-  Handshake, BookOpen, Activity, Users, Sprout, Calendar, Repeat,
+  Handshake, BookOpen, Activity, Users, Sprout, Calendar, Repeat, AlertTriangle,
   type LucideIcon,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -391,7 +391,7 @@ export default function CreatePostModal({ open, onClose }: Props) {
       {open && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
           onClick={requestClose}
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+          className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4">
           <motion.div initial={{ scale: 0.92, opacity: 0, y: 24 }} animate={{ scale: 1, opacity: 1, y: 0 }}
             exit={{ scale: 0.92, opacity: 0, y: 24 }} transition={{ type: 'spring', stiffness: 320, damping: 32 }}
             onClick={e => e.stopPropagation()}
@@ -402,23 +402,23 @@ export default function CreatePostModal({ open, onClose }: Props) {
               <motion.div
                 initial={{ opacity: 0, scale: 0.95, y: 20 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
-                className="rounded-3xl bg-card border-2 border-orange-400/40 shadow-2xl p-8 space-y-4 text-center relative"
+                className="rounded-3xl bg-card border-2 border-orange-400/40 shadow-md p-8 space-y-4 text-center relative"
               >
-                <button onClick={handleClose} className="absolute top-4 right-4 p-2 rounded-full hover:bg-secondary transition-all">
+                <button onClick={handleClose} className="absolute top-4 right-4 p-2 rounded-md hover:bg-secondary transition-all">
                   <X className="w-5 h-5 text-muted-foreground" />
                 </button>
                 <div className="w-16 h-16 rounded-full bg-orange-500/15 flex items-center justify-center mx-auto">
-                  <span className="text-3xl">⚠️</span>
+                  <AlertTriangle className="w-7 h-7 text-orange-500" />
                 </div>
                 <h2 className="text-2xl font-heading font-bold text-foreground">Complete Your Profile First</h2>
                 <p className="text-muted-foreground text-sm leading-relaxed">
                   Before posting an opportunity, you need to complete your organization profile. Add a description and contact email so volunteers know who you are.
                 </p>
                 <div className="flex gap-3 pt-2">
-                  <Button variant="outline" onClick={handleClose} className="flex-1 h-11 rounded-full font-semibold">
+                  <Button variant="outline" onClick={handleClose} className="flex-1 h-11 rounded-md font-semibold">
                     Cancel
                   </Button>
-                  <Button onClick={() => { handleClose(); navigate('/profile'); }} className="flex-1 h-11 rounded-full font-semibold">
+                  <Button onClick={() => { handleClose(); navigate('/profile'); }} className="flex-1 h-11 rounded-md font-semibold">
                     Go to Profile →
                   </Button>
                 </div>
@@ -441,13 +441,13 @@ export default function CreatePostModal({ open, onClose }: Props) {
                 <motion.div key="type"
                   initial={{ opacity: 0, x: 40 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -40 }}
                   transition={{ duration: 0.22 }}
-                  className="rounded-3xl bg-card border border-border shadow-2xl p-8 md:p-10 space-y-6">
+                  className="rounded-3xl bg-card border border-border shadow-md p-8 md:p-10 space-y-6">
                   <div className="flex items-start justify-between">
                     <div>
                       <p className="text-xs font-bold tracking-widest uppercase text-muted-foreground mb-1">Step 1 of 3</p>
                       <h2 className="text-2xl font-heading font-bold text-foreground">What are you offering?</h2>
                     </div>
-                    <button onClick={requestClose} aria-label="Close" className="p-2 rounded-full hover:bg-secondary transition-all -mt-1 -mr-1">
+                    <button onClick={requestClose} aria-label="Close" className="p-2 rounded-md hover:bg-secondary transition-all -mt-1 -mr-1">
                       <X className="w-5 h-5 text-muted-foreground" />
                     </button>
                   </div>
@@ -504,14 +504,14 @@ export default function CreatePostModal({ open, onClose }: Props) {
                 <motion.div key="tags"
                   initial={{ opacity: 0, x: 40 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -40 }}
                   transition={{ duration: 0.22 }}
-                  className="rounded-3xl bg-card border border-border shadow-2xl p-8 md:p-10 space-y-6">
+                  className="rounded-3xl bg-card border border-border shadow-md p-8 md:p-10 space-y-6">
                   <div className="flex items-start justify-between">
                     <div>
                       <p className="text-xs font-bold tracking-widest uppercase text-muted-foreground mb-1">Step 2 of 3</p>
                       <h2 className="text-2xl font-heading font-bold text-foreground">What field is this in?</h2>
                       <p className="text-sm text-muted-foreground mt-1">Select all that apply (optional)</p>
                     </div>
-                    <button onClick={requestClose} aria-label="Close" className="p-2 rounded-full hover:bg-secondary transition-all -mt-1 -mr-1">
+                    <button onClick={requestClose} aria-label="Close" className="p-2 rounded-md hover:bg-secondary transition-all -mt-1 -mr-1">
                       <X className="w-5 h-5 text-muted-foreground" />
                     </button>
                   </div>
@@ -542,7 +542,7 @@ export default function CreatePostModal({ open, onClose }: Props) {
                   {selectedTags.length > 0 && (
                     <div className="flex flex-wrap gap-2">
                       {selectedTags.map(tag => (
-                        <span key={tag} className="inline-flex items-center gap-1 px-3 py-1 bg-primary/10 border border-primary/20 rounded-full text-xs font-semibold text-primary">
+                        <span key={tag} className="inline-flex items-center gap-1 px-3 py-1 bg-primary/10 border border-primary/20 rounded-md text-xs font-semibold text-primary">
                           {tag}
                           <button onClick={() => toggleTag(tag)} className="hover:text-red-500 transition-colors"><X className="w-3 h-3" /></button>
                         </span>
@@ -551,8 +551,8 @@ export default function CreatePostModal({ open, onClose }: Props) {
                   )}
 
                   <div className="flex gap-3 pt-2">
-                    <Button variant="outline" onClick={() => setCreateStep('type')} className="flex-1 rounded-full font-semibold">← Back</Button>
-                    <Button onClick={() => setCreateStep('details')} className="flex-1 rounded-full font-semibold">Continue →</Button>
+                    <Button variant="outline" onClick={() => setCreateStep('type')} className="flex-1 rounded-md font-semibold">← Back</Button>
+                    <Button onClick={() => setCreateStep('details')} className="flex-1 rounded-md font-semibold">Continue →</Button>
                   </div>
                 </motion.div>
               )}
@@ -562,7 +562,7 @@ export default function CreatePostModal({ open, onClose }: Props) {
                 <motion.div key="details"
                   initial={{ opacity: 0, x: 40 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -40 }}
                   transition={{ duration: 0.22 }}
-                  className="rounded-3xl overflow-hidden border-2 border-white/20 shadow-2xl bg-gradient-to-br from-primary/90 to-primary">
+                  className="rounded-3xl overflow-hidden border-2 border-white/20 shadow-md bg-primary">
 
                   {/* Image upload area */}
                   <div className="relative h-52 overflow-hidden cursor-pointer group" onClick={() => fileInputRef.current?.click()}>
@@ -580,7 +580,7 @@ export default function CreatePostModal({ open, onClose }: Props) {
                             post rather than the photo. Two destructive actions of
                             different scope must not share a corner. */}
                         <button onClick={e => { e.stopPropagation(); clearImage(); }}
-                          className="absolute bottom-3 left-3 bg-black/60 rounded-full pl-2 pr-3 py-1.5 text-white text-xs font-semibold hover:bg-black/80 transition-colors inline-flex items-center gap-1.5">
+                          className="absolute bottom-3 left-3 bg-black/60 rounded-md pl-2 pr-3 py-1.5 text-white text-xs font-semibold hover:bg-black/80 transition-colors inline-flex items-center gap-1.5">
                           <X className="w-3.5 h-3.5" />
                           Remove photo
                         </button>
@@ -604,8 +604,8 @@ export default function CreatePostModal({ open, onClose }: Props) {
                     <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageSelect} />
 
                     <div className="absolute top-4 left-4 right-4 flex items-center justify-between">
-                      <span className="text-xs font-bold tracking-widest uppercase text-white/70 bg-black/30 rounded-full px-3 py-1">Step 3 of 3</span>
-                      <button onClick={e => { e.stopPropagation(); requestClose(); }} aria-label="Close" className="p-1.5 rounded-full bg-black/40 hover:bg-black/60 transition-colors">
+                      <span className="text-xs font-bold tracking-widest uppercase text-white/70 bg-black/30 rounded-md px-3 py-1">Step 3 of 3</span>
+                      <button onClick={e => { e.stopPropagation(); requestClose(); }} aria-label="Close" className="p-1.5 rounded-md bg-black/40 hover:bg-black/60 transition-colors">
                         <X className="w-4 h-4 text-white" />
                       </button>
                     </div>
@@ -623,7 +623,7 @@ export default function CreatePostModal({ open, onClose }: Props) {
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="bg-white/15 backdrop-blur-md rounded-2xl p-4 border border-white/20 space-y-2">
+                      <div className="bg-white/15 rounded-2xl p-4 border border-white/20 space-y-2">
                         <label htmlFor="createpostmodal-description" className="text-xs font-bold tracking-widest uppercase opacity-75 block">Description *</label>
                         <Textarea id="createpostmodal-description" placeholder="Describe this opportunity..."
                           value={formData.description}
@@ -632,7 +632,7 @@ export default function CreatePostModal({ open, onClose }: Props) {
                         {formErrors.description && <p className="text-red-200 text-xs">{formErrors.description}</p>}
                       </div>
 
-                      <div className="bg-white/15 backdrop-blur-md rounded-2xl p-4 border border-white/20 space-y-3">
+                      <div className="bg-white/15 rounded-2xl p-4 border border-white/20 space-y-3">
                         <div>
                           <label htmlFor="createpostmodal-location" className="text-xs font-bold tracking-widest uppercase opacity-75 block mb-1">Location *</label>
                           <Input id="createpostmodal-location" placeholder="Full address or place name — shown as a map link"
@@ -736,14 +736,14 @@ export default function CreatePostModal({ open, onClose }: Props) {
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div className="bg-white/15 backdrop-blur-md rounded-2xl p-4 border border-white/20 space-y-2">
+                      <div className="bg-white/15 rounded-2xl p-4 border border-white/20 space-y-2">
                         <label htmlFor="createpostmodal-duration-hours" className="text-xs font-bold tracking-widest uppercase opacity-75 block">Duration (hours)</label>
                         <Input id="createpostmodal-duration-hours" type="number" min={0.5} max={24} step={0.5}
                           value={formData.duration}
                           onChange={e => setFormData({ ...formData, duration: parseFloat(e.target.value) })}
                           className="rounded-xl bg-white/80 text-foreground border-0 text-sm h-9" />
                       </div>
-                      <div className="bg-white/15 backdrop-blur-md rounded-2xl p-4 border border-white/20 space-y-2">
+                      <div className="bg-white/15 rounded-2xl p-4 border border-white/20 space-y-2">
                         <label className="flex items-start gap-2.5 mb-3 cursor-pointer">
                           <input type="checkbox" checked={adultsOnly} onChange={e => setAdultsOnly(e.target.checked)} className="mt-0.5" />
                           <span className="text-xs opacity-90">
@@ -775,18 +775,18 @@ export default function CreatePostModal({ open, onClose }: Props) {
                     </div>
 
                     {selectedTags.length > 0 && (
-                      <div className="bg-white/15 backdrop-blur-md rounded-2xl p-4 border border-white/20 space-y-2">
+                      <div className="bg-white/15 rounded-2xl p-4 border border-white/20 space-y-2">
                         <p className="text-xs font-bold tracking-widest uppercase opacity-75">Your Tags</p>
                         <div className="flex flex-wrap gap-2">
                           {selectedTags.map(tag => (
-                            <span key={tag} className="px-3 py-1 bg-white/25 border border-white/40 rounded-full text-xs font-semibold">{tag}</span>
+                            <span key={tag} className="px-3 py-1 bg-white/25 border border-white/40 rounded-md text-xs font-semibold">{tag}</span>
                           ))}
                         </div>
                       </div>
                     )}
 
                     {/* Volunteer Steps */}
-                    <div className="bg-white/15 backdrop-blur-md rounded-2xl p-4 border border-white/20 space-y-3">
+                    <div className="bg-white/15 rounded-2xl p-4 border border-white/20 space-y-3">
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-bold tracking-widest uppercase opacity-75">How to Participate *</span>
                         <button
@@ -833,14 +833,14 @@ export default function CreatePostModal({ open, onClose }: Props) {
                         skipping the field and stranding volunteers who thought
                         signing up here was enough. Answering is required; giving a
                         URL is required only if the answer is yes. */}
-                    <div className="bg-white/15 backdrop-blur-md rounded-2xl p-4 border border-white/20 space-y-3">
+                    <div className="bg-white/15 rounded-2xl p-4 border border-white/20 space-y-3">
                       <p className="text-xs font-bold tracking-widest uppercase opacity-75">
                         Do volunteers register on your own site? *
                       </p>
                       <div className="flex gap-2">
                         <button type="button"
                           onClick={() => { setHasSignupPage(true); setFormErrors({ ...formErrors, hasSignupPage: '' }); }}
-                          className={cn("flex-1 h-10 rounded-full text-sm font-semibold transition-colors",
+                          className={cn("flex-1 h-10 rounded-md text-sm font-semibold transition-colors",
                             hasSignupPage === true ? "bg-white text-primary" : "bg-white/15 text-white hover:bg-white/25")}>
                           Yes
                         </button>
@@ -850,7 +850,7 @@ export default function CreatePostModal({ open, onClose }: Props) {
                             setFormData(f => ({ ...f, externalSignupUrl: '' }));
                             setFormErrors({ ...formErrors, hasSignupPage: '', externalSignupUrl: '' });
                           }}
-                          className={cn("flex-1 h-10 rounded-full text-sm font-semibold transition-colors",
+                          className={cn("flex-1 h-10 rounded-md text-sm font-semibold transition-colors",
                             hasSignupPage === false ? "bg-white text-primary" : "bg-white/15 text-white hover:bg-white/25")}>
                           No
                         </button>
@@ -876,18 +876,18 @@ export default function CreatePostModal({ open, onClose }: Props) {
                       )}
                     </div>
 
-                    <div className="bg-white/15 backdrop-blur-md rounded-2xl p-4 border border-white/20 text-center">
+                    <div className="bg-white/15 rounded-2xl p-4 border border-white/20 text-center">
                       <p className="text-xs font-bold tracking-widest uppercase opacity-75 mb-1">Posted by</p>
                       <p className="font-semibold">{currentUser?.username || 'You'}</p>
                     </div>
 
                     <div className="flex gap-3 pt-2">
                       <Button variant="outline" onClick={() => setCreateStep('tags')}
-                        className="flex-1 rounded-full h-11 font-semibold border-white/30 text-white hover:bg-white/20 bg-transparent">
+                        className="flex-1 rounded-md h-11 font-semibold border-white/30 text-white hover:bg-white/20 bg-transparent">
                         ← Back
                       </Button>
                       <Button onClick={handleCreate} disabled={creating || uploading}
-                        className="flex-1 rounded-full h-11 font-semibold bg-white text-primary hover:bg-white/90">
+                        className="flex-1 rounded-md h-11 font-semibold bg-white text-primary hover:bg-white/90">
                         {(creating || uploading) && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
                         {uploading ? 'Uploading...' : creating ? 'Publishing...' : 'Publish Post 🚀'}
                       </Button>

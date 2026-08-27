@@ -500,7 +500,7 @@ export default function Home() {
       {/* Pinned directly under the header, which condenses 64px -> 52px on
           scroll. This must track that exactly or a gap opens above the pills. */}
       <div className={cn(
-        "sticky z-40 bg-background/95 backdrop-blur-lg border-b border-border/40 transition-[top] duration-200 ease-out",
+        "sticky z-40 bg-background border-b border-border/40 transition-[top] duration-200 ease-out",
         scrolled ? "top-[52px]" : "top-16"
       )}>
         <div className={cn(
@@ -514,7 +514,7 @@ export default function Home() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className={cn(
-                "pl-10 rounded-full border-border bg-secondary/50 transition-[height] duration-200 ease-out",
+                "pl-10 rounded-md border-border bg-secondary/50 transition-[height] duration-200 ease-out",
                 scrolled ? "h-9" : "h-10"
               )}
             />
@@ -532,7 +532,7 @@ export default function Home() {
                   <button key={cat.value} onClick={() => setCategory(cat.value as Category | 'all')}
                     aria-pressed={active}
                     className={cn(
-                      "relative px-4 py-2 rounded-full text-sm font-medium border transition-colors duration-150",
+                      "relative px-4 py-2 rounded-md text-sm font-medium border transition-colors duration-150",
                       active
                         ? "text-background border-transparent"
                         : "bg-background text-foreground border-border hover:border-foreground/50")}>
@@ -543,7 +543,7 @@ export default function Home() {
                         // padding and search height shrink on scroll, and without
                         // this the indicator animates that drift too.
                         layoutDependency={currentCategory}
-                        className="absolute inset-0 rounded-full bg-foreground"
+                        className="absolute inset-0 rounded-md bg-foreground"
                         transition={{ type: 'spring', stiffness: 380, damping: 32 }}
                       />
                     )}
@@ -583,7 +583,7 @@ export default function Home() {
                 <div className="flex items-center gap-2 flex-wrap pb-1">
                   {SORT_OPTIONS.map(opt => (
                     <button key={opt.value} onClick={() => { setSortBy(opt.value); setShowSort(false); }}
-                      className={cn("px-3 min-h-[38px] rounded-full text-xs font-semibold transition-all border",
+                      className={cn("px-3 min-h-[38px] rounded-md text-xs font-semibold transition-all border",
                         sortBy === opt.value
                           ? "bg-foreground text-background border-foreground"
                           : "bg-background text-foreground border-border hover:border-foreground/50")}>
@@ -605,14 +605,14 @@ export default function Home() {
             {/* The hero is the one surface carrying weight — a faint wash toward
                 the brand blue, larger type, room to breathe. Everything below it
                 stays quiet so the page has an order to read in. */}
-            <section className="mb-10 rounded-3xl border border-border/60 bg-gradient-to-br from-primary/[0.07] via-secondary/50 to-secondary/20 px-6 py-10 md:px-12 md:py-14">
+            <section className="mb-10 rounded-3xl border border-border/60 bg-secondary/40 px-6 py-10 md:px-12 md:py-14">
               <h1 className="font-heading font-bold text-3xl md:text-5xl text-foreground leading-[1.08] tracking-tight max-w-3xl text-balance">
                 Find local volunteer opportunities in Somerset County
               </h1>
               <p className="text-muted-foreground text-base md:text-lg mt-4 max-w-xl leading-relaxed">
                 Real organizations, real events, right where you live.
               </p>
-              <Button onClick={() => navigate('/account')} className="mt-7 rounded-full px-8 h-12 font-semibold">
+              <Button onClick={() => navigate('/account')} className="mt-7 rounded-md px-8 h-12 font-semibold">
                 Sign up free
               </Button>
             </section>
@@ -670,13 +670,9 @@ export default function Home() {
                 className="text-xs font-semibold text-primary hover:underline">
                 Got it
               </button>
-              {/* The walkthrough is four lines; this is where someone goes
-                  when four lines isn't enough. */}
-              <button
-                onClick={() => navigate('/how-it-works')}
-                className="text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors">
-                Full instructions
-              </button>
+              {/* No "Full instructions" link any more: it pointed at
+                  /how-it-works, which this build doesn't have, so it landed on
+                  the NotFound page. The three steps above are the explanation. */}
             </div>
           </motion.div>
         )}
@@ -718,11 +714,11 @@ export default function Home() {
                   whileTap={{ scale: 0.98, transition: { duration: 0.1 } }}
                   onClick={() => setSelectedCard(featuredPost)}
                   className={cn(
-                    "group relative mb-2 rounded-3xl overflow-hidden cursor-pointer border-4 shadow-sm hover:shadow-2xl transition-shadow duration-300 md:h-[200px]",
+                    "group relative mb-2 rounded-3xl overflow-hidden cursor-pointer border shadow-sm hover:shadow-md transition-shadow duration-300 md:h-[200px]",
                     getCategoryBorder(featuredPost.category),
                     (isPast || isClosed) && "grayscale"
                   )}>
-                  <div className={cn("absolute inset-0 bg-gradient-to-br", getCategoryColor(featuredPost.category))} />
+                  <div className={cn("absolute inset-0", getCategoryColor(featuredPost.category))} />
                   <div className="relative z-10 flex flex-col md:flex-row md:h-full text-white">
                     {featuredPost.image && (
                       <div className="relative h-24 md:h-full md:w-2/5 flex-shrink-0 overflow-hidden">
@@ -732,13 +728,13 @@ export default function Home() {
                     )}
                     <div className="flex-1 px-4 py-3 md:p-6 flex flex-col justify-center gap-1.5 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-[10px] font-bold bg-white/25 text-white px-2 py-0.5 rounded-full inline-flex items-center gap-1">
+                        <span className="text-[10px] font-bold bg-white/25 text-white px-2 py-0.5 rounded-md inline-flex items-center gap-1">
                           <Star className="w-3 h-3 fill-current" /> FEATURED
                         </span>
                         <p className="text-xs font-bold tracking-widest uppercase opacity-80">{getCategoryLabel(featuredPost.category)}</p>
-                        {!!featuredPost.isRecurring && <span className="text-[10px] font-bold bg-blue-500/80 text-white px-2 py-0.5 rounded-full inline-flex items-center gap-1"><Repeat className="w-2.5 h-2.5" />{formatRecurringShort(featuredPost)}</span>}
-                        {isPast && !featuredPost.isRecurring && <span className="text-[10px] font-bold bg-white/20 text-white px-2 py-0.5 rounded-full">ENDED</span>}
-                        {isClosed && !!featuredPost.isRecurring && <span className="text-[10px] font-bold bg-orange-500/80 text-white px-2 py-0.5 rounded-full">CLOSED</span>}
+                        {!!featuredPost.isRecurring && <span className="text-[10px] font-bold bg-blue-500/80 text-white px-2 py-0.5 rounded-md inline-flex items-center gap-1"><Repeat className="w-2.5 h-2.5" />{formatRecurringShort(featuredPost)}</span>}
+                        {isPast && !featuredPost.isRecurring && <span className="text-[10px] font-bold bg-white/20 text-white px-2 py-0.5 rounded-md">ENDED</span>}
+                        {isClosed && !!featuredPost.isRecurring && <span className="text-[10px] font-bold bg-orange-500/80 text-white px-2 py-0.5 rounded-md">CLOSED</span>}
                       </div>
                       <h2 className="font-heading font-bold text-lg md:text-2xl leading-tight">{featuredPost.title}</h2>
                       <div className="flex items-center gap-2 text-sm opacity-90 flex-wrap">
@@ -822,7 +818,7 @@ export default function Home() {
                     whileTap={{ scale: 0.97, transition: { duration: 0.1 } }}
                     onClick={() => setSelectedCard(opp)}
                     className={cn(
-                      "group relative rounded-3xl overflow-hidden cursor-pointer border-4 shadow-sm hover:shadow-2xl transition-shadow duration-300",
+                      "group relative rounded-3xl overflow-hidden cursor-pointer border shadow-sm hover:shadow-md transition-shadow duration-300",
                       getCategoryBorder(opp.category), getCardSize(effectivePopularity),
                       // grayscale is a CSS filter — FM doesn't touch filter, so class works fine
                       (isPast || isClosed) && "grayscale"
@@ -833,21 +829,21 @@ export default function Home() {
                         <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent" />
                       </div>
                     ) : (
-                      <div className={cn("absolute inset-0 bg-gradient-to-br", getCategoryColor(opp.category))} />
+                      <div className={cn("absolute inset-0", getCategoryColor(opp.category))} />
                     )}
                     <div className="relative h-full p-6 flex flex-col justify-between z-10 text-white">
                       {/* TOP — always visible, separator sits right below the tags */}
                       <div className="space-y-2 border-b border-white/20 pb-3">
                         <div className="flex items-center gap-2 flex-wrap">
                           <p className="text-xs font-bold tracking-widest uppercase opacity-80">{getCategoryLabel(opp.category)}</p>
-                          {!!opp.isRecurring && <span className="text-[10px] font-bold bg-blue-500/80 text-white px-2 py-0.5 rounded-full inline-flex items-center gap-1"><Repeat className="w-2.5 h-2.5" />{formatRecurringShort(opp)}</span>}
-                          {isPast && !opp.isRecurring && <span className="text-[10px] font-bold bg-white/20 text-white px-2 py-0.5 rounded-full">ENDED</span>}
-                          {isClosed && !!opp.isRecurring && <span className="text-[10px] font-bold bg-orange-500/80 text-white px-2 py-0.5 rounded-full">CLOSED</span>}
+                          {!!opp.isRecurring && <span className="text-[10px] font-bold bg-blue-500/80 text-white px-2 py-0.5 rounded-md inline-flex items-center gap-1"><Repeat className="w-2.5 h-2.5" />{formatRecurringShort(opp)}</span>}
+                          {isPast && !opp.isRecurring && <span className="text-[10px] font-bold bg-white/20 text-white px-2 py-0.5 rounded-md">ENDED</span>}
+                          {isClosed && !!opp.isRecurring && <span className="text-[10px] font-bold bg-orange-500/80 text-white px-2 py-0.5 rounded-md">CLOSED</span>}
                           {alreadyInterested && (
                             <motion.span
                               initial={{ scale: 0.7, opacity: 0 }}
                               animate={{ scale: 1, opacity: 1 }}
-                              className="text-[10px] font-bold bg-green-500/80 text-white px-2 py-0.5 rounded-full">
+                              className="text-[10px] font-bold bg-green-500/80 text-white px-2 py-0.5 rounded-md">
                               INTERESTED ✓
                             </motion.span>
                           )}
@@ -856,7 +852,7 @@ export default function Home() {
                         {opp.tags && opp.tags.length > 0 && (
                           <div className="flex flex-wrap gap-1 pt-1">
                             {opp.tags.slice(0, 2).map(tag => (
-                              <span key={tag} className="text-[10px] font-semibold bg-white/20 px-2 py-0.5 rounded-full">{tag}</span>
+                              <span key={tag} className="text-[10px] font-semibold bg-white/20 px-2 py-0.5 rounded-md">{tag}</span>
                             ))}
                           </div>
                         )}
@@ -958,7 +954,7 @@ export default function Home() {
                     // filters on an empty town left the board just as empty.
                     <Button
                       onClick={() => { setSearchQuery(''); setCategory('all'); setTown('all'); }}
-                      className="rounded-full">
+                      className="rounded-md">
                       Clear all filters
                     </Button>
                   )}
@@ -969,7 +965,7 @@ export default function Home() {
             <div className="rounded-3xl border border-border bg-secondary/30 p-8 md:p-12 text-center">
               <h2 className="font-heading text-2xl md:text-3xl font-bold text-foreground mb-3 text-balance">Ready to make a difference?</h2>
               <p className="text-muted-foreground text-base md:text-lg mb-6 max-w-lg mx-auto leading-relaxed">Discover local volunteer opportunities and connect with people in your community.</p>
-              <Button size="lg" className="rounded-full px-8 h-11 font-semibold" onClick={openCreateModal}>Create an Opportunity</Button>
+              <Button size="lg" className="rounded-md px-8 h-11 font-semibold" onClick={openCreateModal}>Create an Opportunity</Button>
             </div>
           </>
         )}
@@ -984,21 +980,21 @@ export default function Home() {
             exit={{ opacity: 0 }}
             transition={{ duration: 0.22 }}
             onClick={handleCloseModal}
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+            className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4">
             <motion.div
               initial={{ scale: 0.88, opacity: 0, y: 36 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.9, opacity: 0, y: 24 }}
               transition={{ type: 'spring', stiffness: 420, damping: 36 }}
               onClick={e => e.stopPropagation()}
-              className={cn("bg-gradient-to-br rounded-3xl w-full max-w-3xl overflow-hidden border-2 border-white/20 shadow-2xl max-h-[90vh] flex flex-col", getModalGradient(selectedCard.category))}>
+              className={cn("rounded-3xl w-full max-w-3xl overflow-hidden border-2 border-white/20 shadow-md max-h-[90vh] flex flex-col", getModalGradient(selectedCard.category))}>
 
               {/* Modal header image area */}
               <div className="relative h-48 md:h-64 overflow-hidden flex-shrink-0">
                 {selectedCard.image ? (
                   <><img src={selectedCard.image} alt={selectedCard.title} className="absolute inset-0 w-full h-full" style={imageTransformStyle(parseImageTransform(selectedCard.modalObjectPosition))} />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" /></>
-                ) : <div className="absolute inset-0 bg-gradient-to-br opacity-30" />}
+                ) : <div className="absolute inset-0 opacity-30" />}
                 <div className="absolute inset-0 flex items-end p-6 md:p-8 justify-between gap-3">
                   <motion.h2
                     initial={{ opacity: 0, y: 12 }}
@@ -1011,7 +1007,7 @@ export default function Home() {
                     {/* Share button */}
                     <button
                       onClick={() => handleShare(selectedCard.id)}
-                      className="p-2 rounded-full bg-white/20 hover:bg-white/30 text-white transition-colors"
+                      className="p-2 rounded-md bg-white/20 hover:bg-white/30 text-white transition-colors"
                       title="Copy link">
                       <Share2 className="w-4 h-4" />
                     </button>
@@ -1019,12 +1015,12 @@ export default function Home() {
                     {(currentUser?.id === selectedCard.hostId || currentUser?.isAdmin) && (
                       <button
                         onClick={() => showEditForm ? setShowEditForm(false) : openEditForm(selectedCard)}
-                        className="p-2 rounded-full bg-white/20 hover:bg-white/30 text-white transition-colors"
+                        className="p-2 rounded-md bg-white/20 hover:bg-white/30 text-white transition-colors"
                         title="Edit post">
                         <Edit3 className="w-4 h-4" />
                       </button>
                     )}
-                    <button onClick={handleCloseModal} className="p-2 rounded-full bg-white/20 hover:bg-white/30 text-white transition-colors text-lg leading-none">
+                    <button onClick={handleCloseModal} className="p-2 rounded-md bg-white/20 hover:bg-white/30 text-white transition-colors text-lg leading-none">
                       <X className="w-4 h-4" />
                     </button>
                   </div>
@@ -1042,7 +1038,7 @@ export default function Home() {
                       animate={{ opacity: 1, height: 'auto' }}
                       exit={{ opacity: 0, height: 0 }}
                       transition={{ duration: 0.2 }}
-                      className="bg-white/15 backdrop-blur-md rounded-2xl p-4 border border-white/20 space-y-3 overflow-hidden">
+                      className="bg-white/15 rounded-2xl p-4 border border-white/20 space-y-3 overflow-hidden">
                       <p className="text-xs font-bold tracking-widest uppercase opacity-75">Edit Post</p>
                       <input
                         value={editForm.title}
@@ -1198,7 +1194,7 @@ export default function Home() {
                   transition={{ delay: 0.12, duration: 0.32, ease: EASE_OUT }}
                   className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   {/* Location — full width on mobile, 1 col on desktop */}
-                  <div className="col-span-2 md:col-span-1 bg-white/15 backdrop-blur-md rounded-2xl p-3 md:p-4 border border-white/20">
+                  <div className="col-span-2 md:col-span-1 bg-white/15 rounded-2xl p-3 md:p-4 border border-white/20">
                     <p className="text-xs font-bold tracking-widest uppercase opacity-75 mb-1.5">Location</p>
                     {selectedCard.location?.trim() ? (
                       <a
@@ -1216,7 +1212,7 @@ export default function Home() {
                     )}
                   </div>
                   {/* Date & Time / Schedule — full width on mobile, 1 col on desktop */}
-                  <div className="col-span-2 md:col-span-1 bg-white/15 backdrop-blur-md rounded-2xl p-3 md:p-4 border border-white/20">
+                  <div className="col-span-2 md:col-span-1 bg-white/15 rounded-2xl p-3 md:p-4 border border-white/20">
                     {!!selectedCard.isRecurring ? (
                       <>
                         <p className="text-xs font-bold tracking-widest uppercase opacity-75 mb-1.5 inline-flex items-center gap-1.5"><Repeat className="w-3 h-3" /> Weekly Schedule</p>
@@ -1241,12 +1237,12 @@ export default function Home() {
                     )}
                   </div>
                   {/* Duration */}
-                  <div className="bg-white/15 backdrop-blur-md rounded-2xl p-3 md:p-4 border border-white/20">
+                  <div className="bg-white/15 rounded-2xl p-3 md:p-4 border border-white/20">
                     <p className="text-xs font-bold tracking-widest uppercase opacity-75 mb-1.5">Duration</p>
                     <p className="text-sm md:text-base font-semibold">{selectedCard.duration} hours</p>
                   </div>
                   {/* Expected Spots — planned capacity, not a live countdown */}
-                  <div className="bg-white/15 backdrop-blur-md rounded-2xl p-3 md:p-4 border border-white/20">
+                  <div className="bg-white/15 rounded-2xl p-3 md:p-4 border border-white/20">
                     <p className="text-xs font-bold tracking-widest uppercase opacity-75 mb-1.5">Expected Spots</p>
                     <p className="text-sm md:text-base font-semibold">
                       {selectedCard.spotsType === 'limited' && (selectedCard.spots ?? 0) > 0
@@ -1264,7 +1260,7 @@ export default function Home() {
                   initial={{ opacity: 0, y: 14 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.17, duration: 0.32, ease: EASE_OUT }}>
-                  <div className="relative bg-white/15 backdrop-blur-md rounded-2xl p-3 md:p-4 border border-white/20">
+                  <div className="relative bg-white/15 rounded-2xl p-3 md:p-4 border border-white/20">
                     <p className="text-xs font-bold tracking-widest uppercase opacity-75 mb-1.5">Host</p>
                     <div className="flex items-center gap-3 pr-8">
                       {/* Host avatar — skeleton while loading, then image or initial */}
@@ -1301,7 +1297,7 @@ export default function Home() {
                         whileTap={{ scale: 0.85 }}
                         onClick={() => handleFavToggle(selectedCard.hostId)}
                         disabled={togglingFav}
-                        className="absolute top-2.5 right-2.5 p-1.5 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
+                        className="absolute top-2.5 right-2.5 p-1.5 rounded-md bg-white/10 hover:bg-white/20 transition-colors"
                         title={isFavorited(selectedCard.hostId) ? 'Remove from favorites' : 'Favorite this org'}>
                         <motion.div
                           animate={isFavorited(selectedCard.hostId)
@@ -1320,7 +1316,7 @@ export default function Home() {
                   initial={{ opacity: 0, y: 14 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.22, duration: 0.32, ease: EASE_OUT }}
-                  className="bg-white/15 backdrop-blur-md rounded-2xl p-6 border border-white/20 space-y-3">
+                  className="bg-white/15 rounded-2xl p-6 border border-white/20 space-y-3">
                   <h3 className="text-sm font-bold tracking-widest uppercase opacity-75">About This Opportunity</h3>
                   <p className="text-white/95 leading-relaxed text-base">{selectedCard.description}</p>
 
@@ -1336,7 +1332,7 @@ export default function Home() {
                           href={hostProfile.orgWebsite}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1.5 rounded-full bg-white/20 hover:bg-white/30 transition-colors px-3.5 py-2 text-sm font-semibold text-white">
+                          className="inline-flex items-center gap-1.5 rounded-md bg-white/20 hover:bg-white/30 transition-colors px-3.5 py-2 text-sm font-semibold text-white">
                           <Globe className="w-3.5 h-3.5" />
                           {selectedCard.hostName}'s website
                         </a>
@@ -1346,7 +1342,7 @@ export default function Home() {
                           href={selectedCard.externalSignupUrl}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1.5 rounded-full bg-white/20 hover:bg-white/30 transition-colors px-3.5 py-2 text-sm font-semibold text-white">
+                          className="inline-flex items-center gap-1.5 rounded-md bg-white/20 hover:bg-white/30 transition-colors px-3.5 py-2 text-sm font-semibold text-white">
                           <ExternalLink className="w-3.5 h-3.5" />
                           Sign-up page
                         </a>
@@ -1364,7 +1360,7 @@ export default function Home() {
                     initial={{ opacity: 0, y: 12 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.24, duration: 0.32, ease: EASE_OUT }}
-                    className="bg-white/15 backdrop-blur-md rounded-2xl p-6 border border-white/20 space-y-3">
+                    className="bg-white/15 rounded-2xl p-6 border border-white/20 space-y-3">
                     <h3 className="text-sm font-bold tracking-widest uppercase opacity-75">How to Participate</h3>
                     <ol className="space-y-2.5">
                       {selectedCard.steps.map((step, i) => (
@@ -1387,7 +1383,7 @@ export default function Home() {
                     transition={{ delay: 0.26, duration: 0.3, ease: EASE_OUT }}
                     className="flex flex-wrap gap-2">
                     {selectedCard.tags.map(tag => (
-                      <span key={tag} className="px-3 py-1 bg-white/20 border border-white/30 rounded-full text-xs font-semibold">{tag}</span>
+                      <span key={tag} className="px-3 py-1 bg-white/20 border border-white/30 rounded-md text-xs font-semibold">{tag}</span>
                     ))}
                   </motion.div>
                 )}
@@ -1539,7 +1535,7 @@ export default function Home() {
                       <div className="bg-white/10 border border-white/20 rounded-2xl p-4 text-left space-y-3">
                         <div className="flex items-center justify-between">
                           <p className="text-xs font-bold tracking-widest uppercase opacity-75">Report Post</p>
-                          <button onClick={() => setShowReportModal(false)} className="p-1 rounded-full hover:bg-white/10">
+                          <button onClick={() => setShowReportModal(false)} className="p-1 rounded-md hover:bg-white/10">
                             <X className="w-3.5 h-3.5 text-white/60" />
                           </button>
                         </div>

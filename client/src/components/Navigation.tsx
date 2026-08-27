@@ -84,7 +84,7 @@ export default function Navigation() {
       {/* Condenses on scroll: 64px -> 52px. The board's filter bar is pinned
           directly beneath this and shrinks by the same 12px, so the two stay
           flush — see HEADER_H / HEADER_H_SCROLLED in home.tsx. */}
-      <header className="sticky top-0 z-50 bg-background/95 backdrop-blur-lg relative">
+      <header className="sticky top-0 z-50 bg-background relative">
         <div className="container mx-auto px-4">
           <div className={cn(
             "flex items-center justify-between transition-[height] duration-200 ease-out",
@@ -130,7 +130,7 @@ export default function Navigation() {
             <div ref={navRef} className="relative hidden lg:flex items-center gap-6">
               {navIndicator && (
                 <span
-                  className="absolute -bottom-px h-0.5 rounded-full bg-foreground transition-[left,width] duration-300 ease-out"
+                  className="absolute -bottom-px h-0.5 rounded-md bg-foreground transition-[left,width] duration-300 ease-out"
                   style={{ left: navIndicator.left, width: navIndicator.width }}
                 />
               )}
@@ -174,7 +174,7 @@ export default function Navigation() {
                     <button
                       onClick={() => navigate('/admin')}
                       className={cn(
-                        'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all',
+                        'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all',
                         location === '/admin'
                           ? 'bg-red-500 text-white shadow-md'
                           : 'bg-red-500/10 text-red-500 hover:bg-red-500/20'
@@ -208,7 +208,7 @@ export default function Navigation() {
                           animate={{ opacity: 1, y: 0, scale: 1 }}
                           exit={{ opacity: 0, y: 8, scale: 0.95 }}
                           transition={{ duration: 0.15 }}
-                          className="absolute right-0 top-full mt-2 w-80 bg-card border border-border rounded-2xl shadow-xl overflow-hidden z-50"
+                          className="absolute right-0 top-full mt-2 w-80 bg-card border border-border rounded-2xl shadow-md overflow-hidden z-50"
                         >
                           <div className="flex items-center justify-between px-4 py-3 border-b border-border">
                             <h3 className="font-semibold text-sm text-foreground">Notifications</h3>
@@ -218,7 +218,7 @@ export default function Navigation() {
                                   Mark all read
                                 </button>
                               )}
-                              <button onClick={() => setNotifOpen(false)} className="p-1 rounded-full hover:bg-secondary">
+                              <button onClick={() => setNotifOpen(false)} className="p-1 rounded-md hover:bg-secondary">
                                 <X className="w-3.5 h-3.5 text-muted-foreground" />
                               </button>
                             </div>
@@ -295,7 +295,7 @@ export default function Navigation() {
               ) : (
                 <button
                   onClick={() => navigate('/account')}
-                  className="text-sm font-medium bg-primary text-primary-foreground rounded-full px-4 py-1.5 hover:bg-primary/90 transition-colors"
+                  className="text-sm font-medium bg-primary text-primary-foreground rounded-md px-4 py-1.5 hover:bg-primary/90 transition-colors"
                 >
                   Login
                 </button>
@@ -304,7 +304,7 @@ export default function Navigation() {
           </div>
         </div>
         {/* Soft trailing edge instead of a hard border-b. A color-only fade
-            wasn't enough — the header carries backdrop-blur-lg, and a plain
+            wasn't enough — the header carries, and a plain
             gradient div has none, so content underneath still snapped from
             blurred to sharp in a single row right at the seam, reading as a
             hard line no matter how gradual the color was. This div carries
@@ -316,7 +316,7 @@ export default function Navigation() {
             rides along as the header condenses. */}
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute left-0 right-0 top-full h-12 backdrop-blur-lg bg-gradient-to-b from-background/95 to-transparent"
+          className="pointer-events-none absolute left-0 right-0 top-full h-12 bg-gradient-to-b from-background/95 to-transparent"
           style={{
             maskImage: 'linear-gradient(to bottom, black, transparent)',
             WebkitMaskImage: 'linear-gradient(to bottom, black, transparent)',
@@ -325,7 +325,7 @@ export default function Navigation() {
       </header>
 
       {/* Mobile Bottom Nav */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-lg border-t border-border z-50 lg:hidden">
+      <nav className="fixed bottom-0 left-0 right-0 bg-background border-t border-border z-50 lg:hidden">
         <div className="container mx-auto px-2 flex items-center justify-around">
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
@@ -358,7 +358,7 @@ export default function Navigation() {
               <span className="relative">
                 <Bell className="w-5 h-5" />
                 {unreadCount > 0 && (
-                  <span className="absolute -top-1 -right-1.5 w-3.5 h-3.5 bg-red-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center leading-none">
+                  <span className="absolute -top-1 -right-1.5 w-3.5 h-3.5 bg-red-500 text-white text-[8px] font-bold rounded-md flex items-center justify-center leading-none">
                     {unreadCount > 9 ? '9+' : unreadCount}
                   </span>
                 )}

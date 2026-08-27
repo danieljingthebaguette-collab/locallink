@@ -60,9 +60,9 @@ export default function ResetPassword() {
     const params = new URLSearchParams(window.location.search);
     if (!params.get('token')) {
       return (
-        <div className="min-h-screen bg-gradient-to-b from-primary/5 via-background to-background pb-24 font-sans flex items-center justify-center">
+        <div className="min-h-screen bg-background pb-24 font-sans flex items-center justify-center">
           <div className="max-w-md w-full mx-auto px-4">
-            <div className="rounded-3xl bg-card border border-border shadow-lg p-8 md:p-10 text-center space-y-6">
+            <div className="rounded-3xl bg-card border border-border shadow-sm p-8 md:p-10 text-center space-y-6">
               <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-red-100 mx-auto">
                 <XCircle className="w-8 h-8 text-red-500" />
               </div>
@@ -71,7 +71,7 @@ export default function ResetPassword() {
                 This password reset link is missing a token. Please use the link from your email or request a new one.
               </p>
               <Button
-                className="w-full h-12 rounded-full font-semibold"
+                className="w-full h-12 rounded-md font-semibold"
                 onClick={() => navigate('/forgot-password')}
               >
                 Request New Link
@@ -92,9 +92,9 @@ export default function ResetPassword() {
   // Success state
   if (success) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-primary/5 via-background to-background pb-24 font-sans flex items-center justify-center">
+      <div className="min-h-screen bg-background pb-24 font-sans flex items-center justify-center">
         <div className="max-w-md w-full mx-auto px-4">
-          <div className="rounded-3xl bg-card border border-border shadow-lg p-8 md:p-10 text-center space-y-6">
+          <div className="rounded-3xl bg-card border border-border shadow-sm p-8 md:p-10 text-center space-y-6">
             <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-100 mx-auto">
               <CheckCircle className="w-8 h-8 text-green-600" />
             </div>
@@ -105,7 +105,7 @@ export default function ResetPassword() {
               </p>
             </div>
             <Button
-              className="w-full h-12 rounded-full font-semibold"
+              className="w-full h-12 rounded-md font-semibold"
               onClick={() => navigate('/account')}
             >
               Go to Login
@@ -117,7 +117,7 @@ export default function ResetPassword() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-primary/5 via-background to-background pb-24 font-sans">
+    <div className="min-h-screen bg-background pb-24 font-sans">
       <main className="container mx-auto px-4 py-12">
         <div className="max-w-md mx-auto">
           <div className="space-y-6">
@@ -131,7 +131,7 @@ export default function ResetPassword() {
               </p>
             </div>
 
-            <div className="rounded-3xl bg-card border border-border shadow-lg p-8 md:p-10 space-y-5">
+            <div className="rounded-3xl bg-card border border-border shadow-sm p-8 md:p-10 space-y-5">
               {apiError && (
                 <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
                   {apiError}
@@ -190,7 +190,7 @@ export default function ResetPassword() {
               <Button
                 onClick={handleSubmit}
                 disabled={loading || !token}
-                className="w-full h-12 rounded-full font-semibold mt-2"
+                className="w-full h-12 rounded-md font-semibold mt-2"
               >
                 {loading ? 'Resetting...' : 'Reset Password'}
               </Button>

@@ -55,7 +55,7 @@ export default function FeedbackButton() {
         whileHover={{ scale: 1.08 }}
         whileTap={{ scale: 0.94 }}
         onClick={() => setOpen(true)}
-        className="fixed bottom-20 right-4 lg:bottom-6 lg:right-6 z-50 flex items-center gap-2 bg-primary text-primary-foreground rounded-full shadow-lg px-4 py-2.5 text-sm font-semibold"
+        className="fixed bottom-20 right-4 lg:bottom-6 lg:right-6 z-50 flex items-center gap-2 bg-primary text-primary-foreground rounded-md shadow-sm px-4 py-2.5 text-sm font-semibold"
         title="Share feedback"
       >
         <MessageSquarePlus className="w-4 h-4" />
@@ -70,7 +70,7 @@ export default function FeedbackButton() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={() => setOpen(false)}
-            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[70] flex items-end sm:items-center justify-center p-4"
+            className="fixed inset-0 bg-black/50 z-[70] flex items-end sm:items-center justify-center p-4"
           >
             <motion.div
               initial={{ opacity: 0, y: 40, scale: 0.95 }}
@@ -78,7 +78,7 @@ export default function FeedbackButton() {
               exit={{ opacity: 0, y: 40, scale: 0.95 }}
               transition={{ type: 'spring', stiffness: 380, damping: 32 }}
               onClick={e => e.stopPropagation()}
-              className="w-full max-w-sm bg-card border border-border rounded-3xl shadow-2xl p-6 space-y-5"
+              className="w-full max-w-sm bg-card border border-border rounded-3xl shadow-md p-6 space-y-5"
             >
               {/* Header */}
               <div className="flex items-start justify-between">
@@ -86,7 +86,7 @@ export default function FeedbackButton() {
                   <h2 className="font-heading font-bold text-lg text-foreground">Share your feedback</h2>
                   <p className="text-sm text-muted-foreground mt-0.5">Help us make LocalLink better</p>
                 </div>
-                <button onClick={() => setOpen(false)} className="p-1.5 rounded-full hover:bg-secondary transition-colors -mr-1 -mt-1">
+                <button onClick={() => setOpen(false)} className="p-1.5 rounded-md hover:bg-secondary transition-colors -mr-1 -mt-1">
                   <X className="w-4 h-4 text-muted-foreground" />
                 </button>
               </div>

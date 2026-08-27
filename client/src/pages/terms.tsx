@@ -1,6 +1,6 @@
 export default function Terms() {
   return (
-    <div className="min-h-screen bg-gradient-to-b from-primary/5 via-background to-background pb-24 font-sans">
+    <div className="min-h-screen bg-background pb-24 font-sans">
       <main className="container mx-auto px-4 py-12">
         <div className="max-w-3xl mx-auto space-y-6">
 

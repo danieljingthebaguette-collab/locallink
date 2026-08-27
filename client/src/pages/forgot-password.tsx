@@ -35,9 +35,9 @@ export default function ForgotPassword() {
 
   if (submitted) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-primary/5 via-background to-background pb-24 font-sans flex items-center justify-center">
+      <div className="min-h-screen bg-background pb-24 font-sans flex items-center justify-center">
         <div className="max-w-md w-full mx-auto px-4">
-          <div className="rounded-3xl bg-card border border-border shadow-lg p-8 md:p-10 text-center space-y-6">
+          <div className="rounded-3xl bg-card border border-border shadow-sm p-8 md:p-10 text-center space-y-6">
             <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 mx-auto">
               <MailCheck className="w-8 h-8 text-primary" />
             </div>
@@ -65,7 +65,7 @@ export default function ForgotPassword() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-primary/5 via-background to-background pb-24 font-sans">
+    <div className="min-h-screen bg-background pb-24 font-sans">
       <main className="container mx-auto px-4 py-12">
         <div className="max-w-md mx-auto">
           <div className="space-y-6">
@@ -79,7 +79,7 @@ export default function ForgotPassword() {
               </p>
             </div>
 
-            <div className="rounded-3xl bg-card border border-border shadow-lg p-8 md:p-10 space-y-5">
+            <div className="rounded-3xl bg-card border border-border shadow-sm p-8 md:p-10 space-y-5">
               <div className="space-y-2">
                 <label htmlFor="forgot-password-email-address" className="block text-sm font-semibold text-foreground">Email Address</label>
                 <div className="relative">
@@ -107,7 +107,7 @@ export default function ForgotPassword() {
               <Button
                 onClick={handleSubmit}
                 disabled={loading}
-                className="w-full h-12 rounded-full font-semibold mt-2"
+                className="w-full h-12 rounded-md font-semibold mt-2"
               >
                 {loading ? 'Sending...' : 'Send Reset Link'}
               </Button>

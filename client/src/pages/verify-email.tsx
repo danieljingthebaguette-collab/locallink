@@ -49,9 +49,9 @@ export default function VerifyEmail() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-primary/5 via-background to-background pb-24 font-sans flex items-center justify-center">
+    <div className="min-h-screen bg-background pb-24 font-sans flex items-center justify-center">
       <div className="max-w-md w-full mx-auto px-4">
-        <div className="rounded-3xl bg-card border border-border shadow-lg p-8 md:p-10 text-center space-y-6">
+        <div className="rounded-3xl bg-card border border-border shadow-sm p-8 md:p-10 text-center space-y-6">
 
           {status === 'loading' && (
             <>
@@ -71,7 +71,7 @@ export default function VerifyEmail() {
                 {message} Taking you to LocalLink now…
               </p>
               <Button
-                className="w-full h-12 rounded-full font-semibold"
+                className="w-full h-12 rounded-md font-semibold"
                 onClick={() => navigate('/')}
               >
                 Go to LocalLink
@@ -88,7 +88,7 @@ export default function VerifyEmail() {
               <p className="text-sm text-muted-foreground">{message}</p>
               <div className="space-y-3">
                 <Button
-                  className="w-full h-12 rounded-full font-semibold"
+                  className="w-full h-12 rounded-md font-semibold"
                   onClick={() => navigate('/account')}
                 >
                   Back to Login

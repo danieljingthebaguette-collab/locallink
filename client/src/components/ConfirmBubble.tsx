@@ -41,7 +41,7 @@ export default function ConfirmBubble({
             exit={{ scale: 0.9, opacity: 0, y: 10 }}
             transition={{ type: 'spring', stiffness: 420, damping: 30 }}
             onClick={e => e.stopPropagation()}
-            className="w-full max-w-xs rounded-2xl bg-card border border-border shadow-2xl p-5 space-y-4">
+            className="w-full max-w-xs rounded-2xl bg-card border border-border shadow-md p-5 space-y-4">
             <div className="flex items-start gap-3">
               {icon && (
                 <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">

@@ -103,7 +103,7 @@ export default function MyEvents() {
           <Calendar className="w-16 h-16 text-muted-foreground mx-auto opacity-50 mb-4" />
           <h2 className="text-2xl font-heading font-bold text-foreground mb-2">Please Login</h2>
           <p className="text-muted-foreground mb-6">You need to be logged in to view your events.</p>
-          <Button onClick={() => navigate('/account')} className="rounded-full px-8">Login / Sign Up</Button>
+          <Button onClick={() => navigate('/account')} className="rounded-md px-8">Login / Sign Up</Button>
         </main>
       </div>
     );
@@ -263,7 +263,7 @@ export default function MyEvents() {
               <Calendar className="w-10 h-10 text-muted-foreground mx-auto opacity-40" />
               <p className="text-muted-foreground font-medium">No upcoming events</p>
               <p className="text-sm text-muted-foreground">Browse opportunities and mark your interest!</p>
-              <Button onClick={() => navigate('/')} variant="outline" className="rounded-full mt-2">
+              <Button onClick={() => navigate('/')} variant="outline" className="rounded-md mt-2">
                 Browse Opportunities
               </Button>
             </div>
@@ -305,7 +305,7 @@ export default function MyEvents() {
               Hosted Events ({hosted.length})
             </h3>
             {(currentUser.accountType === 'organization' || currentUser.isAdmin) && (
-              <Button onClick={() => setShowCreateModal(true)} className="rounded-full h-9 px-4 text-sm font-semibold gap-1.5">
+              <Button onClick={() => setShowCreateModal(true)} className="rounded-md h-9 px-4 text-sm font-semibold gap-1.5">
                 <Plus className="w-4 h-4" /> New Post
               </Button>
             )}
@@ -321,7 +321,7 @@ export default function MyEvents() {
               <Users className="w-10 h-10 text-muted-foreground mx-auto opacity-40" />
               <p className="text-muted-foreground font-medium">No hosted events yet</p>
               <p className="text-sm text-muted-foreground">Create an opportunity and bring your community together.</p>
-              <Button onClick={() => setShowCreateModal(true)} variant="outline" className="rounded-full mt-2">
+              <Button onClick={() => setShowCreateModal(true)} variant="outline" className="rounded-md mt-2">
                 Create an Opportunity
               </Button>
             </div>
@@ -341,16 +341,16 @@ export default function MyEvents() {
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex-1 space-y-2">
                         <div className="flex flex-wrap gap-2 items-center">
-                          <span className={cn('px-3 py-1 rounded-full text-xs font-bold text-white inline-block', CATEGORY_BG[opp.category] || 'bg-primary')}>
+                          <span className={cn('px-3 py-1 rounded-md text-xs font-bold text-white inline-block', CATEGORY_BG[opp.category] || 'bg-primary')}>
                             {getCategoryLabel(opp.category)}
                           </span>
                           {opp.status === 'pending' && (
-                            <span className="px-3 py-1 rounded-full text-xs font-bold bg-orange-500/15 text-orange-600 border border-orange-400/30">
+                            <span className="px-3 py-1 rounded-md text-xs font-bold bg-orange-500/15 text-orange-600 border border-orange-400/30">
                               ⏳ Pending Approval
                             </span>
                           )}
                           {opp.status === 'denied' && (
-                            <span className="px-3 py-1 rounded-full text-xs font-bold bg-red-500/15 text-red-500 border border-red-400/30">
+                            <span className="px-3 py-1 rounded-md text-xs font-bold bg-red-500/15 text-red-500 border border-red-400/30">
                               ✕ Not Approved
                             </span>
                           )}
@@ -366,7 +366,7 @@ export default function MyEvents() {
                                 onClick={() => handleToggleAvailability(opp)}
                                 disabled={togglingId === opp.id}
                                 title="Click to reopen"
-                                className="text-xs font-semibold text-muted-foreground bg-secondary hover:bg-red-500/10 hover:text-red-500 px-2 py-0.5 rounded-full transition-colors cursor-pointer disabled:opacity-50"
+                                className="text-xs font-semibold text-muted-foreground bg-secondary hover:bg-red-500/10 hover:text-red-500 px-2 py-0.5 rounded-md transition-colors cursor-pointer disabled:opacity-50"
                               >
                                 {togglingId === opp.id ? '…' : 'Closed'}
                               </button>
@@ -376,21 +376,21 @@ export default function MyEvents() {
                                 onClick={() => handleToggleAvailability(opp)}
                                 disabled={togglingId === opp.id}
                                 title="Click to close"
-                                className="text-xs font-semibold text-green-600 dark:text-green-400 bg-green-500/10 hover:bg-red-500/10 hover:text-red-500 px-2 py-0.5 rounded-full transition-colors cursor-pointer disabled:opacity-50"
+                                className="text-xs font-semibold text-green-600 dark:text-green-400 bg-green-500/10 hover:bg-red-500/10 hover:text-red-500 px-2 py-0.5 rounded-md transition-colors cursor-pointer disabled:opacity-50"
                               >
                                 {togglingId === opp.id ? '…' : 'Open'}
                               </button>
                             )
                           ) : isPast(opp.date) ? (
                             // Past one-time event — ended, not togglable
-                            <span className="text-xs font-semibold text-muted-foreground bg-secondary px-2 py-0.5 rounded-full">Ended</span>
+                            <span className="text-xs font-semibold text-muted-foreground bg-secondary px-2 py-0.5 rounded-md">Ended</span>
                           ) : isClosed ? (
                             // One-time event, manually closed — clickable to reopen
                             <button
                               onClick={() => handleToggleAvailability(opp)}
                               disabled={togglingId === opp.id}
                               title="Click to reopen"
-                              className="text-xs font-semibold text-muted-foreground bg-secondary hover:bg-green-500/10 hover:text-green-600 px-2 py-0.5 rounded-full transition-colors cursor-pointer disabled:opacity-50"
+                              className="text-xs font-semibold text-muted-foreground bg-secondary hover:bg-green-500/10 hover:text-green-600 px-2 py-0.5 rounded-md transition-colors cursor-pointer disabled:opacity-50"
                             >
                               {togglingId === opp.id ? '…' : 'Closed'}
                             </button>
@@ -400,7 +400,7 @@ export default function MyEvents() {
                               onClick={() => handleToggleAvailability(opp)}
                               disabled={togglingId === opp.id}
                               title="Click to close"
-                              className="text-xs font-semibold text-green-600 dark:text-green-400 bg-green-500/10 hover:bg-red-500/10 hover:text-red-500 px-2 py-0.5 rounded-full transition-colors cursor-pointer disabled:opacity-50"
+                              className="text-xs font-semibold text-green-600 dark:text-green-400 bg-green-500/10 hover:bg-red-500/10 hover:text-red-500 px-2 py-0.5 rounded-md transition-colors cursor-pointer disabled:opacity-50"
                             >
                               {togglingId === opp.id ? '…' : 'Open'}
                             </button>
@@ -518,7 +518,7 @@ export default function MyEvents() {
                               <img src={editImagePreview || editForm.image} alt="Preview" className="w-full h-full" style={imageTransformStyle(editForm.cardTransform)} />
                               <button type="button"
                                 onClick={() => { setEditImageFile(null); setEditImagePreview(''); setEditForm({ ...editForm, image: '' }); if (editFileRef.current) editFileRef.current.value = ''; }}
-                                className="absolute top-1 right-1 bg-black/60 rounded-full p-1 text-white hover:bg-black/80 transition-colors">
+                                className="absolute top-1 right-1 bg-black/60 rounded-md p-1 text-white hover:bg-black/80 transition-colors">
                                 <X className="w-3 h-3" />
                               </button>
                             </div>
@@ -543,10 +543,10 @@ export default function MyEvents() {
                         </div>
                       </div>
                       <div className="flex gap-3">
-                        <Button variant="outline" onClick={() => setEditingId(null)} className="flex-1 h-10 rounded-full font-semibold">
+                        <Button variant="outline" onClick={() => setEditingId(null)} className="flex-1 h-10 rounded-md font-semibold">
                           <X className="w-4 h-4 mr-1" /> Cancel
                         </Button>
-                        <Button onClick={() => handleSaveEdit(opp.id)} disabled={savingEdit} className="flex-1 h-10 rounded-full font-semibold">
+                        <Button onClick={() => handleSaveEdit(opp.id)} disabled={savingEdit} className="flex-1 h-10 rounded-md font-semibold">
                           {savingEdit ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Save className="w-4 h-4 mr-1" />}
                           {savingEdit ? 'Saving...' : 'Save Changes'}
                         </Button>
@@ -623,7 +623,7 @@ function EventCard({
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1 space-y-2">
           <div className="flex flex-wrap gap-2 items-center">
-            <span className={cn('px-3 py-1 rounded-full text-xs font-bold text-white inline-block', CATEGORY_BG[opp.category] || 'bg-primary')}>
+            <span className={cn('px-3 py-1 rounded-md text-xs font-bold text-white inline-block', CATEGORY_BG[opp.category] || 'bg-primary')}>
               {getCategoryLabel(opp.category)}
             </span>
           </div>
@@ -650,7 +650,7 @@ function EventCard({
           </button>
         )}
         {type === 'past' && (
-          <span className="text-xs font-semibold text-muted-foreground bg-secondary px-3 py-1.5 rounded-full flex-shrink-0">Completed</span>
+          <span className="text-xs font-semibold text-muted-foreground bg-secondary px-3 py-1.5 rounded-md flex-shrink-0">Completed</span>
         )}
       </div>
     </div>

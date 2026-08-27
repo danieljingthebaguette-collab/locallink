@@ -1,19 +1,22 @@
 import { Category } from './mockData';
 
+// Flat fills, not gradients. These stand in for a post's photo, so their whole
+// job is to say which category it is -- a same-hue ramp added nothing except
+// the look of a generated site.
 const CATEGORY_COLOR_MAP: Record<Category, string> = {
-  'volunteer': 'from-cat-vol/80 to-cat-vol',
-  'education': 'from-cat-edu/80 to-cat-edu',
-  'fitness': 'from-cat-sports/80 to-cat-sports',
-  'community': 'from-cat-community/80 to-cat-community',
-  'environment': 'from-cat-environment/80 to-cat-environment',
+  'volunteer': 'bg-cat-vol',
+  'education': 'bg-cat-edu',
+  'fitness': 'bg-cat-sports',
+  'community': 'bg-cat-community',
+  'environment': 'bg-cat-environment',
 };
 
 const CATEGORY_MODAL_MAP: Record<Category, string> = {
-  'volunteer': 'from-cat-vol/90 to-cat-vol',
-  'education': 'from-cat-edu/90 to-cat-edu',
-  'fitness': 'from-cat-sports/90 to-cat-sports',
-  'community': 'from-cat-community/90 to-cat-community',
-  'environment': 'from-cat-environment/90 to-cat-environment',
+  'volunteer': 'bg-cat-vol',
+  'education': 'bg-cat-edu',
+  'fitness': 'bg-cat-sports',
+  'community': 'bg-cat-community',
+  'environment': 'bg-cat-environment',
 };
 
 const CATEGORY_BORDER_MAP: Record<Category, string> = {
@@ -24,28 +27,16 @@ const CATEGORY_BORDER_MAP: Record<Category, string> = {
   'environment': 'border-cat-environment',
 };
 
-const CATEGORY_EMOJI_MAP: Record<Category, string> = {
-  'volunteer': '\u{1F91D}',
-  'education': '\u{1F4DA}',
-  'fitness': '\u26BD',
-  'community': '\u{1F3D8}\uFE0F',
-  'environment': '\u{1F331}',
-};
-
 export const getCategoryBorder = (category: Category): string => {
   return CATEGORY_BORDER_MAP[category] || 'border-primary';
 };
 
 export const getCategoryColor = (category: Category): string => {
-  return CATEGORY_COLOR_MAP[category] || 'from-primary/80 to-primary';
+  return CATEGORY_COLOR_MAP[category] || 'bg-primary';
 };
 
 export const getModalGradient = (category: Category): string => {
-  return CATEGORY_MODAL_MAP[category] || 'from-primary/80 to-primary';
-};
-
-export const getCategoryEmoji = (category: Category): string => {
-  return CATEGORY_EMOJI_MAP[category] || '\u{1F4CC}';
+  return CATEGORY_MODAL_MAP[category] || 'bg-primary';
 };
 
 export const getCategoryLabel = (category: Category): string => {
