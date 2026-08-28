@@ -279,12 +279,14 @@ interface OpportunitiesState {
   searchQuery: string;
   currentCategory: Category | 'all';
   currentTown: string; // one of TOWNS or 'all'
+  currentField: string; // one of FIELD_TAGS or 'all'
   sortBy: 'newest' | 'oldest' | 'soonest' | 'popular' | 'match';
   loading: boolean;
   loaded: boolean;
   setSearchQuery: (q: string) => void;
   setCategory: (cat: Category | 'all') => void;
   setTown: (town: string) => void;
+  setField: (field: string) => void;
   setSortBy: (sort: 'newest' | 'oldest' | 'soonest' | 'popular' | 'match') => void;
   getFiltered: () => Opportunity[];
   fetchOpportunities: () => Promise<void>;
@@ -304,6 +306,7 @@ export const useOpportunitiesStore = create<OpportunitiesState>((set, get) => ({
   searchQuery: '',
   currentCategory: 'all',
   currentTown: 'all',
+  currentField: 'all',
   sortBy: 'newest',
   loading: false,
   loaded: false,
@@ -311,10 +314,11 @@ export const useOpportunitiesStore = create<OpportunitiesState>((set, get) => ({
   setSearchQuery: (q) => set({ searchQuery: q }),
   setCategory: (cat) => set({ currentCategory: cat }),
   setTown: (town) => set({ currentTown: town }),
+  setField: (field) => set({ currentField: field }),
   setSortBy: (sort) => set({ sortBy: sort }),
 
   getFiltered: () => {
-    const { opportunities, currentCategory, currentTown, searchQuery, sortBy } = get();
+    const { opportunities, currentCategory, currentTown, currentField, searchQuery, sortBy } = get();
     let filtered = [...opportunities];
 
     if (currentCategory !== 'all') {
@@ -327,6 +331,12 @@ export const useOpportunitiesStore = create<OpportunitiesState>((set, get) => ({
     // 'all' includes townless posts (created before the town field existed)
     if (currentTown !== 'all') {
       filtered = filtered.filter(opp => opp.town === currentTown);
+    }
+
+    // Same story as towns: posts made before fields were required have none,
+    // and they only disappear once a specific field is asked for.
+    if (currentField !== 'all') {
+      filtered = filtered.filter(opp => (opp.tags ?? []).includes(currentField));
     }
 
     if (searchQuery) {

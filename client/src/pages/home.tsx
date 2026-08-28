@@ -108,8 +108,8 @@ export default function Home() {
   const myMajors = currentUser?.onboardingMajors ?? null;
   const hasAnyPrefs = !!((myInterests && myInterests.length) || (myTowns && myTowns.length) || (myAvailability && myAvailability.length) || (myMajors && myMajors.trim()));
   const {
-    setSearchQuery, setCategory, setSortBy, setTown, getFiltered,
-    currentCategory, searchQuery, sortBy, currentTown,
+    setSearchQuery, setCategory, setSortBy, setTown, setField, getFiltered,
+    currentCategory, searchQuery, sortBy, currentTown, currentField,
     signup, cancelSignup, fetchOpportunities, updateOpportunity,
     loading, loaded, opportunities,
   } = useOpportunitiesStore();
@@ -223,6 +223,12 @@ export default function Home() {
   }, [selectedCard?.hostId]);
 
   const filteredOpportunities = getFiltered();
+  // Built from the fields actually on the board, not the full 50-item list.
+  // Offering all 50 would mean a dropdown where most choices return an empty
+  // board -- a filter that mostly finds nothing teaches people not to use it.
+  const fieldsInUse = Array.from(
+    new Set(opportunities.flatMap(o => o.tags ?? []))
+  ).sort((a, b) => a.localeCompare(b));
 
   // Host avatars for board cards — one profile fetch per unique host,
   // shared with the modal via the same module-level hostProfileCache.
@@ -530,7 +536,7 @@ export default function Home() {
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
-              placeholder="Search opportunities..."
+              placeholder="Search by name, place, or field..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className={cn(
@@ -595,6 +601,22 @@ export default function Home() {
                     {TOWNS.map(t => <option key={t} value={t}>{t}</option>)}
                   </select>
                 </label>
+                {/* Fields were the one taxonomy with no control of its own --
+                    findable only by guessing the exact word into the search
+                    box. Sits beside Town because it does the same job. */}
+                {fieldsInUse.length > 0 && (
+                  <label htmlFor="home-field-filter" className="min-h-[44px] flex items-center gap-1 text-xs font-semibold text-muted-foreground uppercase tracking-wide cursor-pointer hover:text-foreground transition-colors">
+                    <span>Field:</span>
+                    <select id="home-field-filter"
+                      value={currentField}
+                      onChange={e => setField(e.target.value)}
+                      aria-label="Filter by field"
+                      className="min-h-[44px] bg-transparent text-xs font-semibold uppercase tracking-wide cursor-pointer focus:outline-none max-w-[170px]">
+                      <option value="all">All fields</option>
+                      {fieldsInUse.map(f => <option key={f} value={f}>{f}</option>)}
+                    </select>
+                  </label>
+                )}
               </div>
               <div className={cn(
                 "overflow-hidden transition-all duration-300 ease-in-out",
@@ -1068,6 +1090,7 @@ export default function Home() {
                 searchQuery.trim() && `“${searchQuery.trim()}”`,
                 currentCategory !== 'all' && getCategoryLabel(currentCategory as Category),
                 currentTown !== 'all' && currentTown,
+                currentField !== 'all' && currentField,
               ].filter(Boolean) as string[];
               return (
                 <motion.div
@@ -1092,7 +1115,7 @@ export default function Home() {
                     // Must clear town too — it used to be left set, so clearing
                     // filters on an empty town left the board just as empty.
                     <Button
-                      onClick={() => { setSearchQuery(''); setCategory('all'); setTown('all'); }}
+                      onClick={() => { setSearchQuery(''); setCategory('all'); setTown('all'); setField('all'); }}
                       className="rounded-md">
                       Clear all filters
                     </Button>
