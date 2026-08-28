@@ -700,7 +700,7 @@ export default function Home() {
         {loading && !loaded && (
           <>
           <div className="mb-2 h-16 md:h-20 rounded-3xl border-2 border-dashed border-border/30 bg-secondary/20 animate-pulse" />
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-2 auto-rows-[200px] grid-flow-dense mb-12">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2 auto-rows-[200px] grid-flow-dense mb-12">
             {['md:col-span-2 md:row-span-2','md:col-span-2 md:row-span-1','md:col-span-1 md:row-span-1','md:col-span-1 md:row-span-1','md:col-span-2 md:row-span-1','md:col-span-1 md:row-span-1'].map((size, i) => (
               <div key={i} className={cn("rounded-3xl bg-secondary/30 animate-pulse", size)}>
                 <div className="h-full p-6 flex flex-col justify-between">
@@ -752,23 +752,53 @@ export default function Home() {
                           <Star className="w-3 h-3 fill-current" /> FEATURED
                         </span>
                         <p className="text-xs font-bold tracking-widest uppercase opacity-80">{getCategoryLabel(featuredPost.category)}</p>
-                        {!!featuredPost.isRecurring && <span className="text-[10px] font-bold bg-blue-500/80 text-white px-2 py-0.5 rounded-md inline-flex items-center gap-1"><Repeat className="w-2.5 h-2.5" />{formatRecurringShort(featuredPost)}</span>}
                         {isPast && !featuredPost.isRecurring && <span className="text-[10px] font-bold bg-white/20 text-white px-2 py-0.5 rounded-md">ENDED</span>}
                         {isClosed && !!featuredPost.isRecurring && <span className="text-[10px] font-bold bg-orange-500/80 text-white px-2 py-0.5 rounded-md">CLOSED</span>}
                       </div>
                       <h2 className="font-heading font-bold text-lg md:text-2xl leading-tight">{featuredPost.title}</h2>
-                      <div className="flex items-center gap-2 text-sm opacity-90 flex-wrap">
-                        <span className="inline-flex items-center gap-1.5">
-                          {hostAvatars[featuredPost.hostId] ? (
-                            <img src={hostAvatars[featuredPost.hostId]!} alt="" className="w-5 h-5 rounded-full object-cover ring-1 ring-white/40" />
-                          ) : (
-                            <span className="w-5 h-5 rounded-full bg-white/25 flex items-center justify-center text-[9px] font-bold">{featuredPost.hostName.charAt(0).toUpperCase()}</span>
-                          )}
-                          by {featuredPost.hostName}
-                          {!!featuredPost.hostVerified && <VerifiedBadge className="w-3.5 h-3.5" />}
-                        </span>
-                        {!featuredPost.isRecurring && <span>· {formatDate(featuredPost.date)}</span>}
+                      {/* The banner is a post preview like any other, so it carries what
+                          they carry: tags, then where/when/how long. It used to show
+                          none of the three, plus a long-form date and "by Name" where
+                          the cards say the name alone — the one preview on the board
+                          that answered different questions than its neighbours. */}
+                      {featuredPost.tags && featuredPost.tags.length > 0 && (
+                        <div className="flex flex-wrap gap-1">
+                          {featuredPost.tags.slice(0, 2).map(tag => (
+                            <span key={tag} className="text-[10px] font-semibold bg-white/20 px-2 py-0.5 rounded-md">{tag}</span>
+                          ))}
+                        </div>
+                      )}
+                      <div className="flex items-center gap-x-1.5 gap-y-0.5 flex-wrap text-[11px] opacity-80 min-w-0">
+                        <MapPin className="w-3 h-3 flex-shrink-0" />
+                        <span className="truncate max-w-full">{featuredPost.location.split(',')[0]}</span>
+                        <span className="opacity-60 flex-shrink-0">&bull;</span>
+                        {featuredPost.isRecurring ? (
+                          <>
+                            <Repeat className="w-3 h-3 flex-shrink-0" />
+                            <span className="flex-shrink-0">{formatRecurringShort(featuredPost)}</span>
+                          </>
+                        ) : (
+                          <>
+                            <Calendar className="w-3 h-3 flex-shrink-0" />
+                            <span className="flex-shrink-0">
+                              {getRelativeDay(featuredPost.date)
+                                ?? new Date(featuredPost.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                            </span>
+                          </>
+                        )}
+                        <span className="opacity-60 flex-shrink-0">&bull;</span>
+                        <Clock className="w-3 h-3 flex-shrink-0" />
+                        <span className="flex-shrink-0">{featuredPost.duration}h</span>
                       </div>
+                      <span className="text-[11px] opacity-70 font-medium inline-flex items-center gap-1.5 min-w-0">
+                        {hostAvatars[featuredPost.hostId] ? (
+                          <img src={hostAvatars[featuredPost.hostId]!} alt="" className="w-4 h-4 rounded-full object-cover ring-1 ring-white/40 flex-shrink-0" />
+                        ) : (
+                          <span className="w-4 h-4 rounded-full bg-white/25 flex items-center justify-center text-[8px] font-bold flex-shrink-0">{featuredPost.hostName.charAt(0).toUpperCase()}</span>
+                        )}
+                        <span className="truncate">{featuredPost.hostName}</span>
+                        {!!featuredPost.hostVerified && <VerifiedBadge className="w-3.5 h-3.5 flex-shrink-0" />}
+                      </span>
                     </div>
                   </div>
                 </motion.div>
@@ -795,7 +825,7 @@ export default function Home() {
               </motion.div>
             )}
 
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-2 auto-rows-[200px] grid-flow-dense mb-12">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2 auto-rows-[200px] grid-flow-dense mb-12">
 
               {/* Opportunity Cards */}
               {filteredOpportunities.map((opp, index) => {
@@ -935,27 +965,34 @@ export default function Home() {
                             which is worse than no location at all; wrapping gives it
                             its own line there and changes nothing on the wider tiles,
                             where all three still fit across. */}
+                        {/* Two atomic groups, not seven loose children. As loose
+                            children every bullet and icon was its own wrap point, so
+                            on the narrowest 1x1 (178px in a four-column grid) this
+                            broke onto three lines and pushed the card 48px past its
+                            own bottom. Grouped, it is at most two: place on one line,
+                            when-and-how-long on the next. */}
                         <div className="flex items-center gap-x-1.5 gap-y-0.5 flex-wrap pt-1 text-[11px] opacity-80 min-w-0">
-                          <MapPin className="w-3 h-3 flex-shrink-0" />
-                          <span className="truncate max-w-full">{opp.location.split(',')[0]}</span>
-                          <span className="opacity-60 flex-shrink-0">&bull;</span>
-                          {opp.isRecurring ? (
-                            <>
-                              <Repeat className="w-3 h-3 flex-shrink-0" />
-                              <span className="flex-shrink-0">{formatRecurringShort(opp)}</span>
-                            </>
-                          ) : (
-                            <>
-                              <Calendar className="w-3 h-3 flex-shrink-0" />
-                              <span className="flex-shrink-0">
+                          <span className="inline-flex items-center gap-1.5 min-w-0 max-w-full">
+                            <MapPin className="w-3 h-3 flex-shrink-0" />
+                            <span className="truncate">{opp.location.split(',')[0]}</span>
+                          </span>
+                          <span className="inline-flex items-center gap-1.5 flex-shrink-0 whitespace-nowrap">
+                            {opp.isRecurring ? (
+                              <>
+                                <Repeat className="w-3 h-3 flex-shrink-0" />
+                                {formatRecurringShort(opp)}
+                              </>
+                            ) : (
+                              <>
+                                <Calendar className="w-3 h-3 flex-shrink-0" />
                                 {getRelativeDay(opp.date)
                                   ?? new Date(opp.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                              </span>
-                            </>
-                          )}
-                          <span className="opacity-60 flex-shrink-0">&bull;</span>
-                          <Clock className="w-3 h-3 flex-shrink-0" />
-                          <span className="flex-shrink-0">{opp.duration}h</span>
+                              </>
+                            )}
+                            <span className="opacity-60">&bull;</span>
+                            <Clock className="w-3 h-3 flex-shrink-0" />
+                            {opp.duration}h
+                          </span>
                         </div>
                       </div>
                       {/* BOTTOM — one block for every tile size, not a branch per size.
