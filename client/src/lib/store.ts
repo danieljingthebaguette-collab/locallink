@@ -334,7 +334,11 @@ export const useOpportunitiesStore = create<OpportunitiesState>((set, get) => ({
       filtered = filtered.filter(opp =>
         opp.title.toLowerCase().includes(query) ||
         opp.description.toLowerCase().includes(query) ||
-        opp.location.toLowerCase().includes(query)
+        opp.location.toLowerCase().includes(query) ||
+        // Fields too, now that every new post must carry at least one: typing
+        // "tutoring" should find the posts tagged Tutoring, not just the ones
+        // that happen to say the word in their description.
+        (opp.tags ?? []).some(t => t.toLowerCase().includes(query))
       );
     }
 
