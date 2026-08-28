@@ -1012,8 +1012,16 @@ export default function Home() {
                               keeps keying off popularity -- which meant a popular post
                               rendered its desktop content into a phone-sized tile and
                               clipped the bottom off. */}
+                          {/* The hiding lives on a wrapper, not on the <p> itself, and
+                              has to. line-clamp works by setting display:-webkit-box,
+                              so putting md:block on the same element overrode it and
+                              the clamp silently stopped applying -- a long description
+                              then ran to full length and out through the card. Two
+                              display utilities on one element is one too many. */}
                           {showFullDetail && (
-                            <p className="text-sm line-clamp-2 opacity-95 font-medium hidden md:block">{opp.description}</p>
+                            <div className="hidden md:block">
+                              <p className="text-sm line-clamp-3 opacity-95 font-medium">{opp.description}</p>
+                            </div>
                           )}
                           <button
                             onClick={e => { e.stopPropagation(); navigate(`/org/${opp.hostId}`); }}
