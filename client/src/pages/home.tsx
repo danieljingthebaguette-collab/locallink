@@ -722,7 +722,7 @@ export default function Home() {
         {loading && !loaded && (
           <>
           <div className="mb-2 h-16 md:h-20 rounded-3xl border-2 border-dashed border-border/30 bg-secondary/20 animate-pulse" />
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2 auto-rows-[200px] grid-flow-dense mb-12">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2 auto-rows-[240px] grid-flow-dense mb-12">
             {['md:col-span-2 md:row-span-2','md:col-span-2 md:row-span-1','md:col-span-1 md:row-span-1','md:col-span-1 md:row-span-1','md:col-span-2 md:row-span-1','md:col-span-1 md:row-span-1'].map((size, i) => (
               <div key={i} className={cn("rounded-3xl bg-secondary/30 animate-pulse", size)}>
                 <div className="h-full p-6 flex flex-col justify-between">
@@ -847,7 +847,14 @@ export default function Home() {
               </motion.div>
             )}
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2 auto-rows-[200px] grid-flow-dense mb-12">
+            {/* auto-rows was 200px, set back when a card was category, title and a
+                spots line. It has since gained a tags row and a
+                location/date/duration row, leaving content at 193px in a 200px
+                tile -- 7px of slack, and none at all once a title wraps to two
+                lines: that costs 28px more and pushes the spots line out through
+                the bottom under overflow-hidden. 240px fits the two-line case
+                with room to spare. */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2 auto-rows-[240px] grid-flow-dense mb-12">
 
               {/* Opportunity Cards */}
               {filteredOpportunities.map((opp, index) => {
