@@ -7,6 +7,50 @@ const APP_URL = process.env.APP_URL || 'http://localhost:5173';
 // usernames and post titles are free text and would otherwise inject markup
 // into emails delivered under LocalLink branding. Plain-text parts and
 // subject lines are NOT HTML contexts and must stay unescaped.
+// ── Shared look ─────────────────────────────────────────────────────────────
+// The same tokens the site renders with, read off it rather than eyeballed:
+// --primary, --foreground, --border, --muted-foreground, --secondary and
+// --radius from client/src/index.css. Written as literal hex and px because an
+// email has no cascade, no variables, and no stylesheet -- every value has to
+// be inline on the element.
+//
+// The webfonts are named first and then fall back. Gmail and Outlook strip
+// @font-face, so most people see system-ui; naming them still gets the right
+// face in the clients that do allow it, and the fallback stack keeps the rest
+// looking deliberate rather than like Times New Roman.
+const BRAND = {
+  primary: '#254CC1',
+  ink: '#0F1729',
+  body: '#3F4A5C',
+  muted: '#64748B',
+  border: '#DAE0E7',
+  panel: '#F1F5F9',
+  page: '#F9FAFB',
+  card: '#FFFFFF',
+  radius: '6px',
+  headingFont: `'Instrument Sans', system-ui, -apple-system, 'Segoe UI', Arial, sans-serif`,
+  bodyFont: `'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', Arial, sans-serif`,
+};
+
+/** Outer shell every email shares: page ground, white card, wordmark, footer. */
+function layout(bodyHtml: string, footerHtml = ''): string {
+  return `<div style="margin:0;padding:24px 12px;background:${BRAND.page};font-family:${BRAND.bodyFont}">
+  <div style="max-width:520px;margin:0 auto;background:${BRAND.card};border:1px solid ${BRAND.border};border-radius:${BRAND.radius};overflow:hidden">
+    <div style="padding:20px 28px;border-bottom:1px solid ${BRAND.border}">
+      <span style="font-family:${BRAND.headingFont};font-size:19px;font-weight:700;color:${BRAND.ink};letter-spacing:-0.01em">LocalLink</span>
+      <span style="font-family:${BRAND.bodyFont};font-size:12px;color:${BRAND.muted};margin-left:8px">Linking People to Local Action</span>
+    </div>
+    <div style="padding:28px">${bodyHtml}</div>
+  </div>
+  ${footerHtml ? `<div style="max-width:520px;margin:14px auto 0;font-family:${BRAND.bodyFont};font-size:12px;line-height:1.6;color:${BRAND.muted};text-align:center">${footerHtml}</div>` : ''}
+</div>`;
+}
+
+/** Primary action button, matching the site's squared buttons. */
+function button(href: string, label: string): string {
+  return `<a href="${href}" style="display:inline-block;background:${BRAND.primary};color:#ffffff;font-family:${BRAND.headingFont};font-size:15px;font-weight:600;padding:12px 26px;border-radius:${BRAND.radius};text-decoration:none">${label}</a>`;
+}
+
 function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
@@ -224,17 +268,16 @@ export async function sendOnboardingNudgeEmail(
   await sendEmail(
     email,
     'Tell us what you are looking for on LocalLink',
-    `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:24px">
-      <h1 style="color:#6366f1;margin-bottom:4px">LocalLink</h1>
-      <h2 style="margin-top:0">Hi ${usernameHtml}</h2>
-      <p style="color:#444;line-height:1.6">We added a short questionnaire since you joined. It asks what kind of volunteering you enjoy, which towns work for you, and when you are usually free.</p>
-      <p style="color:#444;line-height:1.6">It takes about a minute, every question is optional, and it lets us mark the opportunities that actually fit you.</p>
-      <a href="${surveyUrl}" style="display:inline-block;background:#6366f1;color:white;padding:14px 32px;border-radius:999px;text-decoration:none;font-weight:600;margin-top:8px">Fill it in</a>
-      <p style="color:#aaa;font-size:12px;margin-top:28px">
-        You are getting this once because you have a LocalLink volunteer account.<br>
-        <a href="${unsubUrl}" style="color:#aaa">Unsubscribe from emails like this</a>
-      </p>
-    </div>`,
+    layout(
+      `<h1 style="font-family:${BRAND.headingFont};font-size:22px;font-weight:700;color:${BRAND.ink};margin:0 0 14px;letter-spacing:-0.01em">Hi ${usernameHtml}</h1>
+       <p style="font-size:15px;line-height:1.65;color:${BRAND.body};margin:0 0 14px">We added a short questionnaire since you joined. It asks what kind of volunteering you enjoy, which towns work for you, and when you are usually free.</p>
+       <div style="background:${BRAND.panel};border:1px solid ${BRAND.border};border-radius:${BRAND.radius};padding:14px 18px;margin:0 0 20px">
+         <p style="font-size:14px;line-height:1.6;color:${BRAND.body};margin:0">Takes about a minute. Every question is optional, and it lets us mark the opportunities that actually fit you.</p>
+       </div>
+       ${button(surveyUrl, 'Fill it in')}`,
+      `You are getting this once because you have a LocalLink volunteer account.<br>
+       <a href="${unsubUrl}" style="color:${BRAND.muted};text-decoration:underline">Unsubscribe from emails like this</a>`
+    ),
     `Hi ${username},\n\nWe added a short questionnaire since you joined. It asks what kind of volunteering you enjoy, which towns work for you, and when you are usually free.\n\nIt takes about a minute, every question is optional, and it lets us mark the opportunities that actually fit you.\n\nFill it in: ${surveyUrl}\n\nYou are getting this once because you have a LocalLink volunteer account.\nUnsubscribe: ${unsubUrl}`,
   );
 }
