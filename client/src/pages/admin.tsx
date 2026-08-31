@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { useAuthStore, useAdminStore, useOpportunitiesStore, type JoinLink } from '@/lib/store';
 import { VerifiedBadge } from '@/components/VerifiedBadge';
-import { Ban, CheckCircle2, TrendingUp, Scale, ClipboardCheck, XCircle } from 'lucide-react';
+import { Ban, CheckCircle2, TrendingUp, Scale, ClipboardCheck, XCircle, Mail, Bell } from 'lucide-react';
 import type { AppUser, Opportunity } from '@/lib/mockData';
 import { AVAILABILITY_OPTIONS, CATEGORIES, TOWNS, type Category } from '@/lib/mockData';
 import { getEditCategoryOptions, getCategoryTint, getCategoryLabel } from '@/lib/categoryUtils';
@@ -640,6 +640,43 @@ function UsersTab({
   const [searchQuery, setSearchQuery] = useState('');
   const [confirmDeleteUser, setConfirmDeleteUser] = useState<AppUser | null>(null);
   const [confirmSuspendUser, setConfirmSuspendUser] = useState<AppUser | null>(null);
+  const { toast } = useToast();
+  const [nudging, setNudging] = useState<string | null>(null);
+
+  // Bell asks for a message first: blank sends the questionnaire nudge, which
+  // is the usual case, and anything typed is delivered verbatim. Mail sends
+  // the questionnaire email straight away -- there is nothing to compose.
+  const onNudge = async (user: AppUser, channel: 'email' | 'notification') => {
+    let message = '';
+    if (channel === 'notification') {
+      const typed = window.prompt(
+        `Send ${user.username} a notification.\n\nLeave blank to send the questionnaire nudge, or type a message:`,
+        ''
+      );
+      if (typed === null) return; // cancelled
+      message = typed;
+    }
+    setNudging(`${user.id}:${channel}`);
+    try {
+      const res = await fetch(`/api/admin/users/${user.id}/nudge`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('locallink_token')}` },
+        body: JSON.stringify({ channel, message }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Failed');
+      toast({
+        title: channel === 'email' ? `Emailed ${user.username}` : `Notified ${user.username}`,
+        description: channel === 'email'
+          ? 'The questionnaire email is on its way.'
+          : (message.trim() ? 'Your message is in their notifications.' : 'The questionnaire nudge is in their notifications.'),
+      });
+    } catch (e: any) {
+      toast({ title: `Couldn't reach ${user.username}`, description: e.message, variant: 'destructive' });
+    } finally {
+      setNudging(null);
+    }
+  };
   // Collapsed by default, one at a time -- a list of users is scanned, not
   // read top to bottom, so preferences only take up room once actually asked
   // for. Same reasoning as the "What to Expect" fold on a post.
@@ -760,6 +797,32 @@ function UsersTab({
                       >
                         <BadgeCheck className="w-3 h-3 mr-1" />
                         {user.verified ? 'Unverify' : 'Verify'}
+                      </Button>
+                    )}
+                    {/* Nudge one person: the questionnaire by email, or a
+                        notification in the site. Hidden for anyone the nudge
+                        makes no sense for -- organizations and admins never
+                        answer it, and a volunteer who already has is done. */}
+                    {user.accountType === 'volunteer' && !user.isAdmin && !user.onboardingCompletedAt && !user.banned && (
+                      <Button
+                        size="sm" variant="outline"
+                        className="rounded-md text-xs px-2 text-primary border-primary/30 hover:bg-primary/5"
+                        title={`Email the questionnaire to ${user.username}`}
+                        disabled={nudging === `${user.id}:email`}
+                        onClick={() => onNudge(user, 'email')}
+                      >
+                        <Mail className="w-3.5 h-3.5" />
+                      </Button>
+                    )}
+                    {!user.banned && (
+                      <Button
+                        size="sm" variant="outline"
+                        className="rounded-md text-xs px-2 text-primary border-primary/30 hover:bg-primary/5"
+                        title={`Send ${user.username} a notification on the site`}
+                        disabled={nudging === `${user.id}:notification`}
+                        onClick={() => onNudge(user, 'notification')}
+                      >
+                        <Bell className="w-3.5 h-3.5" />
                       </Button>
                     )}
                     {user.banned ? (

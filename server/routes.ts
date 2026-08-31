@@ -1517,6 +1517,65 @@ const NUDGE_TARGETS = `
     AND banned = 0
 `;
 
+// Nudge one person, rather than the whole cohort. Same two channels as the
+// bulk action: an email, or the in-site notification.
+router.post('/api/admin/users/:id/nudge', requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const { channel, message } = req.body as { channel?: string; message?: string };
+    if (channel !== 'email' && channel !== 'notification') {
+      return res.status(400).json({ error: "channel must be 'email' or 'notification'" });
+    }
+    const u = db.prepare(
+      `SELECT id, username, email, accountType, banned, emailVerified, emailReminders,
+              unsubToken, onboardingCompletedAt
+       FROM users WHERE id = ?`
+    ).get(req.params.id) as any;
+    if (!u) return res.status(404).json({ error: 'User not found' });
+    if (u.banned) return res.status(400).json({ error: 'That account is suspended' });
+
+    const now = new Date().toISOString();
+
+    if (channel === 'notification') {
+      // A blank message means the questionnaire nudge, which is the common
+      // case; anything typed is sent verbatim. The questionnaire one reuses
+      // the fixed id so it can't stack up with the bulk send's copy, but a
+      // written message is its own notification and always goes through.
+      const custom = (message || '').trim().slice(0, MAX_ONBOARDING_TEXT);
+      if (custom) {
+        db.prepare(
+          'INSERT INTO notifications (id, userId, type, message, read, createdAt) VALUES (?, ?, ?, ?, 0, ?)'
+        ).run(randomUUID(), u.id, 'admin_message', custom, now);
+      } else {
+        db.prepare(
+          'INSERT OR IGNORE INTO notifications (id, userId, type, message, read, createdAt) VALUES (?, ?, ?, ?, 0, ?)'
+        ).run(
+          `onboarding-reminder-${u.id}`, u.id, 'onboarding_reminder',
+          'We added a short questionnaire — it takes a minute and lets us mark the opportunities that actually fit you.',
+          now
+        );
+      }
+      return res.json({ sent: true, channel });
+    }
+
+    // channel === 'email'
+    if (!u.emailVerified) return res.status(400).json({ error: 'That address is not verified yet' });
+    if (!u.emailReminders) return res.status(400).json({ error: 'They have unsubscribed from emails' });
+    if (String(u.email).endsWith('@example.com')) {
+      return res.status(400).json({ error: 'That is a placeholder address' });
+    }
+    try {
+      await sendOnboardingNudgeEmail(u.email, u.username, u.unsubToken || '');
+    } catch {
+      return res.status(502).json({ error: "Couldn't send — the mail provider rejected it" });
+    }
+    // Stamped so the bulk send skips them afterwards.
+    db.prepare('UPDATE users SET onboardingNudgedAt = ? WHERE id = ?').run(now, u.id);
+    return res.json({ sent: true, channel });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/api/admin/onboarding-nudge', requireAdmin, (_req: Request, res: Response) => {
   try {
     const pending = (db.prepare(`SELECT COUNT(*) as c ${NUDGE_TARGETS}`).get() as any).c;

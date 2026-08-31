@@ -844,7 +844,7 @@ export interface AppNotification {
   // client compares against with === need to be here; everything else
   // already falls through to Navigation.tsx's default icon/style via
   // .includes(), which doesn't need the literal type.
-  type: 'interest' | 'cancel' | 'admin_delete' | 'admin_edit' | 'reopen' | 'post_approved' | 'post_denied' | 'onboarding_reminder';
+  type: 'interest' | 'cancel' | 'admin_delete' | 'admin_edit' | 'reopen' | 'post_approved' | 'post_denied' | 'onboarding_reminder' | 'admin_message';
   message: string;
   postId: string | null;
   read: boolean;
