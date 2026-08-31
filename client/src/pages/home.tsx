@@ -722,7 +722,7 @@ export default function Home() {
         {loading && !loaded && (
           <>
           <div className="mb-2 h-16 md:h-20 rounded-3xl border-2 border-dashed border-border/30 bg-secondary/20 animate-pulse" />
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2 auto-rows-[240px] grid-flow-dense mb-12">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2 auto-rows-[232px] grid-flow-dense mb-12">
             {['md:col-span-2 md:row-span-2','md:col-span-2 md:row-span-1','md:col-span-1 md:row-span-1','md:col-span-1 md:row-span-1','md:col-span-2 md:row-span-1','md:col-span-1 md:row-span-1'].map((size, i) => (
               <div key={i} className={cn("rounded-3xl bg-secondary/30 animate-pulse", size)}>
                 <div className="h-full p-6 flex flex-col justify-between">
@@ -854,7 +854,7 @@ export default function Home() {
                 lines: that costs 28px more and pushes the spots line out through
                 the bottom under overflow-hidden. 240px fits the two-line case
                 with room to spare. */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2 auto-rows-[240px] grid-flow-dense mb-12">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2 auto-rows-[232px] grid-flow-dense mb-12">
 
               {/* Opportunity Cards */}
               {filteredOpportunities.map((opp, index) => {
@@ -928,9 +928,17 @@ export default function Home() {
                         fixed height and were finishing 2-6px past it once the host
                         line went in. The 8px this frees vertically is the difference. */}
                     <div className={cn(
-                      "relative h-full flex flex-col justify-between z-10 text-white",
+                      "relative h-full flex flex-col z-10 text-white",
+                      // justify-between only on the 2x2. It pins the two blocks to
+                      // opposite edges, and on a tile with height to spare that puts
+                      // the slack in the MIDDLE -- a hole between the divider and the
+                      // organization. On the big tile that reads as the photo showing
+                      // through; on the smaller two it just reads as broken. They flow
+                      // from the top instead, so the leftover space collects at the
+                      // bottom over the image, where it looks deliberate.
+                      showFullDetail ? "justify-between" : "justify-start",
                       // p-6 only once the card is actually the bigger tile, which is
-                      // an md: thing. On a phone it is the same 200px box as the rest.
+                      // an md: thing. On a phone it is the same box as the rest.
                       showFullDetail ? "p-5 md:p-6" : "p-5"
                     )}>
                       {/* TOP — always visible, separator sits right below the tags */}
