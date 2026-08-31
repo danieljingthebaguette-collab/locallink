@@ -217,6 +217,10 @@ export async function sendOnboardingNudgeEmail(
 ): Promise<void> {
   const usernameHtml = escapeHtml(username);
   const unsubUrl = `${APP_URL}/api/unsubscribe?token=${unsubToken}`;
+  // Opens the questionnaire on arrival rather than dropping them on the board
+  // and hoping the modal fires. Survives a signed-out click: the flag is held
+  // until they sign in.
+  const surveyUrl = `${APP_URL}/?survey=1`;
   await sendEmail(
     email,
     'Tell us what you are looking for on LocalLink',
@@ -225,12 +229,12 @@ export async function sendOnboardingNudgeEmail(
       <h2 style="margin-top:0">Hi ${usernameHtml}</h2>
       <p style="color:#444;line-height:1.6">We added a short questionnaire since you joined. It asks what kind of volunteering you enjoy, which towns work for you, and when you are usually free.</p>
       <p style="color:#444;line-height:1.6">It takes about a minute, every question is optional, and it lets us mark the opportunities that actually fit you.</p>
-      <a href="${APP_URL}" style="display:inline-block;background:#6366f1;color:white;padding:14px 32px;border-radius:999px;text-decoration:none;font-weight:600;margin-top:8px">Fill it in</a>
+      <a href="${surveyUrl}" style="display:inline-block;background:#6366f1;color:white;padding:14px 32px;border-radius:999px;text-decoration:none;font-weight:600;margin-top:8px">Fill it in</a>
       <p style="color:#aaa;font-size:12px;margin-top:28px">
         You are getting this once because you have a LocalLink volunteer account.<br>
         <a href="${unsubUrl}" style="color:#aaa">Unsubscribe from emails like this</a>
       </p>
     </div>`,
-    `Hi ${username},\n\nWe added a short questionnaire since you joined. It asks what kind of volunteering you enjoy, which towns work for you, and when you are usually free.\n\nIt takes about a minute, every question is optional, and it lets us mark the opportunities that actually fit you.\n\nFill it in: ${APP_URL}\n\nYou are getting this once because you have a LocalLink volunteer account.\nUnsubscribe: ${unsubUrl}`,
+    `Hi ${username},\n\nWe added a short questionnaire since you joined. It asks what kind of volunteering you enjoy, which towns work for you, and when you are usually free.\n\nIt takes about a minute, every question is optional, and it lets us mark the opportunities that actually fit you.\n\nFill it in: ${surveyUrl}\n\nYou are getting this once because you have a LocalLink volunteer account.\nUnsubscribe: ${unsubUrl}`,
   );
 }

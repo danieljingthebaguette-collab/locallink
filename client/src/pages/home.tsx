@@ -99,7 +99,7 @@ function InterestBurst() {
 export default function Home() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
-  const { isLoggedIn, currentUser, markWelcomeSeen } = useAuthStore();
+  const { isLoggedIn, currentUser, markWelcomeSeen, showOnboardingPrompt } = useAuthStore();
   // Read back what the onboarding questionnaire collected. Organizations never
   // answer it, so this stays empty for them and every match count falls to 0.
   const myInterests = currentUser?.onboardingInterests ?? null;
@@ -186,6 +186,31 @@ export default function Home() {
       window.history.replaceState({}, '', window.location.pathname);
     }
   }, [loaded, opportunities]);
+
+  // Deep link: ?survey=1 opens the questionnaire. This is what the nudge email
+  // points at, so it has to work for someone who is signed out on the device
+  // they read their mail on -- otherwise the link lands them on the board with
+  // nothing happening. The intent is parked in sessionStorage and fires once
+  // they are actually signed in.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const wantsSurvey = params.get('survey') === '1';
+    if (wantsSurvey) {
+      sessionStorage.setItem('locallink_open_survey', '1');
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+    if (sessionStorage.getItem('locallink_open_survey') !== '1') return;
+
+    if (!isLoggedIn) {
+      // Keep the flag; they land back here after signing in.
+      if (wantsSurvey) navigate('/account');
+      return;
+    }
+    sessionStorage.removeItem('locallink_open_survey');
+    // Harmless if they already did it -- the modal will not open once
+    // onboardingCompletedAt is set, whoever asks it to.
+    showOnboardingPrompt();
+  }, [isLoggedIn, navigate, showOnboardingPrompt]);
 
   // Re-animate cards when sort or category changes
   useEffect(() => {
