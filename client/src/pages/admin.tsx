@@ -643,19 +643,17 @@ function UsersTab({
   const { toast } = useToast();
   const [nudging, setNudging] = useState<string | null>(null);
 
-  // Bell asks for a message first: blank sends the questionnaire nudge, which
-  // is the usual case, and anything typed is delivered verbatim. Mail sends
-  // the questionnaire email straight away -- there is nothing to compose.
-  const onNudge = async (user: AppUser, channel: 'email' | 'notification') => {
-    let message = '';
-    if (channel === 'notification') {
-      const typed = window.prompt(
-        `Send ${user.username} a notification.\n\nLeave blank to send the questionnaire nudge, or type a message:`,
-        ''
-      );
-      if (typed === null) return; // cancelled
-      message = typed;
-    }
+  // Bell opens a dialog to compose in: blank sends the questionnaire nudge,
+  // which is the usual case, and anything typed is delivered verbatim. Mail
+  // sends the questionnaire email straight away -- there is nothing to write.
+  //
+  // A real dialog rather than window.prompt(), which is not dependable: it
+  // throws outright in an embedded frame and Chrome suppresses it in
+  // cross-origin ones, so the button would have looked broken with no clue why.
+  const [composeFor, setComposeFor] = useState<AppUser | null>(null);
+  const [composeText, setComposeText] = useState('');
+
+  const sendNudge = async (user: AppUser, channel: 'email' | 'notification', message = '') => {
     setNudging(`${user.id}:${channel}`);
     try {
       const res = await fetch(`/api/admin/users/${user.id}/nudge`, {
@@ -675,6 +673,8 @@ function UsersTab({
       toast({ title: `Couldn't reach ${user.username}`, description: e.message, variant: 'destructive' });
     } finally {
       setNudging(null);
+      setComposeFor(null);
+      setComposeText('');
     }
   };
   // Collapsed by default, one at a time -- a list of users is scanned, not
@@ -748,6 +748,40 @@ function UsersTab({
         </AlertDialogContent>
       </AlertDialog>
 
+      {/* Compose a notification for one person */}
+      <AlertDialog open={!!composeFor} onOpenChange={(open) => { if (!open) { setComposeFor(null); setComposeText(''); } }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Notify {composeFor?.username}</AlertDialogTitle>
+            <AlertDialogDescription>
+              This lands in their notification bell on the site. Leave it blank to send the
+              standard questionnaire nudge, or write your own message.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <Textarea
+            value={composeText}
+            onChange={(e) => setComposeText(e.target.value)}
+            placeholder="Leave blank for the questionnaire nudge, or type a message…"
+            maxLength={300}
+            className="min-h-[92px] resize-none"
+          />
+          <p className="text-xs text-muted-foreground -mt-1">
+            {composeText.trim()
+              ? `${composeText.trim().length}/300 — sent as written.`
+              : 'Will send: “We added a short questionnaire — it takes a minute and lets us mark the opportunities that actually fit you.”'}
+          </p>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => composeFor && sendNudge(composeFor, 'notification', composeText)}
+              disabled={!!nudging}
+            >
+              {nudging ? 'Sending…' : 'Send notification'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {loading ? (
         <div className="text-center py-12 text-muted-foreground">Loading users...</div>
       ) : filteredUsers.length === 0 ? (
@@ -809,7 +843,7 @@ function UsersTab({
                         className="rounded-md text-xs px-2 text-primary border-primary/30 hover:bg-primary/5"
                         title={`Email the questionnaire to ${user.username}`}
                         disabled={nudging === `${user.id}:email`}
-                        onClick={() => onNudge(user, 'email')}
+                        onClick={() => sendNudge(user, 'email')}
                       >
                         <Mail className="w-3.5 h-3.5" />
                       </Button>
@@ -820,7 +854,7 @@ function UsersTab({
                         className="rounded-md text-xs px-2 text-primary border-primary/30 hover:bg-primary/5"
                         title={`Send ${user.username} a notification on the site`}
                         disabled={nudging === `${user.id}:notification`}
-                        onClick={() => onNudge(user, 'notification')}
+                        onClick={() => { setComposeText(''); setComposeFor(user); }}
                       >
                         <Bell className="w-3.5 h-3.5" />
                       </Button>
