@@ -265,6 +265,84 @@ function bucketByMonth(data: { date: string; signups: number; users: number }[])
   return Array.from(map.values());
 }
 
+/**
+ * One-off nudge for volunteers who signed up before the questionnaire existed.
+ * Shows the count first and asks before sending, because the email half cannot
+ * be taken back. Safe to press twice: the server stamps everyone it processes,
+ * so a second press finds nobody.
+ */
+function OnboardingNudgeCard() {
+  const { toast } = useToast();
+  const [counts, setCounts] = useState<{ pending: number; emailable: number; alreadyNudged: number } | null>(null);
+  const [sending, setSending] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+
+  const load = () => {
+    const token = localStorage.getItem('locallink_token');
+    fetch('/api/admin/onboarding-nudge', { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => (r.ok ? r.json() : null))
+      .then(setCounts)
+      .catch(() => {});
+  };
+  useEffect(load, []);
+
+  const send = async () => {
+    setSending(true);
+    try {
+      const token = localStorage.getItem('locallink_token');
+      const res = await fetch('/api/admin/onboarding-nudge', {
+        method: 'POST', headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error(String(res.status));
+      const r = await res.json();
+      toast({
+        title: `Notified ${r.notified} volunteer${r.notified === 1 ? '' : 's'}`,
+        description: `${r.emailed} email${r.emailed === 1 ? '' : 's'} sent${r.emailFailed ? `, ${r.emailFailed} failed` : ''}.`,
+      });
+      setConfirming(false);
+      load();
+    } catch {
+      toast({ title: "Couldn't send the nudge", variant: 'destructive' });
+    } finally {
+      setSending(false);
+    }
+  };
+
+  if (!counts) return null;
+
+  return (
+    <div className="rounded-2xl bg-card border border-border p-6 space-y-3">
+      <div>
+        <h3 className="font-heading font-semibold text-foreground">Questionnaire nudge</h3>
+        <p className="text-sm text-muted-foreground mt-1">
+          {counts.pending === 0
+            ? `Everyone has been asked. ${counts.alreadyNudged} volunteer${counts.alreadyNudged === 1 ? '' : 's'} nudged so far.`
+            : `${counts.pending} volunteer${counts.pending === 1 ? " hasn't" : "s haven't"} filled in the questionnaire yet, and ${counts.pending === 1 ? 'has' : 'have'}n't been asked. ${counts.emailable} can be emailed; any others get the in-site notification only.`}
+        </p>
+      </div>
+      {counts.pending > 0 && (
+        confirming ? (
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-sm text-foreground font-medium">
+              Send to {counts.pending}? {counts.emailable} will get a real email.
+            </span>
+            <Button size="sm" onClick={send} disabled={sending} className="rounded-md">
+              {sending ? 'Sending…' : 'Yes, send'}
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setConfirming(false)} disabled={sending} className="rounded-md">
+              Cancel
+            </Button>
+          </div>
+        ) : (
+          <Button size="sm" onClick={() => setConfirming(true)} className="rounded-md">
+            Send the nudge
+          </Button>
+        )
+      )}
+    </div>
+  );
+}
+
 function OverviewTab({ stats, users, opportunities }: { stats: any; users: AppUser[]; opportunities: Opportunity[] }) {
   const [rangeDays, setRangeDays] = useState<7 | 14 | 30 | 365>(14);
   const [analytics, setAnalytics] = useState<{ date: string; signups: number; users: number }[]>([]);
@@ -491,6 +569,9 @@ function OverviewTab({ stats, users, opportunities }: { stats: any; users: AppUs
           </p>
         </div>
       </div>
+
+      {/* Questionnaire nudge — one-off, for volunteers who joined before it existed */}
+      <OnboardingNudgeCard />
 
       {/* Recent Users */}
       <div className="rounded-2xl bg-card border border-border p-6">

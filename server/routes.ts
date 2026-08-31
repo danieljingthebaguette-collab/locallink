@@ -8,7 +8,7 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { randomUUID } from 'crypto';
 import { toAppLocalString } from './time.js';
-import { sendVerificationEmail, sendPasswordResetEmail, sendSignupNotificationEmail, sendPostApprovedEmail, sendPostDeniedEmail, sendEventCancelledEmail, sendEventReminderEmail } from './email.js';
+import { sendVerificationEmail, sendPasswordResetEmail, sendSignupNotificationEmail, sendPostApprovedEmail, sendPostDeniedEmail, sendEventCancelledEmail, sendEventReminderEmail, sendOnboardingNudgeEmail } from './email.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -1507,6 +1507,86 @@ router.post('/api/admin/opportunities/:id/deny', requireAdmin, async (req: Reque
 // does `r.ok ? r.json() : []`, so a missing route reaches the chart as an
 // empty array and renders "No data for this period" — which is exactly what a
 // genuinely quiet fortnight looks like.
+// Who still hasn't done the questionnaire. Read-only, so the admin can see the
+// number before deciding to send anything.
+const NUDGE_TARGETS = `
+  FROM users
+  WHERE accountType = 'volunteer'
+    AND onboardingCompletedAt IS NULL
+    AND onboardingNudgedAt IS NULL
+    AND banned = 0
+`;
+
+router.get('/api/admin/onboarding-nudge', requireAdmin, (_req: Request, res: Response) => {
+  try {
+    const pending = (db.prepare(`SELECT COUNT(*) as c ${NUDGE_TARGETS}`).get() as any).c;
+    const emailable = (db.prepare(
+      `SELECT COUNT(*) as c ${NUDGE_TARGETS} AND emailVerified = 1 AND emailReminders = 1 AND email NOT LIKE '%@example.com'`
+    ).get() as any).c;
+    const alreadyNudged = (db.prepare(
+      "SELECT COUNT(*) as c FROM users WHERE accountType='volunteer' AND onboardingNudgedAt IS NOT NULL"
+    ).get() as any).c;
+    return res.json({ pending, emailable, alreadyNudged });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Sends the nudge. Safe to re-run: onboardingNudgedAt is stamped on everyone it
+// processes, so a second call finds nobody. The in-site notification goes to
+// every target; the email only to those who verified an address and still have
+// reminders on -- a nudge is not worth overriding someone's unsubscribe.
+router.post('/api/admin/onboarding-nudge', requireAdmin, async (_req: Request, res: Response) => {
+  try {
+    const targets = db.prepare(
+      `SELECT id, username, email, emailVerified, emailReminders, unsubToken ${NUDGE_TARGETS}`
+    ).all() as any[];
+
+    const now = new Date().toISOString();
+    const notify = db.prepare(
+      'INSERT OR IGNORE INTO notifications (id, userId, type, message, read, createdAt) VALUES (?, ?, ?, ?, 0, ?)'
+    );
+    const markNudged = db.prepare('UPDATE users SET onboardingNudgedAt = ? WHERE id = ?');
+    const wantsEmail = (u: any) =>
+      u.emailVerified && u.emailReminders && !String(u.email).endsWith('@example.com');
+
+    // The in-site notification is free and idempotent, so everyone gets it now.
+    db.transaction(() => {
+      for (const u of targets) {
+        notify.run(
+          `onboarding-reminder-${u.id}`, u.id, 'onboarding_reminder',
+          'We added a short questionnaire — it takes a minute and lets us mark the opportunities that actually fit you.',
+          now
+        );
+        // Stamped straight away only for people who get no email; there is
+        // nothing left to go wrong for them.
+        if (!wantsEmail(u)) markNudged.run(now, u.id);
+      }
+    })();
+
+    // Everyone else is stamped only once their email actually goes out. The
+    // stamp is what stops a second send, so stamping before the attempt would
+    // mean a Brevo outage silently skipped those people forever -- they would
+    // look "already nudged" and never be retried. This way a failure leaves
+    // them pending and pressing the button again picks up exactly them.
+    let emailed = 0, emailFailed = 0;
+    for (const u of targets) {
+      if (!wantsEmail(u)) continue;
+      try {
+        await sendOnboardingNudgeEmail(u.email, u.username, u.unsubToken || '');
+        markNudged.run(now, u.id);
+        emailed++;
+      } catch {
+        emailFailed++;
+      }
+    }
+
+    return res.json({ notified: targets.length, emailed, emailFailed });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/api/admin/analytics', requireAdmin, (req: Request, res: Response) => {
   try {
     const ALLOWED_DAYS = [7, 14, 30, 365];

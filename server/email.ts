@@ -206,3 +206,31 @@ export async function sendEventReminderEmail(
   );
 }
 
+
+/**
+ * One-off nudge asking a volunteer who joined before the questionnaire existed
+ * to fill it in. Carries the unsubscribe link because it is the only bulk mail
+ * this app sends -- everything else is a reply to something the person did.
+ */
+export async function sendOnboardingNudgeEmail(
+  email: string, username: string, unsubToken: string
+): Promise<void> {
+  const usernameHtml = escapeHtml(username);
+  const unsubUrl = `${APP_URL}/api/unsubscribe?token=${unsubToken}`;
+  await sendEmail(
+    email,
+    'Tell us what you are looking for on LocalLink',
+    `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:24px">
+      <h1 style="color:#6366f1;margin-bottom:4px">LocalLink</h1>
+      <h2 style="margin-top:0">Hi ${usernameHtml}</h2>
+      <p style="color:#444;line-height:1.6">We added a short questionnaire since you joined. It asks what kind of volunteering you enjoy, which towns work for you, and when you are usually free.</p>
+      <p style="color:#444;line-height:1.6">It takes about a minute, every question is optional, and it lets us mark the opportunities that actually fit you.</p>
+      <a href="${APP_URL}" style="display:inline-block;background:#6366f1;color:white;padding:14px 32px;border-radius:999px;text-decoration:none;font-weight:600;margin-top:8px">Fill it in</a>
+      <p style="color:#aaa;font-size:12px;margin-top:28px">
+        You are getting this once because you have a LocalLink volunteer account.<br>
+        <a href="${unsubUrl}" style="color:#aaa">Unsubscribe from emails like this</a>
+      </p>
+    </div>`,
+    `Hi ${username},\n\nWe added a short questionnaire since you joined. It asks what kind of volunteering you enjoy, which towns work for you, and when you are usually free.\n\nIt takes about a minute, every question is optional, and it lets us mark the opportunities that actually fit you.\n\nFill it in: ${APP_URL}\n\nYou are getting this once because you have a LocalLink volunteer account.\nUnsubscribe: ${unsubUrl}`,
+  );
+}
