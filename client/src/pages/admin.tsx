@@ -274,15 +274,28 @@ function bucketByMonth(data: { date: string; signups: number; users: number }[])
 function OnboardingNudgeCard() {
   const { toast } = useToast();
   const [counts, setCounts] = useState<{ pending: number; emailable: number; alreadyNudged: number } | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [confirming, setConfirming] = useState(false);
 
+  // Failures are shown, not swallowed. This used to be
+  // `r.ok ? r.json() : null` followed by `if (!counts) return null`, so any
+  // error at all -- an expired token, a 500 -- deleted the whole card from the
+  // page with nothing to see. That is precisely how the missing analytics
+  // route stayed hidden, and it hid this one too.
   const load = () => {
     const token = localStorage.getItem('locallink_token');
+    setLoadError(null);
     fetch('/api/admin/onboarding-nudge', { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => (r.ok ? r.json() : null))
+      .then(async r => {
+        if (!r.ok) {
+          const body = await r.json().catch(() => ({}));
+          throw new Error(body.error || `the server returned ${r.status}`);
+        }
+        return r.json();
+      })
       .then(setCounts)
-      .catch(() => {});
+      .catch((e: Error) => setLoadError(e.message));
   };
   useEffect(load, []);
 
@@ -308,12 +321,22 @@ function OnboardingNudgeCard() {
     }
   };
 
-  if (!counts) return null;
-
   return (
     <div className="rounded-2xl bg-card border border-border p-6 space-y-3">
       <div>
         <h3 className="font-heading font-semibold text-foreground">Questionnaire nudge</h3>
+        {loadError && (
+          <p className="text-sm text-red-600 mt-1">
+            Couldn't load the count — {loadError}.{' '}
+            <button onClick={load} className="underline font-medium">Try again</button>
+          </p>
+        )}
+        {!counts && !loadError && (
+          <p className="text-sm text-muted-foreground mt-1">Checking who still needs asking…</p>
+        )}
+      </div>
+      {counts && (<>
+      <div>
         <p className="text-sm text-muted-foreground mt-1">
           {counts.pending === 0
             ? `Everyone has been asked. ${counts.alreadyNudged} volunteer${counts.alreadyNudged === 1 ? '' : 's'} nudged so far.`
@@ -339,6 +362,7 @@ function OnboardingNudgeCard() {
           </Button>
         )
       )}
+      </>)}
     </div>
   );
 }
