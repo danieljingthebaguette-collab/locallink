@@ -408,6 +408,23 @@ try {
 // shipped -- a separate idempotent block rather than folding into the one
 // above, since that one's guard column (onboardingCompletedAt) already
 // exists on every database that predates this change.
+// One-time repair for the first questionnaire send.
+//
+// That run stamped everyone it processed, including people it had not emailed
+// because their address was never verified. Those accounts cannot log in at
+// all, so the in-site notification they were given sits in a bell they can
+// never open -- they received nothing, and the stamp then excluded them from
+// every future nudge. Clearing it puts them back in the queue.
+//
+// Narrow on purpose: only unverified accounts, which are exactly the ones that
+// could not have been emailed. Anyone verified either got the email or can at
+// least see the notification, and keeps their stamp. Idempotent.
+db.exec(`
+  UPDATE users SET onboardingNudgedAt = NULL
+  WHERE onboardingNudgedAt IS NOT NULL
+    AND emailVerified = 0
+`);
+
 // Records that we already nudged this person about the questionnaire, so the
 // admin action can be re-run without emailing anyone twice. The in-site
 // notification dedupes on its own (fixed id + INSERT OR IGNORE); email does

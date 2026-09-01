@@ -1640,9 +1640,13 @@ router.post('/api/admin/onboarding-nudge', requireAdmin, async (_req: Request, r
           'We added a short questionnaire — it takes a minute and lets us mark the opportunities that actually fit you.',
           now
         );
-        // Stamped straight away only for people who get no email; there is
-        // nothing left to go wrong for them.
-        if (!wantsEmail(u)) markNudged.run(now, u.id);
+        // Stamped straight away only where the in-site notification is
+        // actually reachable, which means a verified account -- login refuses
+        // an unverified one, so that notification would sit in a bell its owner
+        // can never open. Marking those people "nudged" told us they had been
+        // reached when they had received nothing at all, and permanently
+        // excluded them from ever being nudged again.
+        if (!wantsEmail(u) && u.emailVerified) markNudged.run(now, u.id);
       }
     })();
 
