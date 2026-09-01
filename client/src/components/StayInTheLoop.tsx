@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Bell, Share, Plus, X, Check, Smartphone } from 'lucide-react';
+import { Bell, Share, Plus, X, Check, Smartphone, SlidersHorizontal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { useAuthStore } from '@/lib/store';
 import {
-  pushSupported, isIos, isStandalone, needsInstallFirst, permission, enablePush, iosBrowser,
+  pushSupported, isIos, isStandalone, needsInstallFirst, permission, enablePush, iosBrowser, isBlocked,
 } from '@/lib/push';
 
 const SEEN_KEY = 'locallink_loop_prompt_seen';
@@ -73,6 +73,11 @@ export default function StayInTheLoop({ suppressed }: { suppressed?: boolean }) 
   // restriction — but not Safari's toolbar. Sending a Chrome user to "Share at
   // the bottom" points at a button that isn't there.
   const inSafari = iosBrowser() === 'safari';
+  // Blocked is a dead end for the page: requestPermission() resolves to denied
+  // in about a millisecond without showing anything, so offering the button
+  // here would be offering a button that visibly does nothing. Only the
+  // browser's own site settings can undo it.
+  const blocked = !iosNeedsInstall && isBlocked();
 
   return (
     <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-4 bg-black/40 backdrop-blur-[2px]">
@@ -116,6 +121,24 @@ export default function StayInTheLoop({ suppressed }: { suppressed?: boolean }) 
               <li className="flex items-start gap-2.5">
                 <span className="w-5 h-5 rounded-full bg-secondary text-[11px] font-bold flex items-center justify-center flex-shrink-0 mt-0.5">{inSafari ? 3 : 4}</span>
                 <span>Open LocalLink from your Home Screen and turn on notifications</span>
+              </li>
+            </ol>
+            <Button onClick={() => close()} className="w-full rounded-md">Got it</Button>
+          </>
+        ) : blocked ? (
+          <>
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              Notifications are blocked for LocalLink, so your browser won't even ask. You can
+              turn them back on in two taps:
+            </p>
+            <ol className="text-sm text-foreground space-y-2.5">
+              <li className="flex items-start gap-2.5">
+                <span className="w-5 h-5 rounded-full bg-secondary text-[11px] font-bold flex items-center justify-center flex-shrink-0 mt-0.5">1</span>
+                <span>Click the <SlidersHorizontal className="w-4 h-4 inline mx-0.5 text-primary" /> icon just left of the address bar</span>
+              </li>
+              <li className="flex items-start gap-2.5">
+                <span className="w-5 h-5 rounded-full bg-secondary text-[11px] font-bold flex items-center justify-center flex-shrink-0 mt-0.5">2</span>
+                <span>Switch <strong className="font-semibold">Notifications</strong> on, or choose <strong className="font-semibold">Reset permission</strong>, then reload</span>
               </li>
             </ol>
             <Button onClick={() => close()} className="w-full rounded-md">Got it</Button>

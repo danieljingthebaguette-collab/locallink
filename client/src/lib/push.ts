@@ -61,6 +61,11 @@ export function permission(): NotificationPermission | 'unsupported' {
   return pushSupported() ? Notification.permission : 'unsupported';
 }
 
+/** Already refused. Nothing the page can do brings the prompt back. */
+export function isBlocked(): boolean {
+  return pushSupported() && Notification.permission === 'denied';
+}
+
 function urlBase64ToUint8Array(base64: string): Uint8Array {
   const padding = '='.repeat((4 - (base64.length % 4)) % 4);
   const raw = atob((base64 + padding).replace(/-/g, '+').replace(/_/g, '/'));
@@ -88,10 +93,14 @@ export async function enablePush(): Promise<{ ok: true } | { ok: false; reason: 
   const cfg = await fetch(`${API}/push/key`).then(r => r.json()).catch(() => null);
   if (!cfg?.enabled || !cfg.publicKey) return { ok: false, reason: 'Notifications are not configured on the server yet.' };
 
+  // Worth knowing: once someone has picked Block, this resolves to 'denied'
+  // immediately and shows them nothing -- measured at 1ms. So a button that
+  // just calls this looks broken to exactly the people who most need telling
+  // what to do. The caller checks isBlocked() first and explains instead.
   const perm = await Notification.requestPermission();
   if (perm !== 'granted') {
     return { ok: false, reason: perm === 'denied'
-      ? 'Notifications are blocked for this site. You can re-allow them in your browser settings.'
+      ? 'Notifications are blocked for this site — the browser did not even ask. Reset it in the site settings next to the address bar.'
       : 'Notifications were not enabled.' };
   }
 
