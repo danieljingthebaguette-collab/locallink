@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { useAuthStore } from '@/lib/store';
 import {
-  pushSupported, isIos, isStandalone, needsInstallFirst, permission, enablePush,
+  pushSupported, isIos, isStandalone, needsInstallFirst, permission, enablePush, iosBrowser,
 } from '@/lib/push';
 
 const SEEN_KEY = 'locallink_loop_prompt_seen';
@@ -69,6 +69,10 @@ export default function StayInTheLoop({ suppressed }: { suppressed?: boolean }) 
   if (!open) return null;
 
   const iosNeedsInstall = needsInstallFirst();
+  // Every iOS browser is WebKit underneath, so they all share Safari's
+  // restriction — but not Safari's toolbar. Sending a Chrome user to "Share at
+  // the bottom" points at a button that isn't there.
+  const inSafari = iosBrowser() === 'safari';
 
   return (
     <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-4 bg-black/40 backdrop-blur-[2px]">
@@ -95,17 +99,23 @@ export default function StayInTheLoop({ suppressed }: { suppressed?: boolean }) 
               way iPhone can send you notifications when a spot opens up.
             </p>
             <ol className="text-sm text-foreground space-y-2.5">
-              <li className="flex items-center gap-2.5">
-                <span className="w-5 h-5 rounded-full bg-secondary text-[11px] font-bold flex items-center justify-center flex-shrink-0">1</span>
-                Tap <Share className="w-4 h-4 inline mx-0.5 text-primary" /> Share at the bottom of Safari
+              {!inSafari && (
+                <li className="flex items-start gap-2.5">
+                  <span className="w-5 h-5 rounded-full bg-secondary text-[11px] font-bold flex items-center justify-center flex-shrink-0 mt-0.5">1</span>
+                  <span>Open localnetlink.com in <strong className="font-semibold">Safari</strong> — only Safari can do this on iPhone</span>
+                </li>
+              )}
+              <li className="flex items-start gap-2.5">
+                <span className="w-5 h-5 rounded-full bg-secondary text-[11px] font-bold flex items-center justify-center flex-shrink-0 mt-0.5">{inSafari ? 1 : 2}</span>
+                <span>Tap <Share className="w-4 h-4 inline mx-0.5 text-primary" /> Share at the bottom</span>
               </li>
-              <li className="flex items-center gap-2.5">
-                <span className="w-5 h-5 rounded-full bg-secondary text-[11px] font-bold flex items-center justify-center flex-shrink-0">2</span>
-                Choose <Plus className="w-4 h-4 inline mx-0.5 text-primary" /> Add to Home Screen
+              <li className="flex items-start gap-2.5">
+                <span className="w-5 h-5 rounded-full bg-secondary text-[11px] font-bold flex items-center justify-center flex-shrink-0 mt-0.5">{inSafari ? 2 : 3}</span>
+                <span>Choose <Plus className="w-4 h-4 inline mx-0.5 text-primary" /> Add to Home Screen</span>
               </li>
-              <li className="flex items-center gap-2.5">
-                <span className="w-5 h-5 rounded-full bg-secondary text-[11px] font-bold flex items-center justify-center flex-shrink-0">3</span>
-                Open LocalLink from your Home Screen and turn on notifications
+              <li className="flex items-start gap-2.5">
+                <span className="w-5 h-5 rounded-full bg-secondary text-[11px] font-bold flex items-center justify-center flex-shrink-0 mt-0.5">{inSafari ? 3 : 4}</span>
+                <span>Open LocalLink from your Home Screen and turn on notifications</span>
               </li>
             </ol>
             <Button onClick={() => close()} className="w-full rounded-md">Got it</Button>

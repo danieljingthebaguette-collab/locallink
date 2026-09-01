@@ -28,6 +28,30 @@ export function isIos(): boolean {
     || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 }
 
+/**
+ * Which browser on iOS, which matters more than it sounds.
+ *
+ * Apple requires every iOS browser to run on WebKit, so Chrome and Firefox on
+ * an iPhone are Safari wearing a different coat -- they inherit the same rule
+ * that push only works once the site is on the Home Screen. Detecting them is
+ * not about capability, then, but about instructions: "tap Share at the bottom"
+ * is Safari's layout, and telling a Chrome user that sends them hunting for a
+ * button that is somewhere else.
+ *
+ * Apple's documented path to a push-capable web app is Safari's own
+ * Add to Home Screen, so anyone in another iOS browser is pointed there first.
+ */
+export type IosBrowser = 'safari' | 'chrome' | 'firefox' | 'edge' | 'other';
+
+export function iosBrowser(): IosBrowser {
+  const ua = navigator.userAgent;
+  if (/CriOS/i.test(ua)) return 'chrome';
+  if (/FxiOS/i.test(ua)) return 'firefox';
+  if (/EdgiOS/i.test(ua)) return 'edge';
+  if (/Safari/i.test(ua)) return 'safari';
+  return 'other';
+}
+
 /** iPhone in Safari, not installed — push is impossible until they add it. */
 export function needsInstallFirst(): boolean {
   return isIos() && !isStandalone();
