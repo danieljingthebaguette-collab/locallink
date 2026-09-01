@@ -55,7 +55,24 @@ function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-async function sendEmail(to: string, subject: string, html: string, text: string): Promise<void> {
+/**
+ * opts.unsubscribeUrl adds the List-Unsubscribe pair. Counter-intuitively this
+ * helps rather than flags: it is what a well-behaved bulk sender looks like,
+ * Gmail surfaces its own one-click unsubscribe from it, and its absence is a
+ * spam signal in itself. Worth being straight about the limits though -- which
+ * Gmail tab a message lands in comes mostly from sender reputation and what
+ * recipients do with it, so headers and wording shift the odds rather than
+ * decide the outcome.
+ */
+async function sendEmail(
+  to: string, subject: string, html: string, text: string,
+  opts: { unsubscribeUrl?: string } = {}
+): Promise<void> {
+  const headers: Record<string, string> = {};
+  if (opts.unsubscribeUrl) {
+    headers['List-Unsubscribe'] = `<${opts.unsubscribeUrl}>`;
+    headers['List-Unsubscribe-Post'] = 'List-Unsubscribe=One-Click';
+  }
   const res = await fetch('https://api.brevo.com/v3/smtp/email', {
     method: 'POST',
     headers: {
@@ -65,10 +82,14 @@ async function sendEmail(to: string, subject: string, html: string, text: string
     },
     body: JSON.stringify({
       sender: { name: FROM_NAME, email: FROM_EMAIL },
+      // A real reply-to makes it a message from a person rather than a no-reply
+      // broadcast, which is the other thing that reads as marketing.
+      replyTo: { email: FROM_EMAIL, name: FROM_NAME },
       to: [{ email: to }],
       subject,
       htmlContent: html,
       textContent: text,
+      ...(Object.keys(headers).length ? { headers } : {}),
     }),
   });
   if (!res.ok) {
@@ -267,17 +288,17 @@ export async function sendOnboardingNudgeEmail(
   const surveyUrl = `${APP_URL}/?survey=1`;
   await sendEmail(
     email,
-    'Tell us what you are looking for on LocalLink',
+    'A quick question about your volunteering',
     layout(
       `<h1 style="font-family:${BRAND.headingFont};font-size:22px;font-weight:700;color:${BRAND.ink};margin:0 0 14px;letter-spacing:-0.01em">Hi ${usernameHtml}</h1>
        <p style="font-size:15px;line-height:1.65;color:${BRAND.body};margin:0 0 14px">We added a short questionnaire since you joined. It asks what kind of volunteering you enjoy, which towns work for you, and when you are usually free.</p>
-       <div style="background:${BRAND.panel};border:1px solid ${BRAND.border};border-radius:${BRAND.radius};padding:14px 18px;margin:0 0 20px">
-         <p style="font-size:14px;line-height:1.6;color:${BRAND.body};margin:0">Takes about a minute. Every question is optional, and it lets us mark the opportunities that actually fit you.</p>
-       </div>
-       ${button(surveyUrl, 'Fill it in')}`,
+       <p style="font-size:15px;line-height:1.65;color:${BRAND.body};margin:0 0 20px">Takes about a minute, every question is optional, and it lets us mark the opportunities that actually fit you.</p>
+       ${button(surveyUrl, 'Fill it in')}
+       <p style="font-size:13px;line-height:1.6;color:${BRAND.muted};margin:16px 0 0">Or paste this into your browser: <a href="${surveyUrl}" style="color:${BRAND.muted}">${surveyUrl}</a></p>`,
       `You are getting this once because you have a LocalLink volunteer account.<br>
        <a href="${unsubUrl}" style="color:${BRAND.muted};text-decoration:underline">Unsubscribe from emails like this</a>`
     ),
     `Hi ${username},\n\nWe added a short questionnaire since you joined. It asks what kind of volunteering you enjoy, which towns work for you, and when you are usually free.\n\nIt takes about a minute, every question is optional, and it lets us mark the opportunities that actually fit you.\n\nFill it in: ${surveyUrl}\n\nYou are getting this once because you have a LocalLink volunteer account.\nUnsubscribe: ${unsubUrl}`,
+    { unsubscribeUrl: unsubUrl },
   );
 }
