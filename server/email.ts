@@ -82,14 +82,17 @@ async function sendEmail(
     },
     body: JSON.stringify({
       sender: { name: FROM_NAME, email: FROM_EMAIL },
-      // A real reply-to makes it a message from a person rather than a no-reply
-      // broadcast, which is the other thing that reads as marketing.
-      replyTo: { email: FROM_EMAIL, name: FROM_NAME },
       to: [{ email: to }],
       subject,
       htmlContent: html,
       textContent: text,
-      ...(Object.keys(headers).length ? { headers } : {}),
+      // replyTo and headers ride along only for the emails that ask for them.
+      // Both field names come from Brevo's v3 API, but I have no key here to
+      // prove that against the live service, and a wrong guess is rejected for
+      // the whole request. Scoped this way the blast radius is the one email
+      // that opted in; account verification and password resets keep the exact
+      // payload shape that has been working in production all along.
+      ...(opts.unsubscribeUrl ? { replyTo: { email: FROM_EMAIL, name: FROM_NAME }, headers } : {}),
     }),
   });
   if (!res.ok) {
