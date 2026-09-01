@@ -8,6 +8,7 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { randomUUID } from 'crypto';
 import { toAppLocalString } from './time.js';
+import { pushEnabled, getPublicKey, saveSubscription, removeSubscription, countSubscriptions, sendPush } from './push.js';
 import { sendVerificationEmail, sendPasswordResetEmail, sendSignupNotificationEmail, sendPostApprovedEmail, sendPostDeniedEmail, sendEventCancelledEmail, sendEventReminderEmail, sendOnboardingNudgeEmail } from './email.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -1697,6 +1698,54 @@ router.get('/api/admin/stats', requireAdmin, (_req: Request, res: Response) => {
     const totalOpps = (db.prepare("SELECT COUNT(*) as count FROM opportunities WHERE status = 'approved'").get() as any).count;
     const totalSignups = (db.prepare('SELECT COUNT(*) as count FROM signups').get() as any).count;
     return res.json({ totalUsers, totalOpps, totalSignups });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ===== WEB PUSH =====
+
+// The public key is not a secret -- the browser needs it to subscribe. Returned
+// with an enabled flag so the client can hide the whole feature when the server
+// has no keys, rather than offering a button that cannot work.
+router.get('/api/push/key', (_req: Request, res: Response) => {
+  return res.json({ enabled: pushEnabled, publicKey: getPublicKey() });
+});
+
+router.post('/api/push/subscribe', requireAuth, (req: AuthRequest, res: Response) => {
+  try {
+    const sub = req.body?.subscription;
+    if (!sub?.endpoint || !sub?.keys?.p256dh || !sub?.keys?.auth) {
+      return res.status(400).json({ error: 'Invalid subscription' });
+    }
+    saveSubscription(req.userId!, sub);
+    return res.json({ subscribed: true, devices: countSubscriptions(req.userId!) });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/api/push/unsubscribe', requireAuth, (req: AuthRequest, res: Response) => {
+  try {
+    const endpoint = req.body?.endpoint;
+    if (!endpoint) return res.status(400).json({ error: 'endpoint required' });
+    removeSubscription(String(endpoint));
+    return res.json({ unsubscribed: true, devices: countSubscriptions(req.userId!) });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Sends to the caller's own devices only. Lets someone confirm the thing works
+// on this phone without needing an event to happen first.
+router.post('/api/push/test', requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const delivered = await sendPush(req.userId!, {
+      title: 'LocalLink',
+      body: 'Notifications are on. This is what they will look like.',
+      url: '/',
+    });
+    return res.json({ delivered });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }

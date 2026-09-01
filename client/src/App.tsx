@@ -7,6 +7,7 @@ import { Toaster } from "@/components/ui/toaster";
 import Navigation from "@/components/Navigation";
 import FeedbackButton from "@/components/FeedbackButton";
 import OnboardingQuestionnaire from "@/components/OnboardingQuestionnaire";
+import StayInTheLoop from "@/components/StayInTheLoop";
 import Home from "@/pages/home";
 import MyEvents from "@/pages/my-events";
 import About from "@/pages/about";
@@ -76,6 +77,10 @@ function App() {
         <Router />
         <FeedbackButton />
         <OnboardingQuestionnaire suppressed={hideOnboarding} />
+        {/* Queues itself behind the questionnaire — see the component. Two
+            modals on a first visit is one too many, and being asked what you're
+            interested in matters more than how we reach you. */}
+        <StayInTheLoop suppressed={hideOnboarding} />
       </MotionConfig>
     </QueryClientProvider>
   );
