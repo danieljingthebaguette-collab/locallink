@@ -45,8 +45,22 @@ export default function StayInTheLoop({ suppressed }: { suppressed?: boolean }) 
     // Already granted in a normal browser tab, and not an iPhone: also nothing to ask.
     if (!isIos() && permission() === 'granted') return;
     if (!pushSupported() && !isIos()) return;
-    const t = setTimeout(() => setOpen(true), 1200); // let the board paint first
-    return () => clearTimeout(t);
+
+    // Ask the server whether it can send at all before promising anything. With
+    // no VAPID keys configured this whole prompt is a lie -- the button would
+    // fail and the iPhone install instructions would be talking about
+    // notifications that cannot arrive. That is the state a deploy is in until
+    // the keys are set, so it is the state to handle, not the edge case.
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout>;
+    fetch('/api/push/key')
+      .then(r => (r.ok ? r.json() : { enabled: false }))
+      .catch(() => ({ enabled: false }))
+      .then(cfg => {
+        if (cancelled || !cfg?.enabled) return;
+        timer = setTimeout(() => setOpen(true), 1200); // let the board paint first
+      });
+    return () => { cancelled = true; clearTimeout(timer); };
   }, [isLoggedIn, suppressed, questionnaireShowing]);
 
   const close = (remember = true) => {
