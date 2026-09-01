@@ -408,6 +408,16 @@ try {
 // shipped -- a separate idempotent block rather than folding into the one
 // above, since that one's guard column (onboardingCompletedAt) already
 // exists on every database that predates this change.
+// Records that we already nudged this person about the questionnaire, so the
+// admin action can be re-run without emailing anyone twice. The in-site
+// notification dedupes on its own (fixed id + INSERT OR IGNORE); email does
+// not, and an accidental second send goes to real inboxes.
+try {
+  db.prepare('SELECT onboardingNudgedAt FROM users LIMIT 1').get();
+} catch {
+  db.exec('ALTER TABLE users ADD COLUMN onboardingNudgedAt TEXT DEFAULT NULL');
+}
+
 // One-time repair for the first questionnaire send.
 //
 // That run stamped everyone it processed, including people it had not emailed
@@ -424,16 +434,6 @@ db.exec(`
   WHERE onboardingNudgedAt IS NOT NULL
     AND emailVerified = 0
 `);
-
-// Records that we already nudged this person about the questionnaire, so the
-// admin action can be re-run without emailing anyone twice. The in-site
-// notification dedupes on its own (fixed id + INSERT OR IGNORE); email does
-// not, and an accidental second send goes to real inboxes.
-try {
-  db.prepare('SELECT onboardingNudgedAt FROM users LIMIT 1').get();
-} catch {
-  db.exec('ALTER TABLE users ADD COLUMN onboardingNudgedAt TEXT DEFAULT NULL');
-}
 
 try {
   db.prepare('SELECT onboardingTowns FROM users LIMIT 1').get();
