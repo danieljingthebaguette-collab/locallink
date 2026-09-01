@@ -302,12 +302,23 @@ export default function Navigation() {
                   </button>
                 </>
               ) : (
-                <button
-                  onClick={() => navigate('/account')}
-                  className="text-sm font-medium bg-primary text-primary-foreground rounded-md px-4 py-1.5 hover:bg-primary/90 transition-colors"
-                >
-                  Login
-                </button>
+                <div className="flex items-center gap-2">
+                  {/* Login stays the quiet one; Sign Up carries the fill, since
+                      a signed-out visitor on the board is far more likely to be
+                      new than returning. */}
+                  <button
+                    onClick={() => navigate('/account')}
+                    className="min-h-[44px] text-sm font-medium text-muted-foreground hover:text-foreground px-2 transition-colors"
+                  >
+                    Login
+                  </button>
+                  <button
+                    onClick={() => navigate('/account?signup=1')}
+                    className="min-h-[44px] text-sm font-medium bg-primary text-primary-foreground rounded-md px-4 py-1.5 hover:bg-primary/90 transition-colors"
+                  >
+                    Sign Up
+                  </button>
+                </div>
               )}
             </div>
           </div>
