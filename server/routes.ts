@@ -1585,7 +1585,17 @@ router.get('/api/admin/onboarding-nudge', requireAdmin, (_req: Request, res: Res
     const alreadyNudged = (db.prepare(
       "SELECT COUNT(*) as c FROM users WHERE accountType='volunteer' AND onboardingNudgedAt IS NOT NULL"
     ).get() as any).c;
-    return res.json({ pending, emailable, alreadyNudged });
+    // Of those already nudged, how many were in a position to receive the email
+    // rather than only the in-site notification. onboardingNudgedAt is stamped
+    // for an emailable person only after their email actually goes out, so this
+    // is a real delivery count, not an attempt count. It reads current settings
+    // though, so someone who unsubscribed afterwards drops out of it.
+    const alreadyEmailed = (db.prepare(
+      `SELECT COUNT(*) as c FROM users
+       WHERE accountType='volunteer' AND onboardingNudgedAt IS NOT NULL
+         AND emailVerified = 1 AND emailReminders = 1 AND email NOT LIKE '%@example.com'`
+    ).get() as any).c;
+    return res.json({ pending, emailable, alreadyNudged, alreadyEmailed });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }

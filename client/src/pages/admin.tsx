@@ -273,7 +273,7 @@ function bucketByMonth(data: { date: string; signups: number; users: number }[])
  */
 function OnboardingNudgeCard() {
   const { toast } = useToast();
-  const [counts, setCounts] = useState<{ pending: number; emailable: number; alreadyNudged: number } | null>(null);
+  const [counts, setCounts] = useState<{ pending: number; emailable: number; alreadyNudged: number; alreadyEmailed: number } | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [confirming, setConfirming] = useState(false);
@@ -339,13 +339,13 @@ function OnboardingNudgeCard() {
       <div>
         <p className="text-sm text-muted-foreground mt-1">
           {counts.pending === 0
-            ? `Everyone has been asked — ${counts.alreadyNudged} volunteer${counts.alreadyNudged === 1 ? '' : 's'} nudged so far. Nothing will be sent.`
+            ? `Everyone has been asked — ${counts.alreadyNudged} volunteer${counts.alreadyNudged === 1 ? '' : 's'} nudged, ${counts.alreadyEmailed} of them by email. Nothing will be sent.`
             : `${counts.pending} volunteer${counts.pending === 1 ? " hasn't" : "s haven't"} filled in the questionnaire yet, and ${counts.pending === 1 ? 'has' : 'have'}n't been asked. ${counts.emailable} can be emailed; any others get the in-site notification only.`}
         </p>
         {counts.pending > 0 && counts.alreadyNudged > 0 && (
           <p className="text-xs text-muted-foreground mt-1">
             {counts.alreadyNudged} {counts.alreadyNudged === 1 ? 'volunteer has' : 'volunteers have'} already been
-            nudged previously and will not be contacted again.
+            nudged previously ({counts.alreadyEmailed} by email) and will not be contacted again.
           </p>
         )}
       </div>
