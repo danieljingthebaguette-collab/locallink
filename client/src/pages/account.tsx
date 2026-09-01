@@ -19,7 +19,11 @@ export default function Account() {
     try { return JSON.parse(sessionStorage.getItem('locallink_join') || 'null'); } catch { return null; }
   })();
 
-  const [isLoginMode, setIsLoginMode] = useState(!joinPrefill); // open register tab if coming from join link
+  // ?signup=1 opens straight on the register tab -- what the header's Sign Up
+  // button links to, so it lands people on the form they asked for rather than
+  // on Login with a "Sign Up" link to find underneath it.
+  const wantsSignup = new URLSearchParams(window.location.search).get('signup') === '1';
+  const [isLoginMode, setIsLoginMode] = useState(!joinPrefill && !wantsSignup);
   const [accountType, setAccountType] = useState<'volunteer' | 'organization'>(joinPrefill ? 'organization' : 'volunteer');
   // Year only, never a full date of birth. Organizations aren't people, so
   // they're never asked.
