@@ -195,6 +195,13 @@ function majorWords(majors: string): string[] {
   return majors.toLowerCase().split(/[^a-z]+/).filter(w => w.length >= 4 && !MAJOR_STOPWORDS.has(w));
 }
 
+/** A tag as the two sides can be compared: no leading emoji, no case.
+ *  Every FIELD_TAGS entry starts with an ASCII letter, so trimming to the
+ *  first one is enough and avoids the /u flag this build target rejects. */
+function normaliseTag(t: string): string {
+  return t.replace(/^[^A-Za-z0-9]+/, '').toLowerCase();
+}
+
 /**
  * How well a post matches a volunteer's stated preferences.
  *
@@ -204,7 +211,13 @@ function majorWords(majors: string): string[] {
  * covering every preference the questionnaire now collects.
  *
  * Field tags and interests come from the same FIELD_TAGS list by design, so
- * that match is a plain set intersection rather than anything fuzzy. Category
+ * that match is a plain set intersection rather than anything fuzzy -- but
+ * only for posts written against the current list. Posts from before it
+ * stored the label with an emoji glued to the front ("🌿 Environment"),
+ * which no questionnaire answer can ever equal, so every one of those posts
+ * scored zero on interests no matter what someone picked. normaliseTag drops
+ * that prefix on both sides so the old posts match on the same terms as new
+ * ones, without rewriting anyone's data. Category
  * is counted too, since someone who said "Education" should match education
  * posts that carry no tags at all. Town, availability, and majors are each
  * worth one point on a match, same weight as a single tag -- none of the
@@ -218,11 +231,11 @@ export function getMatchScore(
 
   const interests = prefs.interests;
   if (interests && interests.length > 0) {
-    const wanted = new Set(interests.map(i => i.toLowerCase()));
+    const wanted = new Set(interests.map(normaliseTag));
     for (const tag of opp.tags ?? []) {
-      if (wanted.has(tag.toLowerCase())) n++;
+      if (wanted.has(normaliseTag(tag))) n++;
     }
-    if (wanted.has(getCategoryLabel(opp.category).toLowerCase())) n++;
+    if (wanted.has(normaliseTag(getCategoryLabel(opp.category)))) n++;
   }
 
   if (prefs.towns && prefs.towns.length > 0 && opp.town && prefs.towns.includes(opp.town)) {

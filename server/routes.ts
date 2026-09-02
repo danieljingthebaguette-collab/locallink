@@ -1598,9 +1598,13 @@ router.get('/api/admin/onboarding-nudge', requireAdmin, (_req: Request, res: Res
     // Why the rest were skipped. Without this, "31 nudged but only 1 email"
     // is a mystery you cannot solve from the outside -- the send did what it
     // was told, and the interesting part is what it was told about each person.
+    // Scoped to the same people `pending` counts -- without the nudged check
+    // this also counted anyone skipped on an earlier run, so the card showed
+    // a breakdown adding up to more than the number it was explaining.
     const skipCount = (clause: string) =>
       (db.prepare(`SELECT COUNT(*) as c FROM users
                    WHERE accountType='volunteer' AND onboardingCompletedAt IS NULL
+                     AND onboardingNudgedAt IS NULL
                      AND banned = 0 AND ${clause}`).get() as any).c;
     const skipped = {
       unverifiedEmail: skipCount('emailVerified = 0'),
