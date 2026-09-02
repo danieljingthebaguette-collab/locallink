@@ -51,6 +51,35 @@ function button(href: string, label: string): string {
   return `<a href="${href}" style="display:inline-block;background:${BRAND.primary};color:#ffffff;font-family:${BRAND.headingFont};font-size:15px;font-weight:600;padding:12px 26px;border-radius:${BRAND.radius};text-decoration:none">${label}</a>`;
 }
 
+/** The callout every email uses to name the post it is about.
+ *  Tone is semantic, not decorative: it is the one part of these emails that
+ *  says at a glance whether the news is good. */
+const TONES = {
+  neutral: { bg: BRAND.panel, edge: BRAND.primary },
+  good: { bg: '#F0FDF4', edge: '#16A34A' },
+  bad: { bg: '#FEF2F2', edge: '#DC2626' },
+  warn: { bg: '#FFF7ED', edge: '#EA580C' },
+} as const;
+
+function panel(titleHtml: string, subHtml = '', tone: keyof typeof TONES = 'neutral'): string {
+  const t = TONES[tone];
+  return `<div style="background:${t.bg};border-left:3px solid ${t.edge};border-radius:${BRAND.radius};padding:14px 18px;margin:18px 0">
+    <p style="margin:0;font-family:${BRAND.headingFont};font-size:16px;font-weight:600;color:${BRAND.ink}">${titleHtml}</p>
+    ${subHtml ? `<p style="margin:5px 0 0;font-size:13px;color:${BRAND.muted}">${subHtml}</p>` : ''}
+  </div>`;
+}
+
+/** Heading + lead paragraph, the shape every one of these emails opens with. */
+function greeting(nameHtml: string, leadHtml: string): string {
+  return `<h1 style="font-family:${BRAND.headingFont};font-size:22px;font-weight:700;color:${BRAND.ink};margin:0 0 14px;letter-spacing:-0.01em">Hi ${nameHtml}</h1>
+       <p style="font-size:15px;line-height:1.65;color:${BRAND.body};margin:0 0 4px">${leadHtml}</p>`;
+}
+
+/** A closing line in the body's voice. */
+function para(html: string): string {
+  return `<p style="font-size:15px;line-height:1.65;color:${BRAND.body};margin:14px 0 20px">${html}</p>`;
+}
+
 function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
@@ -108,7 +137,11 @@ export async function sendVerificationEmail(email: string, username: string, tok
   await sendEmail(
     email,
     'Verify your LocalLink email address',
-    `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:24px"><h1>LocalLink</h1><h2>Welcome, ${usernameHtml}!</h2><p>Click below to verify your email.</p><a href="${verifyUrl}" style="display:inline-block;background:#6366f1;color:white;padding:14px 32px;border-radius:999px;text-decoration:none;font-weight:600">Verify Email Address</a><p style="color:#888;font-size:13px">Expires in 24 hours.</p><p style="font-size:12px">Or copy: <a href="${verifyUrl}">${verifyUrl}</a></p></div>`,
+    layout(
+      `${greeting(usernameHtml, 'Welcome to LocalLink. One click confirms your address and you are in.')}
+       ${button(verifyUrl, 'Confirm my email')}
+       <p style="font-size:13px;line-height:1.6;color:${BRAND.muted};margin:16px 0 0">This link lasts 24 hours. Or paste it into your browser: <a href="${verifyUrl}" style="color:${BRAND.muted}">${verifyUrl}</a></p>`
+    ),
     `Welcome to LocalLink, ${username}!\n\nVerify your email: ${verifyUrl}\n\nExpires in 24 hours.`,
   );
 }
@@ -119,7 +152,12 @@ export async function sendPasswordResetEmail(email: string, username: string, to
   await sendEmail(
     email,
     'Reset your LocalLink password',
-    `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:24px"><h1>LocalLink</h1><h2>Reset your password, ${usernameHtml}</h2><p>Click below to reset your password.</p><a href="${resetUrl}" style="display:inline-block;background:#6366f1;color:white;padding:14px 32px;border-radius:999px;text-decoration:none;font-weight:600">Reset Password</a><p style="color:#888;font-size:13px">Expires in 1 hour.</p><p style="font-size:12px">Or copy: <a href="${resetUrl}">${resetUrl}</a></p></div>`,
+    layout(
+      `${greeting(usernameHtml, 'Use the button below to set a new password.')}
+       ${button(resetUrl, 'Reset my password')}
+       <p style="font-size:13px;line-height:1.6;color:${BRAND.muted};margin:16px 0 0">This link lasts 1 hour. Or paste it into your browser: <a href="${resetUrl}" style="color:${BRAND.muted}">${resetUrl}</a></p>`,
+      `If you did not ask for this, ignore this email and your password stays as it is.`
+    ),
     `Hi ${username},\n\nReset your password: ${resetUrl}\n\nExpires in 1 hour.`,
   );
 }
@@ -131,17 +169,13 @@ export async function sendReopenReminderEmail(email: string, username: string, p
   await sendEmail(
     email,
     `"${postTitle}" opens again tomorrow on LocalLink!`,
-    `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:24px">
-      <h1 style="color:#6366f1;margin-bottom:4px">LocalLink</h1>
-      <h2 style="margin-top:0">Hey ${usernameHtml} 👋</h2>
-      <p style="color:#444;line-height:1.6">A recurring volunteer opportunity you signed up for is <strong>opening again tomorrow (Monday)</strong>!</p>
-      <div style="background:#f5f3ff;border-left:4px solid #6366f1;border-radius:8px;padding:16px 20px;margin:20px 0">
-        <p style="margin:0;font-size:17px;font-weight:600;color:#1a1a2e">${postTitleHtml}</p>
-      </div>
-      <p style="color:#444;line-height:1.6">Sign-ups open Monday at midnight — head over to LocalLink to grab your spot!</p>
-      <a href="${appUrl}" style="display:inline-block;background:#6366f1;color:white;padding:14px 32px;border-radius:999px;text-decoration:none;font-weight:600;margin-top:8px">Open LocalLink</a>
-      <p style="color:#aaa;font-size:12px;margin-top:28px">You're receiving this reminder because you previously signed up for this recurring event.</p>
-    </div>`,
+    layout(
+      `${greeting(usernameHtml, 'A recurring opportunity you signed up for opens again <strong>tomorrow (Monday)</strong>.')}
+       ${panel(postTitleHtml)}
+       ${para('Sign-ups open at midnight, so you can claim your spot first thing.')}
+       ${button(appUrl, 'Open LocalLink')}`,
+      `You are getting this because you signed up for this recurring event before.`
+    ),
     `Hi ${username}!\n\nThe recurring volunteer opportunity "${postTitle}" opens again tomorrow (Monday).\n\nSign-ups open at midnight — visit LocalLink to secure your spot: ${appUrl}\n\nYou're receiving this because you signed up for this recurring event.`,
   );
 }
@@ -155,16 +189,12 @@ export async function sendSignupNotificationEmail(
   await sendEmail(
     orgEmail,
     `${volunteerName} is interested in "${postTitle}"`,
-    `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:24px">
-      <h1 style="color:#6366f1;margin-bottom:4px">LocalLink</h1>
-      <h2 style="margin-top:0">New interest in your post! 🎉</h2>
-      <p>Hi ${orgUsernameHtml},</p>
-      <p><strong>${volunteerNameHtml}</strong> has expressed interest in your opportunity:</p>
-      <div style="background:#f5f3ff;border-left:4px solid #6366f1;border-radius:8px;padding:16px 20px;margin:20px 0">
-        <p style="margin:0;font-size:17px;font-weight:600;color:#1a1a2e">${postTitleHtml}</p>
-      </div>
-      <a href="${APP_URL}" style="display:inline-block;background:#6366f1;color:white;padding:14px 32px;border-radius:999px;text-decoration:none;font-weight:600">View on LocalLink</a>
-    </div>`,
+    layout(
+      `${greeting(orgUsernameHtml, `<strong>${volunteerNameHtml}</strong> is interested in your opportunity.`)}
+       ${panel(postTitleHtml)}
+       ${para('Their details are on the post, so you can get in touch whenever suits.')}
+       ${button(APP_URL, 'View on LocalLink')}`
+    ),
     `Hi ${orgUsername},\n\n${volunteerName} is interested in "${postTitle}".\n\nView on LocalLink: ${APP_URL}`
   );
 }
@@ -177,17 +207,12 @@ export async function sendPostApprovedEmail(
   await sendEmail(
     orgEmail,
     `✅ Your post "${postTitle}" has been approved!`,
-    `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:24px">
-      <h1 style="color:#6366f1;margin-bottom:4px">LocalLink</h1>
-      <h2 style="margin-top:0">Your post is live! ✅</h2>
-      <p>Hi ${orgUsernameHtml},</p>
-      <p>Great news — your opportunity has been reviewed and approved by our team:</p>
-      <div style="background:#f0fdf4;border-left:4px solid #22c55e;border-radius:8px;padding:16px 20px;margin:20px 0">
-        <p style="margin:0;font-size:17px;font-weight:600;color:#1a1a2e">${postTitleHtml}</p>
-      </div>
-      <p>It is now live on the board and volunteers can start signing up!</p>
-      <a href="${APP_URL}" style="display:inline-block;background:#6366f1;color:white;padding:14px 32px;border-radius:999px;text-decoration:none;font-weight:600">View on LocalLink</a>
-    </div>`,
+    layout(
+      `${greeting(orgUsernameHtml, 'Your opportunity has been reviewed and approved.')}
+       ${panel(postTitleHtml, '', 'good')}
+       ${para('It is on the board now, and volunteers can start signing up.')}
+       ${button(APP_URL, 'View on LocalLink')}`
+    ),
     `Hi ${orgUsername},\n\nYour post "${postTitle}" has been approved and is now live!\n\nView on LocalLink: ${APP_URL}`
   );
 }
@@ -201,18 +226,12 @@ export async function sendPostDeniedEmail(
   await sendEmail(
     orgEmail,
     `Your post "${postTitle}" was not approved`,
-    `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:24px">
-      <h1 style="color:#6366f1;margin-bottom:4px">LocalLink</h1>
-      <h2 style="margin-top:0">Post not approved</h2>
-      <p>Hi ${orgUsernameHtml},</p>
-      <p>Unfortunately your post was not approved at this time:</p>
-      <div style="background:#fef2f2;border-left:4px solid #ef4444;border-radius:8px;padding:16px 20px;margin:20px 0">
-        <p style="margin:0;font-size:17px;font-weight:600;color:#1a1a2e">${postTitleHtml}</p>
-        ${reasonHtml ? `<p style="margin:8px 0 0;font-size:13px;color:#555">Reason: ${reasonHtml}</p>` : ''}
-      </div>
-      <p>You are welcome to revise and resubmit. If you have questions, please contact us.</p>
-      <a href="${APP_URL}" style="display:inline-block;background:#6366f1;color:white;padding:14px 32px;border-radius:999px;text-decoration:none;font-weight:600">Go to LocalLink</a>
-    </div>`,
+    layout(
+      `${greeting(orgUsernameHtml, 'Your post was not approved this time.')}
+       ${panel(postTitleHtml, reasonHtml ? `Reason: ${reasonHtml}` : '', 'bad')}
+       ${para('You are welcome to revise it and submit again. Reply to this email if anything is unclear.')}
+       ${button(APP_URL, 'Go to LocalLink')}`
+    ),
     `Hi ${orgUsername},\n\nYour post "${postTitle}" was not approved.${reason ? '\n\nReason: ' + reason : ''}\n\nYou can revise and resubmit at: ${APP_URL}`
   );
 }
@@ -226,18 +245,12 @@ export async function sendEventCancelledEmail(
   await sendEmail(
     volunteerEmail,
     `"${postTitle}" has been cancelled`,
-    `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:24px">
-      <h1 style="color:#6366f1;margin-bottom:4px">LocalLink</h1>
-      <h2 style="margin-top:0">Event cancelled</h2>
-      <p>Hi ${volunteerUsernameHtml},</p>
-      <p>An event you signed up for has been cancelled by the organizer:</p>
-      <div style="background:#fff7ed;border-left:4px solid #f97316;border-radius:8px;padding:16px 20px;margin:20px 0">
-        <p style="margin:0;font-size:17px;font-weight:600;color:#1a1a2e">${postTitleHtml}</p>
-        <p style="margin:4px 0 0;font-size:13px;color:#555">Hosted by ${orgNameHtml}</p>
-      </div>
-      <p>Check out other opportunities on LocalLink!</p>
-      <a href="${APP_URL}" style="display:inline-block;background:#6366f1;color:white;padding:14px 32px;border-radius:999px;text-decoration:none;font-weight:600">Find More Opportunities</a>
-    </div>`,
+    layout(
+      `${greeting(volunteerUsernameHtml, 'An event you signed up for has been cancelled by the organizer.')}
+       ${panel(postTitleHtml, `Hosted by ${orgNameHtml}`, 'warn')}
+       ${para('Nothing is needed from you. There are other opportunities on the board whenever you are ready.')}
+       ${button(APP_URL, 'Find another opportunity')}`
+    ),
     `Hi ${volunteerUsername},\n\nThe event "${postTitle}" hosted by ${orgName} has been cancelled.\n\nFind other opportunities: ${APP_URL}`
   );
 }
@@ -254,22 +267,18 @@ export async function sendEventReminderEmail(
   await sendEmail(
     volunteerEmail,
     `Reminder: "${postTitle}" is tomorrow!`,
-    `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:24px">
-      <h1 style="color:#6366f1;margin-bottom:4px">LocalLink</h1>
-      <h2 style="margin-top:0">Your event is tomorrow!</h2>
-      <p>Hi ${volunteerUsernameHtml},</p>
-      <p>Just a reminder — you signed up for an event happening tomorrow:</p>
-      <div style="background:#f5f3ff;border-left:4px solid #6366f1;border-radius:8px;padding:16px 20px;margin:20px 0">
-        <p style="margin:0;font-size:17px;font-weight:600;color:#1a1a2e">${postTitleHtml}</p>
-        <p style="margin:4px 0 0;font-size:13px;color:#555">By ${orgNameHtml} · ${dateStr}</p>
-      </div>
-      <a href="${APP_URL}" style="display:inline-block;background:#6366f1;color:white;padding:14px 32px;border-radius:999px;text-decoration:none;font-weight:600;margin-top:8px">View on LocalLink</a>
-      <p style="color:#aaa;font-size:11px;margin-top:28px">
-        You are receiving this because you signed up for this event.<br>
-        <strong>Note:</strong> Even if you unsubscribe from reminders, important account notifications will still be sent.<br>
-        <a href="${unsubUrl}" style="color:#aaa">Unsubscribe from event reminders</a>
-      </p>
-    </div>`,
+    // NOTE: the unsubscribe link goes in layout()'s footer argument and this
+    // call deliberately passes no `opts`. Passing { unsubscribeUrl } here
+    // would add replyTo and headers to the Brevo body, and this is a cron
+    // email going to real volunteers -- not the place to find out whether
+    // Brevo accepts those field names.
+    layout(
+      `${greeting(volunteerUsernameHtml, 'A quick reminder about an event you signed up for. It is tomorrow.')}
+       ${panel(postTitleHtml, `By ${orgNameHtml} · ${dateStr}`)}
+       ${button(APP_URL, 'View on LocalLink')}`,
+      `You are getting this because you signed up for this event.<br>
+       <a href="${unsubUrl}" style="color:${BRAND.muted};text-decoration:underline">Unsubscribe from event reminders</a> — account emails like post approvals still reach you.`
+    ),
     `Hi ${volunteerUsername},\n\nReminder: "${postTitle}" by ${orgName} is tomorrow (${dateStr}).\n\nView on LocalLink: ${APP_URL}\n\n---\nUnsubscribe from reminders: ${unsubUrl}\nNote: Important account notifications will still be sent even after unsubscribing.`
   );
 }
