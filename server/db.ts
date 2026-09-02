@@ -409,22 +409,30 @@ try {
   db.exec('ALTER TABLE users ADD COLUMN onboardingNudgedAt TEXT DEFAULT NULL');
 }
 
-// One-time repair for the first questionnaire send.
-//
-// That run stamped everyone it processed, including people it had not emailed
-// because their address was never verified. Those accounts cannot log in at
-// all, so the in-site notification they were given sits in a bell they can
-// never open -- they received nothing, and the stamp then excluded them from
-// every future nudge. Clearing it puts them back in the queue.
-//
-// Narrow on purpose: only unverified accounts, which are exactly the ones that
-// could not have been emailed. Anyone verified either got the email or can at
-// least see the notification, and keeps their stamp. Idempotent.
-db.exec(`
-  UPDATE users SET onboardingNudgedAt = NULL
-  WHERE onboardingNudgedAt IS NOT NULL
-    AND emailVerified = 0
-`);
+// The repair that used to live here cleared onboardingNudgedAt for unverified
+// accounts, because the first questionnaire send stamped people it had not
+// actually emailed and the stamp then excluded them forever. It has done its
+// job, and it must not run again: the column no longer means "was nudged,
+// never again" but "when we last contacted them", and this ran unconditionally
+// on every single boot. Under the new meaning it would wipe that timestamp for
+// exactly the unverified accounts the nudge now sends confirmation mail to --
+// re-emailing them on every restart, with the cooldown unable to hold.
+
+// Backfill unsubToken. The column was added with DEFAULT NULL and nothing ever
+// filled it in for accounts that predate it, so those users' emails carry a
+// List-Unsubscribe header pointing at a token that matches nobody -- a
+// one-click unsubscribe that silently does nothing. Idempotent: only ever
+// touches rows that are still NULL.
+const missingUnsub = db.prepare(
+  'SELECT id FROM users WHERE unsubToken IS NULL OR unsubToken = ?'
+).all('') as { id: string }[];
+if (missingUnsub.length > 0) {
+  const setUnsub = db.prepare('UPDATE users SET unsubToken = ? WHERE id = ?');
+  db.transaction(() => {
+    for (const u of missingUnsub) setUnsub.run(randomUUID(), u.id);
+  })();
+  console.log(`[db] backfilled unsubToken for ${missingUnsub.length} user(s)`);
+}
 
 try {
   db.prepare('SELECT onboardingTowns FROM users LIMIT 1').get();

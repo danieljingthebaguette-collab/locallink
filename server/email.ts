@@ -280,6 +280,36 @@ export async function sendEventReminderEmail(
  * to fill it in. Carries the unsubscribe link because it is the only bulk mail
  * this app sends -- everything else is a reply to something the person did.
  */
+/**
+ * For the volunteers who never confirmed their address. They cannot log in, so
+ * the ordinary questionnaire email would land them on a wall they have no way
+ * through -- the survey link needs a session and they have never had one. This
+ * asks for the one thing that unsticks the account, and only mentions the
+ * questionnaire as what is waiting on the other side.
+ *
+ * No unsubscribe footer: this is account confirmation, not a mailing. The same
+ * reason password resets carry none.
+ */
+export async function sendVerifyThenSurveyEmail(
+  email: string, username: string, token: string
+): Promise<void> {
+  const usernameHtml = escapeHtml(username);
+  const verifyUrl = `${APP_URL}/verify-email?token=${token}`;
+  await sendEmail(
+    email,
+    'Confirm your email to finish setting up LocalLink',
+    layout(
+      `<h1 style="font-family:${BRAND.headingFont};font-size:22px;font-weight:700;color:${BRAND.ink};margin:0 0 14px;letter-spacing:-0.01em">Hi ${usernameHtml}</h1>
+       <p style="font-size:15px;line-height:1.65;color:${BRAND.body};margin:0 0 14px">Your LocalLink account was never confirmed, so you have not been able to sign in. One click fixes that.</p>
+       <p style="font-size:15px;line-height:1.65;color:${BRAND.body};margin:0 0 20px">Once you are in, there is a short questionnaire waiting — about a minute, every question optional — that lets us mark the opportunities that actually fit you.</p>
+       ${button(verifyUrl, 'Confirm my email')}
+       <p style="font-size:13px;line-height:1.6;color:${BRAND.muted};margin:16px 0 0">This link lasts 24 hours. Or paste it into your browser: <a href="${verifyUrl}" style="color:${BRAND.muted}">${verifyUrl}</a></p>`,
+      `You have a LocalLink volunteer account that was never confirmed. If this was not you, ignore this email and nothing happens.`
+    ),
+    `Hi ${username},\n\nYour LocalLink account was never confirmed, so you have not been able to sign in. One click fixes that.\n\nConfirm your email: ${verifyUrl}\n\nThis link lasts 24 hours.\n\nOnce you are in, there is a short questionnaire waiting -- about a minute, every question optional -- that lets us mark the opportunities that actually fit you.\n\nIf this was not you, ignore this email and nothing happens.`,
+  );
+}
+
 export async function sendOnboardingNudgeEmail(
   email: string, username: string, unsubToken: string
 ): Promise<void> {

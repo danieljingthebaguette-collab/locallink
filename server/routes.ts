@@ -8,7 +8,7 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { randomUUID } from 'crypto';
 import { toAppLocalString } from './time.js';
-import { sendVerificationEmail, sendPasswordResetEmail, sendSignupNotificationEmail, sendPostApprovedEmail, sendPostDeniedEmail, sendEventCancelledEmail, sendEventReminderEmail, sendOnboardingNudgeEmail } from './email.js';
+import { sendVerificationEmail, sendPasswordResetEmail, sendSignupNotificationEmail, sendPostApprovedEmail, sendPostDeniedEmail, sendEventCancelledEmail, sendEventReminderEmail, sendOnboardingNudgeEmail, sendVerifyThenSurveyEmail } from './email.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -269,6 +269,25 @@ function optionalAuth(req: AuthRequest, _res: Response, next: NextFunction) {
 
 // ===== AUTH =====
 
+/**
+ * A fresh 24-hour email-confirmation token, replacing any the user already has.
+ *
+ * The delete is the point: verifying issues a 30-day session, so every
+ * outstanding token is a live login link for that account. Handing out a
+ * second one without retiring the first leaves two doors open. Both the
+ * resend route and the nudge's unverified branch go through here so they
+ * cannot drift apart on that.
+ */
+function mintVerificationToken(userId: string): string {
+  db.prepare('DELETE FROM email_verifications WHERE userId = ?').run(userId);
+  const token = randomUUID() + '-' + randomUUID();
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+  db.prepare(
+    'INSERT INTO email_verifications (token, userId, expiresAt, createdAt) VALUES (?, ?, ?, ?)'
+  ).run(token, userId, expiresAt, new Date().toISOString());
+  return token;
+}
+
 router.post('/api/auth/register', async (req: Request, res: Response) => {
   try {
     const { username, email, password, accountType, joinSlug, birthYear } = req.body;
@@ -469,13 +488,7 @@ router.post('/api/auth/resend-verification', async (req: Request, res: Response)
       return res.json({ success: true, message: 'If that email is registered and unverified, a new link has been sent.' });
     }
 
-    // Delete any existing tokens for this user, then create a fresh one
-    db.prepare('DELETE FROM email_verifications WHERE userId = ?').run(user.id);
-    const newToken = randomUUID() + '-' + randomUUID();
-    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-    db.prepare(
-      'INSERT INTO email_verifications (token, userId, expiresAt, createdAt) VALUES (?, ?, ?, ?)'
-    ).run(newToken, user.id, expiresAt, new Date().toISOString());
+    const newToken = mintVerificationToken(user.id);
 
     sendVerificationEmail(user.email, user.username, newToken).catch((err) => {
       console.error('Failed to resend verification email:', err.message);
@@ -1509,12 +1522,36 @@ router.post('/api/admin/opportunities/:id/deny', requireAdmin, async (req: Reque
 // genuinely quiet fortnight looks like.
 // Who still hasn't done the questionnaire. Read-only, so the admin can see the
 // number before deciding to send anything.
+/** How long before the same person can be nudged again. */
+const NUDGE_COOLDOWN_DAYS = 7;
+
+/** ISO cutoff for the cooldown. Computed here rather than in SQL on purpose:
+ *  every timestamp in this database is a JS toISOString(), which SQLite's own
+ *  datetime('now') does not match, so a SQL-side comparison would quietly
+ *  compare two different formats. */
+function nudgeCutoff(): string {
+  return new Date(Date.now() - NUDGE_COOLDOWN_DAYS * 24 * 60 * 60 * 1000).toISOString();
+}
+
+/**
+ * Who a nudge is for: every volunteer who has not answered the questionnaire
+ * and has not been contacted inside the cooldown.
+ *
+ * The cooldown replaces what used to be `onboardingNudgedAt IS NULL`. That
+ * excluded anyone nudged even once, forever -- which is why the button
+ * eventually reported nothing to send and did nothing when pressed. But the
+ * stamp still has to gate something, because it is also what makes a failed
+ * run resumable: a Brevo outage leaves those people unstamped, and pressing
+ * again picks up exactly them instead of re-emailing everyone who already
+ * succeeded. A time window keeps that property and still lets a second round
+ * go out later. Takes the cutoff as a bound parameter.
+ */
 const NUDGE_TARGETS = `
   FROM users
   WHERE accountType = 'volunteer'
     AND onboardingCompletedAt IS NULL
-    AND onboardingNudgedAt IS NULL
     AND banned = 0
+    AND (onboardingNudgedAt IS NULL OR onboardingNudgedAt < ?)
 `;
 
 // Nudge one person, rather than the whole cohort. Same two channels as the
@@ -1532,6 +1569,15 @@ router.post('/api/admin/users/:id/nudge', requireAdmin, async (req: Request, res
     ).get(req.params.id) as any;
     if (!u) return res.status(404).json({ error: 'User not found' });
     if (u.banned) return res.status(400).json({ error: 'That account is suspended' });
+    // The admin UI already hides these buttons for accounts they make no sense
+    // for, but that was the only thing enforcing it -- the route itself would
+    // happily email an organization the volunteer questionnaire.
+    if (u.accountType !== 'volunteer') {
+      return res.status(400).json({ error: 'The questionnaire is for volunteer accounts' });
+    }
+    if (u.onboardingCompletedAt) {
+      return res.status(400).json({ error: 'They have already answered the questionnaire' });
+    }
 
     const now = new Date().toISOString();
 
@@ -1558,19 +1604,29 @@ router.post('/api/admin/users/:id/nudge', requireAdmin, async (req: Request, res
     }
 
     // channel === 'email'
-    if (!u.emailVerified) return res.status(400).json({ error: 'That address is not verified yet' });
-    if (!u.emailReminders) return res.status(400).json({ error: 'They have unsubscribed from emails' });
     if (String(u.email).endsWith('@example.com')) {
       return res.status(400).json({ error: 'That is a placeholder address' });
     }
+    // Unsubscribing is the one thing a single-user send still will not
+    // override. Everything else here is a judgement the admin is entitled to
+    // make one person at a time; this one is the recipient's.
+    if (u.emailVerified && !u.emailReminders) {
+      return res.status(400).json({ error: 'They have unsubscribed from emails' });
+    }
     try {
-      await sendOnboardingNudgeEmail(u.email, u.username, u.unsubToken || '');
+      if (u.emailVerified) {
+        await sendOnboardingNudgeEmail(u.email, u.username, u.unsubToken || '');
+      } else {
+        // Same reasoning as the bulk send: the survey link needs a session
+        // they have never been able to get. Ask for the confirmation instead.
+        await sendVerifyThenSurveyEmail(u.email, u.username, mintVerificationToken(u.id));
+      }
     } catch {
       return res.status(502).json({ error: "Couldn't send — the mail provider rejected it" });
     }
-    // Stamped so the bulk send skips them afterwards.
+    // Stamped so the bulk send leaves them alone for the cooldown.
     db.prepare('UPDATE users SET onboardingNudgedAt = ? WHERE id = ?').run(now, u.id);
-    return res.json({ sent: true, channel });
+    return res.json({ sent: true, channel, kind: u.emailVerified ? 'questionnaire' : 'verification' });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
@@ -1578,64 +1634,90 @@ router.post('/api/admin/users/:id/nudge', requireAdmin, async (req: Request, res
 
 router.get('/api/admin/onboarding-nudge', requireAdmin, (_req: Request, res: Response) => {
   try {
-    const pending = (db.prepare(`SELECT COUNT(*) as c ${NUDGE_TARGETS}`).get() as any).c;
-    const emailable = (db.prepare(
-      `SELECT COUNT(*) as c ${NUDGE_TARGETS} AND emailVerified = 1 AND emailReminders = 1 AND email NOT LIKE '%@example.com'`
-    ).get() as any).c;
+    const cutoff = nudgeCutoff();
+    const count = (extra = '', ...args: any[]) =>
+      (db.prepare(`SELECT COUNT(*) as c ${NUDGE_TARGETS} ${extra}`).get(cutoff, ...args) as any).c;
+
+    const pending = count();
+    // The three ways a target is handled, made mutually exclusive so the
+    // breakdown always adds up to `pending`. Order matters: a placeholder
+    // address is checked first, then never-confirmed, then unsubscribed, so
+    // nobody lands in two buckets at once the way they used to.
+    const placeholderAddress = count("AND email LIKE '%@example.com'");
+    const unverifiedEmail = count("AND email NOT LIKE '%@example.com' AND emailVerified = 0");
+    const unsubscribed = count(
+      "AND email NOT LIKE '%@example.com' AND emailVerified = 1 AND emailReminders = 0"
+    );
+    // Everyone left gets the questionnaire email.
+    const emailable = count(
+      "AND email NOT LIKE '%@example.com' AND emailVerified = 1 AND emailReminders = 1"
+    );
+
     const alreadyNudged = (db.prepare(
       "SELECT COUNT(*) as c FROM users WHERE accountType='volunteer' AND onboardingNudgedAt IS NOT NULL"
     ).get() as any).c;
-    // Of those already nudged, how many were in a position to receive the email
-    // rather than only the in-site notification. onboardingNudgedAt is stamped
-    // for an emailable person only after their email actually goes out, so this
-    // is a real delivery count, not an attempt count. It reads current settings
-    // though, so someone who unsubscribed afterwards drops out of it.
-    const alreadyEmailed = (db.prepare(
-      `SELECT COUNT(*) as c FROM users
-       WHERE accountType='volunteer' AND onboardingNudgedAt IS NOT NULL
-         AND emailVerified = 1 AND emailReminders = 1 AND email NOT LIKE '%@example.com'`
-    ).get() as any).c;
-    // Why the rest were skipped. Without this, "31 nudged but only 1 email"
-    // is a mystery you cannot solve from the outside -- the send did what it
-    // was told, and the interesting part is what it was told about each person.
-    // Scoped to the same people `pending` counts -- without the nudged check
-    // this also counted anyone skipped on an earlier run, so the card showed
-    // a breakdown adding up to more than the number it was explaining.
-    const skipCount = (clause: string) =>
-      (db.prepare(`SELECT COUNT(*) as c FROM users
-                   WHERE accountType='volunteer' AND onboardingCompletedAt IS NULL
-                     AND onboardingNudgedAt IS NULL
-                     AND banned = 0 AND ${clause}`).get() as any).c;
-    const skipped = {
-      unverifiedEmail: skipCount('emailVerified = 0'),
-      unsubscribed: skipCount("emailVerified = 1 AND emailReminders = 0"),
-      placeholderAddress: skipCount("email LIKE '%@example.com'"),
-    };
-    return res.json({ pending, emailable, alreadyNudged, alreadyEmailed, skipped });
+
+    // Named, not just counted. The owner has to decide case by case whether to
+    // reach these two some other way, and "2 unsubscribed" does not let them.
+    const unsubscribedNames = (db.prepare(
+      `SELECT username, email ${NUDGE_TARGETS}
+         AND email NOT LIKE '%@example.com' AND emailVerified = 1 AND emailReminders = 0
+       ORDER BY username LIMIT 25`
+    ).all(cutoff) as any[]).map(u => ({ username: u.username, email: u.email }));
+
+    return res.json({
+      pending,
+      emailable,
+      verificationEmailable: unverifiedEmail,
+      alreadyNudged,
+      cooldownDays: NUDGE_COOLDOWN_DAYS,
+      skipped: { unverifiedEmail, unsubscribed, placeholderAddress },
+      unsubscribedNames,
+    });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
 });
 
-// Sends the nudge. Safe to re-run: onboardingNudgedAt is stamped on everyone it
-// processes, so a second call finds nobody. The in-site notification goes to
-// every target; the email only to those who verified an address and still have
-// reminders on -- a nudge is not worth overriding someone's unsubscribe.
+// One nudge run at a time. The route awaits Brevo once per recipient, so a
+// run takes as long as the mailing does; a proxy timeout in front of it shows
+// the admin an error even when the send is still going fine, and the obvious
+// reaction is to press again. The targets are selected before the first await,
+// so testing and setting this is atomic in a single-process server.
+let nudgeRunning = false;
+
 router.post('/api/admin/onboarding-nudge', requireAdmin, async (_req: Request, res: Response) => {
+  if (nudgeRunning) {
+    return res.status(409).json({ error: 'A nudge is already being sent. Give it a moment.' });
+  }
+  nudgeRunning = true;
   try {
+    const cutoff = nudgeCutoff();
     const targets = db.prepare(
       `SELECT id, username, email, emailVerified, emailReminders, unsubToken ${NUDGE_TARGETS}`
-    ).all() as any[];
+    ).all(cutoff) as any[];
 
     const now = new Date().toISOString();
+    // Upsert, not INSERT OR IGNORE. The id is one per user, so the row usually
+    // already exists -- from an earlier nudge, or from skipping the
+    // questionnaire, which writes the same id. Ignoring the conflict meant a
+    // repeat nudge wrote nothing at all: no unread badge, no new timestamp,
+    // nothing the volunteer could notice, while the response still reported
+    // every target as notified. Re-arming read and createdAt is what actually
+    // puts it back at the top of the bell.
     const notify = db.prepare(
-      'INSERT OR IGNORE INTO notifications (id, userId, type, message, read, createdAt) VALUES (?, ?, ?, ?, 0, ?)'
+      `INSERT INTO notifications (id, userId, type, message, read, createdAt)
+       VALUES (?, ?, ?, ?, 0, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         message = excluded.message, read = 0, createdAt = excluded.createdAt`
     );
     const markNudged = db.prepare('UPDATE users SET onboardingNudgedAt = ? WHERE id = ?');
-    const wantsEmail = (u: any) =>
-      u.emailVerified && u.emailReminders && !String(u.email).endsWith('@example.com');
 
-    // The in-site notification is free and idempotent, so everyone gets it now.
+    const isPlaceholder = (u: any) => String(u.email).endsWith('@example.com');
+    const wantsQuestionnaire = (u: any) => !isPlaceholder(u) && u.emailVerified && u.emailReminders;
+    const wantsVerification = (u: any) => !isPlaceholder(u) && !u.emailVerified;
+
+    // The in-site notification is free and goes to everyone, every run.
     db.transaction(() => {
       for (const u of targets) {
         notify.run(
@@ -1643,36 +1725,57 @@ router.post('/api/admin/onboarding-nudge', requireAdmin, async (_req: Request, r
           'We added a short questionnaire — it takes a minute and lets us mark the opportunities that actually fit you.',
           now
         );
-        // Stamped straight away only where the in-site notification is
-        // actually reachable, which means a verified account -- login refuses
-        // an unverified one, so that notification would sit in a bell its owner
-        // can never open. Marking those people "nudged" told us they had been
-        // reached when they had received nothing at all, and permanently
-        // excluded them from ever being nudged again.
-        if (!wantsEmail(u) && u.emailVerified) markNudged.run(now, u.id);
+        // Someone who gets no email is finished with as soon as the
+        // notification is written -- but only if they can actually reach it.
+        // An unverified account cannot log in, so its bell is unreachable;
+        // those people are stamped further down, when their email goes out.
+        if (!wantsQuestionnaire(u) && !wantsVerification(u) && u.emailVerified) {
+          markNudged.run(now, u.id);
+        }
       }
     })();
 
-    // Everyone else is stamped only once their email actually goes out. The
-    // stamp is what stops a second send, so stamping before the attempt would
-    // mean a Brevo outage silently skipped those people forever -- they would
-    // look "already nudged" and never be retried. This way a failure leaves
-    // them pending and pressing the button again picks up exactly them.
-    let emailed = 0, emailFailed = 0;
+    // Stamped only once the email is actually away. The stamp is what holds
+    // someone out for the cooldown, so stamping before the attempt would mean
+    // a Brevo outage silently skipped them for a week. This way a failure
+    // leaves them selectable and pressing again picks up exactly them.
+    let emailedQuestionnaire = 0, emailedVerification = 0, emailFailed = 0;
+    let skippedUnsubscribed = 0;
     for (const u of targets) {
-      if (!wantsEmail(u)) continue;
-      try {
-        await sendOnboardingNudgeEmail(u.email, u.username, u.unsubToken || '');
-        markNudged.run(now, u.id);
-        emailed++;
-      } catch {
-        emailFailed++;
+      if (isPlaceholder(u)) continue;
+      if (wantsQuestionnaire(u)) {
+        try {
+          await sendOnboardingNudgeEmail(u.email, u.username, u.unsubToken || '');
+          markNudged.run(now, u.id);
+          emailedQuestionnaire++;
+        } catch { emailFailed++; }
+      } else if (wantsVerification(u)) {
+        // They never confirmed, so the survey link would only ever show them a
+        // login they cannot pass. Ask for the confirmation instead -- it is the
+        // one thing that unsticks the account, and the questionnaire is waiting
+        // on the other side of it.
+        try {
+          const token = mintVerificationToken(u.id);
+          await sendVerifyThenSurveyEmail(u.email, u.username, token);
+          markNudged.run(now, u.id);
+          emailedVerification++;
+        } catch { emailFailed++; }
+      } else {
+        skippedUnsubscribed++;
       }
     }
 
-    return res.json({ notified: targets.length, emailed, emailFailed });
+    return res.json({
+      notified: targets.length,
+      emailedQuestionnaire,
+      emailedVerification,
+      skippedUnsubscribed,
+      emailFailed,
+    });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
+  } finally {
+    nudgeRunning = false;
   }
 });
 
