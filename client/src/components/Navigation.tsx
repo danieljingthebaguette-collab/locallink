@@ -251,7 +251,12 @@ export default function Navigation() {
                                     setNotifOpen(false);
                                   }}
                                   className={cn(
-                                    'w-full text-left px-4 py-3 hover:bg-secondary/50 transition-colors flex gap-3 items-start',
+                                    // cursor-pointer is not redundant: Tailwind's
+                                    // preflight gives <button> cursor:default, so
+                                    // without it these rows never look tappable --
+                                    // and the reminder is the one notification that
+                                    // is meant to be acted on rather than read.
+                                    'w-full text-left px-4 py-3 hover:bg-secondary/50 transition-colors flex gap-3 items-start cursor-pointer',
                                     !n.read && 'bg-primary/5'
                                   )}
                                 >
@@ -280,6 +285,12 @@ export default function Navigation() {
                                   </div>
                                   <div className="flex-1 min-w-0">
                                     <p className="text-sm text-foreground leading-snug">{n.message}</p>
+                                    {/* Every other notification reports something that
+                                        already happened; this one is asking for a minute
+                                        of their time, and nothing on the row said so. */}
+                                    {n.type === 'onboarding_reminder' && (
+                                      <span className="text-xs font-semibold text-primary mt-1 block">Answer it now →</span>
+                                    )}
                                     <p className="text-[11px] text-muted-foreground mt-0.5">{formatTimeAgo(n.createdAt)}</p>
                                   </div>
                                   {!n.read && <div className="w-2 h-2 rounded-full bg-primary mt-1.5 flex-shrink-0" />}

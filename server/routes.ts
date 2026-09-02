@@ -155,7 +155,10 @@ const VALID_PINNED_SIZES = ['small', 'medium', 'large'] as const;
 const VALID_TOWNS = [
   'Montgomery/Skillman', 'Hillsborough', 'Princeton', 'Bridgewater',
   'Somerville', 'Franklin Township', 'Manville', 'Raritan',
-  'Belle Mead/Rocky Hill', 'Flemington',
+  'Belle Mead/Rocky Hill', 'Flemington', 'Basking Ridge', 'Bedminster',
+  'Bernardsville', 'Bound Brook', 'Branchburg', 'Far Hills', 'Green Brook',
+  'Millstone', 'North Plainfield', 'Peapack-Gladstone', 'South Bound Brook',
+  'Warren', 'Watchung', 'Pittstown', 'Trenton'
 ] as const;
 
 // Mirrors FIELD_TAGS in client/src/lib/mockData.ts — keep the two lists in
@@ -1063,7 +1066,7 @@ router.put('/api/opportunities/:id', requireAuth, (req: AuthRequest, res: Respon
     if (!opp) return res.status(404).json({ error: 'Opportunity not found' });
     if (opp.hostId !== userId && !req.isAdmin) return res.status(403).json({ error: 'Not authorized to edit this opportunity' });
 
-    const { title, description, category, location, town, date, duration, spots, spotsType, image, tags, isAvailable, isRecurring, recurringDay, recurringTime, cardObjectPosition, modalObjectPosition, externalSignupUrl } = req.body;
+    const { title, description, category, location, town, date, duration, spots, spotsType, image, tags, steps, isAvailable, isRecurring, recurringDay, recurringTime, cardObjectPosition, modalObjectPosition, externalSignupUrl } = req.body;
 
     // --- Input validation ---
     if (spotsType !== undefined && !VALID_SPOTS_TYPES.includes(spotsType)) {
@@ -1103,6 +1106,19 @@ router.put('/api/opportunities/:id', requireAuth, (req: AuthRequest, res: Respon
     }
     // Never required — validated only when a non-blank value was sent; a blank value clears it to null
     let trimmedSignupUrl: string | undefined;
+    // steps were accepted on create but never on edit, so an organization that
+    // put its registration link in the wrong place -- or simply mistyped it --
+    // had no way of correcting it. Same limits create applies.
+    if (steps !== undefined) {
+      if (!Array.isArray(steps)) return res.status(400).json({ error: 'steps must be a list' });
+      if (steps.length > LIMITS.steps) {
+        return res.status(400).json({ error: `Keep this to ${LIMITS.steps} steps or fewer` });
+      }
+      for (const st of steps) {
+        const stepError = getLengthError('step', st);
+        if (stepError) return res.status(400).json({ error: stepError });
+      }
+    }
     if (externalSignupUrl !== undefined) {
       trimmedSignupUrl = typeof externalSignupUrl === 'string' ? externalSignupUrl.trim() : '';
       if (trimmedSignupUrl) {
@@ -1132,6 +1148,7 @@ router.put('/api/opportunities/:id', requireAuth, (req: AuthRequest, res: Respon
       if (cardObjectPosition  !== undefined) db.prepare('UPDATE opportunities SET cardObjectPosition = ? WHERE id = ?').run(cardObjectPosition || null, oppId);
       if (modalObjectPosition !== undefined) db.prepare('UPDATE opportunities SET modalObjectPosition = ? WHERE id = ?').run(modalObjectPosition || null, oppId);
       if (trimmedSignupUrl    !== undefined) db.prepare('UPDATE opportunities SET externalSignupUrl = ? WHERE id = ?').run(trimmedSignupUrl || null, oppId);
+      if (steps                !== undefined) db.prepare('UPDATE opportunities SET steps = ? WHERE id = ?').run(JSON.stringify(steps), oppId);
     })();
 
     const updated = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(oppId) as any;
@@ -1586,11 +1603,16 @@ router.post('/api/admin/users/:id/nudge', requireAdmin, async (req: Request, res
       // case; anything typed is sent verbatim. The questionnaire one reuses
       // the fixed id so it can't stack up with the bulk send's copy, but a
       // written message is its own notification and always goes through.
+      //
+      // Typed messages are onboarding_reminder too, not admin_message. This
+      // button exists to ask someone about the questionnaire, so whatever the
+      // wording, tapping it should open the questionnaire -- as admin_message
+      // it was a dead end that marked itself read and did nothing else.
       const custom = (message || '').trim().slice(0, MAX_ONBOARDING_TEXT);
       if (custom) {
         db.prepare(
           'INSERT INTO notifications (id, userId, type, message, read, createdAt) VALUES (?, ?, ?, ?, 0, ?)'
-        ).run(randomUUID(), u.id, 'admin_message', custom, now);
+        ).run(randomUUID(), u.id, 'onboarding_reminder', custom, now);
       } else {
         db.prepare(
           'INSERT OR IGNORE INTO notifications (id, userId, type, message, read, createdAt) VALUES (?, ?, ?, ?, 0, ?)'

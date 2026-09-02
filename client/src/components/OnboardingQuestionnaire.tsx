@@ -53,8 +53,9 @@ export default function OnboardingQuestionnaire({ suppressed }: { suppressed?: b
     && currentUser?.accountType === 'volunteer'
     && !currentUser?.onboardingCompletedAt;
 
-  // Always reopens on step 1 -- nothing is saved until the final Save, so
-  // there is no half-finished state worth returning someone to.
+  // Always reopens on step 1. Answers are only ever written by an explicit
+  // Save, and a save completes the questionnaire, so there is no
+  // half-finished server state to return someone to.
   useEffect(() => {
     if (open) setStep(0);
   }, [open]);
@@ -90,6 +91,15 @@ export default function OnboardingQuestionnaire({ suppressed }: { suppressed?: b
 
   const filteredTags = FIELD_TAGS.filter(t => t.toLowerCase().includes(tagSearch.toLowerCase()));
 
+  // Whether there is anything worth keeping. Save used to live on the last
+  // step only, with "Skip for now" sitting beside it the whole way through --
+  // so answering step one and leaving threw the answers away without a word,
+  // while the intro promised "answer what you'd like and skip the rest".
+  const hasAnswers = Boolean(
+    hoursSoFar.trim() || majors.trim() || goalHours.trim() || goalEvents.trim() ||
+    interests.length || towns.length || availability.length
+  );
+
   const handleSave = async () => {
     setSaving(true);
     const result = await submitOnboarding({
@@ -103,6 +113,8 @@ export default function OnboardingQuestionnaire({ suppressed }: { suppressed?: b
     });
     setSaving(false);
     if (result.success) {
+      // No hide needed: submitOnboarding merges onboardingCompletedAt into
+      // currentUser, and that is what `open` is gated on.
       toast({ title: 'Thanks! We\'ll use this to help you find a good fit.' });
     } else {
       toast({ title: result.error || 'Could not save your answers', variant: 'destructive' });
@@ -309,6 +321,12 @@ export default function OnboardingQuestionnaire({ suppressed }: { suppressed?: b
           {step > 0 && (
             <Button variant="outline" onClick={() => setStep(s => (s - 1) as Step)} disabled={saving} className="rounded-md">
               <ChevronLeft className="w-4 h-4 mr-1" /> Back
+            </Button>
+          )}
+          {step < STEP_COUNT - 1 && hasAnswers && (
+            <Button variant="outline" onClick={handleSave} disabled={saving} className="rounded-md">
+              {saving && <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />}
+              Save &amp; finish
             </Button>
           )}
           {step < STEP_COUNT - 1 ? (

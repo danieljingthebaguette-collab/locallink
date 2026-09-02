@@ -265,18 +265,27 @@ function bucketByMonth(data: { date: string; signups: number; users: number }[])
   return Array.from(map.values());
 }
 
+type NudgeCounts = {
+  pending: number;
+  emailable: number;
+  verificationEmailable: number;
+  alreadyNudged: number;
+  cooldownDays: number;
+  skipped: { unverifiedEmail: number; unsubscribed: number; placeholderAddress: number };
+  unsubscribedNames: { username: string; email: string }[];
+};
+
 /**
- * One-off nudge for volunteers who signed up before the questionnaire existed.
- * Shows the count first and asks before sending, because the email half cannot
- * be taken back. Safe to press twice: the server stamps everyone it processes,
- * so a second press finds nobody.
+ * Emails every volunteer who has not answered the questionnaire, and puts the
+ * same reminder in their bell.
+ *
+ * Shows exactly what will go out and asks before sending, because the email
+ * half cannot be taken back. The server holds a cooldown so a second press
+ * inside the window sends nothing, and refuses a concurrent press outright.
  */
 function OnboardingNudgeCard() {
   const { toast } = useToast();
-  const [counts, setCounts] = useState<{
-    pending: number; emailable: number; alreadyNudged: number; alreadyEmailed: number;
-    skipped?: { unverifiedEmail: number; unsubscribed: number; placeholderAddress: number };
-  } | null>(null);
+  const [counts, setCounts] = useState<NudgeCounts | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [confirming, setConfirming] = useState(false);
@@ -309,20 +318,29 @@ function OnboardingNudgeCard() {
       const res = await fetch('/api/admin/onboarding-nudge', {
         method: 'POST', headers: { Authorization: `Bearer ${token}` },
       });
-      if (!res.ok) throw new Error(String(res.status));
-      const r = await res.json();
+      const r = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(r.error || `the server returned ${res.status}`);
+      const bits = [
+        r.emailedQuestionnaire && `${r.emailedQuestionnaire} questionnaire email${r.emailedQuestionnaire === 1 ? '' : 's'}`,
+        r.emailedVerification && `${r.emailedVerification} confirm-your-address email${r.emailedVerification === 1 ? '' : 's'}`,
+        r.emailFailed && `${r.emailFailed} failed`,
+      ].filter(Boolean).join(', ');
       toast({
-        title: `Notified ${r.notified} volunteer${r.notified === 1 ? '' : 's'}`,
-        description: `${r.emailed} email${r.emailed === 1 ? '' : 's'} sent${r.emailFailed ? `, ${r.emailFailed} failed` : ''}.`,
+        title: r.notified === 0
+          ? 'Nobody was due — everyone has been asked recently'
+          : `Notified ${r.notified} volunteer${r.notified === 1 ? '' : 's'}`,
+        description: bits ? `${bits} sent.` : 'In-site notifications only.',
       });
       setConfirming(false);
       load();
-    } catch {
-      toast({ title: "Couldn't send the nudge", variant: 'destructive' });
+    } catch (e: any) {
+      toast({ title: "Couldn't send the nudge", description: e.message, variant: 'destructive' });
     } finally {
       setSending(false);
     }
   };
+
+  const totalEmails = counts ? counts.emailable + counts.verificationEmailable : 0;
 
   return (
     <div className="rounded-2xl bg-card border border-border p-6 space-y-3">
@@ -342,25 +360,36 @@ function OnboardingNudgeCard() {
       <div>
         <p className="text-sm text-muted-foreground mt-1">
           {counts.pending === 0
-            ? `Everyone has been asked — ${counts.alreadyNudged} volunteer${counts.alreadyNudged === 1 ? '' : 's'} nudged, ${counts.alreadyEmailed} of them by email. Nothing will be sent.`
-            : `${counts.pending} volunteer${counts.pending === 1 ? " hasn't" : "s haven't"} filled in the questionnaire yet, and ${counts.pending === 1 ? 'has' : 'have'}n't been asked. ${counts.emailable} can be emailed; any others get the in-site notification only.`}
+            ? `Nobody is due right now. Everyone who hasn't answered has been contacted in the last ${counts.cooldownDays} days; they become due again after that.`
+            : `${counts.pending} volunteer${counts.pending === 1 ? '' : 's'} still ${counts.pending === 1 ? "hasn't" : "haven't"} filled in the questionnaire. All of them get the in-site notification; ${totalEmails} also get an email.`}
         </p>
-        {/* Why anyone was reached by notification only. The gap between
-            "nudged" and "emailed" is otherwise unexplainable from here. */}
-        {counts.skipped && (counts.skipped.unverifiedEmail + counts.skipped.unsubscribed + counts.skipped.placeholderAddress) > 0 && (
+        {/* The email half is two different letters, and which one someone gets
+            changes what it asks of them -- so it is worth saying out loud
+            rather than reporting a single "emails sent" number. */}
+        {counts.pending > 0 && counts.verificationEmailable > 0 && (
           <p className="text-xs text-muted-foreground mt-2">
-            Notification only, no email:{' '}
-            {[
-              counts.skipped.unverifiedEmail && `${counts.skipped.unverifiedEmail} never confirmed their email address`,
-              counts.skipped.unsubscribed && `${counts.skipped.unsubscribed} unsubscribed`,
-              counts.skipped.placeholderAddress && `${counts.skipped.placeholderAddress} on a placeholder address`,
-            ].filter(Boolean).join(' · ')}.
+            {counts.verificationEmailable} of those never confirmed their address, so they can't sign in
+            at all. They get a confirm-your-email link instead of the survey — that's the only thing
+            that unsticks the account.
           </p>
         )}
-        {counts.pending > 0 && counts.alreadyNudged > 0 && (
+        {/* Named, not just counted: reaching these two some other way is a
+            judgement call, and a bare number doesn't let you make it. */}
+        {counts.unsubscribedNames.length > 0 && (
+          <p className="text-xs text-muted-foreground mt-2">
+            No email for {counts.unsubscribedNames.map(u => u.username).join(', ')} — {counts.unsubscribedNames.length === 1 ? 'they' : 'they'} unsubscribed.
+            {' '}They still get the in-site notification.
+          </p>
+        )}
+        {counts.skipped.placeholderAddress > 0 && (
           <p className="text-xs text-muted-foreground mt-1">
-            {counts.alreadyNudged} {counts.alreadyNudged === 1 ? 'volunteer has' : 'volunteers have'} already been
-            nudged previously ({counts.alreadyEmailed} by email) and will not be contacted again.
+            {counts.skipped.placeholderAddress} on a placeholder address, skipped.
+          </p>
+        )}
+        {counts.alreadyNudged > 0 && (
+          <p className="text-xs text-muted-foreground mt-1">
+            {counts.alreadyNudged} {counts.alreadyNudged === 1 ? 'volunteer has' : 'volunteers have'} been
+            contacted before. They're asked again once {counts.cooldownDays} days have passed.
           </p>
         )}
       </div>
@@ -368,7 +397,7 @@ function OnboardingNudgeCard() {
         confirming ? (
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-sm text-foreground font-medium">
-              Send to {counts.pending}? {counts.emailable} will get a real email.
+              Notify {counts.pending} and send {totalEmails} real email{totalEmails === 1 ? '' : 's'}?
             </span>
             <Button size="sm" onClick={send} disabled={sending} className="rounded-md">
               {sending ? 'Sending…' : 'Yes, send'}

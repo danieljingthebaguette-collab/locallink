@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'wouter';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { cn, getLocationError, getExternalSignupUrlError, getRelativeDay } from '@/lib/utils';
+import { Linkified, hasLink } from '@/components/Linkified';
 import { Plus, MapPin, Users, Clock, Search, Loader2, Heart, Flag, X, Share2, Edit3, Save, ChevronDown, Star, Trash2, Repeat, Globe, ExternalLink, Sparkles, ClipboardList, Calendar, User, Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -254,6 +255,22 @@ export default function Home() {
   const fieldsInUse = Array.from(
     new Set(opportunities.flatMap(o => o.tags ?? []))
   ).sort((a, b) => a.localeCompare(b));
+
+  // Towns that actually have a post, for the board filter only. The full list
+  // offered every town in the county whether or not anything was there, so
+  // most choices led to an empty board and looked broken. currentTown is kept
+  // in the list even when its last post disappears: dropping it would leave
+  // the select showing "All towns" while the filter still excluded everything.
+  //
+  // The authoring dropdowns (post create/edit, admin) must keep the FULL list
+  // -- filtering those to towns-in-use would mean a town could never get its
+  // first post.
+  const townsInUse = Array.from(
+    new Set(opportunities.map(o => o.town).filter((t): t is string => !!t))
+  ).sort((a, b) => a.localeCompare(b));
+  const townOptions = currentTown !== 'all' && !townsInUse.includes(currentTown)
+    ? [...townsInUse, currentTown]
+    : townsInUse;
 
   // Host avatars for board cards — one profile fetch per unique host,
   // shared with the modal via the same module-level hostProfileCache.
@@ -623,7 +640,7 @@ export default function Home() {
                     aria-label="Filter by town"
                     className="min-h-[44px] bg-transparent text-xs font-semibold uppercase tracking-wide cursor-pointer focus:outline-none max-w-[150px]">
                     <option value="all">All towns</option>
-                    {TOWNS.map(t => <option key={t} value={t}>{t}</option>)}
+                    {townOptions.map(t => <option key={t} value={t}>{t}</option>)}
                   </select>
                 </label>
                 {/* Fields were the one taxonomy with no control of its own --
@@ -1541,14 +1558,23 @@ export default function Home() {
                       icon and step count exist for the same reason -- so what's
                       behind the fold is legible before it's opened, not just
                       after. */}
-                  {selectedCard.steps && selectedCard.steps.length > 0 && (
+                  {selectedCard.steps && selectedCard.steps.length > 0 && (() => {
+                    // Most of these posts keep their real registration link in
+                    // here, so the label has to say so -- nobody opens
+                    // "What to Expect" looking for the way to sign up.
+                    const stepsHaveLink = selectedCard.steps.some(hasLink);
+                    return (
                     <div className="pt-1">
                       <button
                         onClick={() => setStepsExpanded(v => !v)}
                         aria-expanded={stepsExpanded}
                         className="inline-flex items-center gap-1.5 text-sm font-semibold text-white/85 hover:text-white underline underline-offset-4 decoration-white/40 hover:decoration-white transition-colors">
                         <ClipboardList className="w-3.5 h-3.5" />
-                        {stepsExpanded ? 'Show less' : `What to Expect (${selectedCard.steps.length} ${selectedCard.steps.length === 1 ? 'step' : 'steps'})`}
+                        {stepsExpanded
+                          ? 'Show less'
+                          : stepsHaveLink
+                            ? 'How to sign up — includes the registration link'
+                            : `What to Expect (${selectedCard.steps.length} ${selectedCard.steps.length === 1 ? 'step' : 'steps'})`}
                         <ChevronDown className={cn('w-3.5 h-3.5 transition-transform duration-200', stepsExpanded && 'rotate-180')} />
                       </button>
 
@@ -1569,7 +1595,9 @@ export default function Home() {
                                   <span className="flex-shrink-0 w-6 h-6 rounded-full bg-white/20 text-white text-xs font-bold flex items-center justify-center tabular-nums mt-0.5">
                                     {i + 1}
                                   </span>
-                                  <span className="text-white/95 text-sm leading-relaxed">{step}</span>
+                                  <span className="text-white/95 text-sm leading-relaxed">
+                                    <Linkified text={step} />
+                                  </span>
                                 </li>
                               ))}
                             </ol>
@@ -1577,7 +1605,8 @@ export default function Home() {
                         )}
                       </AnimatePresence>
                     </div>
-                  )}
+                    );
+                  })()}
 
                   {/* Both links, when each exists — they answer different questions.
                       The organization's site is "who are these people"; the signup

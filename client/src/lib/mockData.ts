@@ -38,6 +38,21 @@ export const TOWNS = [
   'Raritan',
   'Belle Mead/Rocky Hill',
   'Flemington',
+  'Basking Ridge',
+  'Bedminster',
+  'Bernardsville',
+  'Bound Brook',
+  'Branchburg',
+  'Far Hills',
+  'Green Brook',
+  'Millstone',
+  'North Plainfield',
+  'Peapack-Gladstone',
+  'South Bound Brook',
+  'Warren',
+  'Watchung',
+  'Pittstown',
+  'Trenton',
 ] as const;
 
 export interface Opportunity {
