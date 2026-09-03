@@ -255,6 +255,14 @@ export default function Home() {
   const fieldsInUse = Array.from(
     new Set(opportunities.flatMap(o => o.tags ?? []))
   ).sort((a, b) => a.localeCompare(b));
+  // Same reconciliation as townOptions below, for the same reason: filters
+  // live in the store, so they outlive a refetch. An admin who filters to a
+  // field and then deletes the last post carrying it comes back to a select
+  // reading "All fields" while the filter still excludes everything -- an
+  // empty board and a dropdown disagreeing about why.
+  const fieldOptions = currentField !== 'all' && !fieldsInUse.includes(currentField)
+    ? [...fieldsInUse, currentField]
+    : fieldsInUse;
 
   // Towns that actually have a post, for the board filter only. The full list
   // offered every town in the county whether or not anything was there, so
@@ -646,7 +654,7 @@ export default function Home() {
                 {/* Fields were the one taxonomy with no control of its own --
                     findable only by guessing the exact word into the search
                     box. Sits beside Town because it does the same job. */}
-                {fieldsInUse.length > 0 && (
+                {fieldOptions.length > 0 && (
                   <label htmlFor="home-field-filter" className="min-h-[44px] flex items-center gap-1 text-xs font-semibold text-muted-foreground uppercase tracking-wide cursor-pointer hover:text-foreground transition-colors">
                     <span>Field:</span>
                     <select id="home-field-filter"
@@ -655,7 +663,7 @@ export default function Home() {
                       aria-label="Filter by field"
                       className="min-h-[44px] bg-transparent text-xs font-semibold uppercase tracking-wide cursor-pointer focus:outline-none max-w-[170px]">
                       <option value="all">All fields</option>
-                      {fieldsInUse.map(f => <option key={f} value={f}>{f}</option>)}
+                      {fieldOptions.map(f => <option key={f} value={f}>{f}</option>)}
                     </select>
                   </label>
                 )}
