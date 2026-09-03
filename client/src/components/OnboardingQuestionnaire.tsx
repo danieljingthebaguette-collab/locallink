@@ -325,11 +325,15 @@ export default function OnboardingQuestionnaire({ suppressed }: { suppressed?: b
           )}
         </div>
 
-        <div className="mt-7 flex items-center gap-2">
-          <Button variant="outline" onClick={skip} disabled={saving} className="rounded-md text-muted-foreground">
-            Skip for now
-          </Button>
-          <div className="flex-1" />
+        {/* Four bordered buttons never fit this panel: at 375px the old
+            single row needed 351px of button in 293px of room and pushed
+            Continue clean off the screen, and even at desktop width the
+            panel is 512px against ~521px of controls. Leaving is also not a
+            peer of Back/Save/Continue, so it stops pretending to be one --
+            the three actions keep one row at every width, and the way out
+            sits under them as quiet text. */}
+        <div className="mt-7 flex flex-col gap-3">
+          <div className="flex flex-wrap items-center justify-end gap-2">
           {step > 0 && (
             <Button variant="outline" onClick={() => setStep(s => (s - 1) as Step)} disabled={saving} className="rounded-md">
               <ChevronLeft className="w-4 h-4 mr-1" /> Back
@@ -351,6 +355,18 @@ export default function OnboardingQuestionnaire({ suppressed }: { suppressed?: b
               Save
             </Button>
           )}
+          </div>
+          {/* Says what it actually does once there is something to lose. "Skip
+              for now" reads like "ask me later" -- fine on an empty form, but
+              a lie next to half-filled answers it is about to throw away. */}
+          <button
+            type="button"
+            onClick={skip}
+            disabled={saving}
+            className="self-start text-sm font-medium text-muted-foreground hover:text-foreground underline underline-offset-4 disabled:opacity-50 cursor-pointer"
+          >
+            {hasAnswers ? 'Close without saving' : 'Skip for now'}
+          </button>
         </div>
       </div>
     </div>
