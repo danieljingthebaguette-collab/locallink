@@ -141,7 +141,9 @@ export default function Home() {
   const [showEditForm, setShowEditForm] = useState(false);
   const [showDiscardEdits, setShowDiscardEdits] = useState(false);
   // Collapsed by default, and reset per post -- expanding one shouldn't leave
-  // the next one you open already unrolled.
+  // the next one you open already unrolled. The reset is the effect below;
+  // without it this only ever described an intention, and the "includes the
+  // registration link" label on the next post was skipped past unread.
   const [stepsExpanded, setStepsExpanded] = useState(false);
   const scrolled = useScrolled();
   // Signed-out visitors still see the Create Post strip (it prompts sign-up);
@@ -173,6 +175,7 @@ export default function Home() {
   const prevFilters = useRef({ sortBy, currentCategory });
 
   useEffect(() => { fetchOpportunities(); }, [fetchOpportunities]);
+  useEffect(() => { setStepsExpanded(false); }, [selectedCard?.id]);
   useEffect(() => { if (isLoggedIn) fetchFavorites(); }, [isLoggedIn, fetchFavorites]);
 
   // Deep link: auto-open post from ?post=ID in URL

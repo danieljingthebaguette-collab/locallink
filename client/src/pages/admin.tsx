@@ -271,7 +271,7 @@ type NudgeCounts = {
   verificationEmailable: number;
   alreadyNudged: number;
   cooldownDays: number;
-  skipped: { unverifiedEmail: number; unsubscribed: number; placeholderAddress: number };
+  skipped: { unverifiedEmail: number; unsubscribed: number };
   unsubscribedNames: { username: string; email: string }[];
 };
 
@@ -306,7 +306,19 @@ function OnboardingNudgeCard() {
         }
         return r.json();
       })
-      .then(setCounts)
+      // Defaults for the nested fields. A body missing them -- a client and
+      // server briefly out of step across a deploy -- would otherwise throw
+      // while rendering, and with no ErrorBoundary in the app that blanks the
+      // entire admin page rather than just this card.
+      .then((d: Partial<NudgeCounts>) => setCounts({
+        pending: d.pending ?? 0,
+        emailable: d.emailable ?? 0,
+        verificationEmailable: d.verificationEmailable ?? 0,
+        alreadyNudged: d.alreadyNudged ?? 0,
+        cooldownDays: d.cooldownDays ?? 7,
+        skipped: { unverifiedEmail: 0, unsubscribed: 0, ...(d.skipped ?? {}) },
+        unsubscribedNames: d.unsubscribedNames ?? [],
+      }))
       .catch((e: Error) => setLoadError(e.message));
   };
   useEffect(load, []);
@@ -381,15 +393,11 @@ function OnboardingNudgeCard() {
             {' '}They still get the in-site notification.
           </p>
         )}
-        {counts.skipped.placeholderAddress > 0 && (
-          <p className="text-xs text-muted-foreground mt-1">
-            {counts.skipped.placeholderAddress} on a placeholder address, skipped.
-          </p>
-        )}
         {counts.alreadyNudged > 0 && (
           <p className="text-xs text-muted-foreground mt-1">
-            {counts.alreadyNudged} {counts.alreadyNudged === 1 ? 'volunteer has' : 'volunteers have'} been
-            contacted before. They're asked again once {counts.cooldownDays} days have passed.
+            {counts.alreadyNudged} of the volunteers who still haven't answered {counts.alreadyNudged === 1 ? 'was' : 'were'} contacted
+            before. Anyone contacted within the last {counts.cooldownDays} days is left alone; the rest are
+            counted above and will be emailed again.
           </p>
         )}
       </div>

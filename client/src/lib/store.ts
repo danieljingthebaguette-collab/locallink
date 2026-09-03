@@ -214,7 +214,18 @@ export const useAuthStore = create<AuthState>((set) => {
     logout: () => {
       localStorage.removeItem('locallink_user');
       localStorage.removeItem('locallink_token');
-      set({ isLoggedIn: false, currentUser: null });
+      // Clear the questionnaire state too. Both of these outlive the account
+      // that set them otherwise, and on a shared computer that is the next
+      // person's problem: one leftover flag skips the first-run walkthrough
+      // for them, the other suppresses the questionnaire they have never been
+      // shown.
+      sessionStorage.removeItem(ONBOARDING_DISMISS_KEY);
+      set({
+        isLoggedIn: false,
+        currentUser: null,
+        onboardingPromptDismissed: false,
+        onboardingRequested: false,
+      });
     },
 
     loadUser: () => {

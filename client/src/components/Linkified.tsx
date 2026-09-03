@@ -18,12 +18,21 @@
 // will not end on punctuation, so "(https://example.org/x)" keeps its trailing
 // slash but drops the bracket, and a URL ending a sentence drops the full stop.
 // No /u flag: this tsconfig targets below es6 and rejects it.
-const URL_RE = /(https?:\/\/[^\s<>()"']+[^\s<>()"'.,;:!?])/g;
+//
+// "@" is barred from the host but allowed after the first "/", because
+// "https://google.com@evil.com/x" is a real address that reads as google.com
+// and goes to evil.com. Stopping the host at the "@" makes the link go where
+// it appears to, and leaves the rest as visible text.
+const URL_RE = /(https?:\/\/[^\s<>()"'@\/]*[^\s<>()"'@\/.,;:!?](?:\/[^\s<>()"']*[^\s<>()"'.,;:!?])?)/g;
 
 export function Linkified({ text, className }: { text: string; className?: string }) {
   // split() with a capturing group puts the matches at the odd indices. Using
   // .test() here instead would be a bug: URL_RE is /g and therefore stateful.
-  const parts = text.split(URL_RE);
+  //
+  // String() rather than trusting the type: steps are stored as JSON and the
+  // length check that guards them ignores non-strings, so a number or object
+  // in that array reaches here and .split would take the whole page down.
+  const parts = String(text).split(URL_RE);
   return (
     <>
       {parts.map((part, i) =>

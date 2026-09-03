@@ -60,17 +60,41 @@ export default function OnboardingQuestionnaire({ suppressed }: { suppressed?: b
   // onboardingRequested overrides that gate. Someone who taps the bell or
   // follows the link in the nudge email has asked for this outright, and
   // first-run tidiness is no reason to refuse them.
+  // The welcome card is only dismissible on the board, so gating purely on
+  // hasSeenWelcome would silence the questionnaire forever for anyone who
+  // never clicks "Got it" -- the gate is meant to order someone's first
+  // minute, not to exclude them. After a day the first run is over either
+  // way, so it stops applying.
+  const pastFirstRun = currentUser?.createdAt
+    ? Date.now() - new Date(currentUser.createdAt).getTime() > 24 * 60 * 60 * 1000
+    : true;
+
   const open = !suppressed && !dismissed && isLoggedIn
     && currentUser?.accountType === 'volunteer'
-    && (currentUser?.hasSeenWelcome || requested)
+    && (currentUser?.hasSeenWelcome || requested || pastFirstRun)
     && !currentUser?.onboardingCompletedAt;
 
-  // Always reopens on step 1. Answers are only ever written by an explicit
-  // Save, and a save completes the questionnaire, so there is no
-  // half-finished server state to return someone to.
+  // Always reopens on step 1, with empty fields.
+  //
+  // Clearing the fields is not tidiness, it is correctness: this component is
+  // mounted once at the app root and exits by returning null, so it never
+  // unmounts and its state outlives the account that typed it. On a shared
+  // computer that meant one volunteer could close a half-filled form, log
+  // out, and the next person to log in would find the questionnaire already
+  // holding someone else's answers -- and saving would write them to their
+  // own account.
   useEffect(() => {
-    if (open) setStep(0);
-  }, [open]);
+    if (!open) return;
+    setStep(0);
+    setHoursSoFar('');
+    setInterests([]);
+    setTagSearch('');
+    setMajors('');
+    setTowns([]);
+    setAvailability([]);
+    setGoalHours('');
+    setGoalEvents('');
+  }, [open, currentUser?.id]);
 
   // Leaving via any exit -- Skip, Escape, the backdrop -- both dismisses
   // the modal and leaves the standing reminders (Profile card, bell) in
@@ -154,7 +178,7 @@ export default function OnboardingQuestionnaire({ suppressed }: { suppressed?: b
       >
         <button
           onClick={skip}
-          aria-label="Skip for now"
+          aria-label={hasAnswers ? 'Close without saving' : 'Skip for now'}
           className="absolute top-4 right-4 p-2 rounded-md hover:bg-secondary transition-colors"
         >
           <X className="w-4 h-4 text-muted-foreground" />

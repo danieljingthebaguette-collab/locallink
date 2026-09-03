@@ -285,9 +285,11 @@ export async function sendEventReminderEmail(
 
 
 /**
- * One-off nudge asking a volunteer who joined before the questionnaire existed
- * to fill it in. Carries the unsubscribe link because it is the only bulk mail
- * this app sends -- everything else is a reply to something the person did.
+ * Asks a volunteer who has not answered the questionnaire to fill it in. Not a
+ * one-off: the sender holds a cooldown, so someone who never answers and never
+ * unsubscribes can be asked again later, and the footer says so. Carries the
+ * unsubscribe link because it is the only bulk mail this app sends --
+ * everything else is a reply to something the person did.
  */
 /**
  * For the volunteers who never confirmed their address. They cannot log in, so
@@ -337,10 +339,10 @@ export async function sendOnboardingNudgeEmail(
        <p style="font-size:15px;line-height:1.65;color:${BRAND.body};margin:0 0 20px">Takes about a minute, every question is optional, and it lets us mark the opportunities that actually fit you.</p>
        ${button(surveyUrl, 'Fill it in')}
        <p style="font-size:13px;line-height:1.6;color:${BRAND.muted};margin:16px 0 0">Or paste this into your browser: <a href="${surveyUrl}" style="color:${BRAND.muted}">${surveyUrl}</a></p>`,
-      `You are getting this once because you have a LocalLink volunteer account.<br>
+      `You are getting this because you have a LocalLink volunteer account and haven't answered the questionnaire yet. Answer it, or unsubscribe, and we'll stop asking.<br>
        <a href="${unsubUrl}" style="color:${BRAND.muted};text-decoration:underline">Unsubscribe from emails like this</a>`
     ),
-    `Hi ${username},\n\nWe added a short questionnaire since you joined. It asks what kind of volunteering you enjoy, which towns work for you, and when you are usually free.\n\nIt takes about a minute, every question is optional, and it lets us mark the opportunities that actually fit you.\n\nFill it in: ${surveyUrl}\n\nYou are getting this once because you have a LocalLink volunteer account.\nUnsubscribe: ${unsubUrl}`,
+    `Hi ${username},\n\nWe added a short questionnaire since you joined. It asks what kind of volunteering you enjoy, which towns work for you, and when you are usually free.\n\nIt takes about a minute, every question is optional, and it lets us mark the opportunities that actually fit you.\n\nFill it in: ${surveyUrl}\n\nYou are getting this because you have a LocalLink volunteer account and haven't answered the questionnaire yet. Answer it, or unsubscribe, and we'll stop asking.\nUnsubscribe: ${unsubUrl}`,
     { unsubscribeUrl: unsubUrl },
   );
 }

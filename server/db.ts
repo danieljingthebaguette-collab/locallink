@@ -423,15 +423,23 @@ try {
 // List-Unsubscribe header pointing at a token that matches nobody -- a
 // one-click unsubscribe that silently does nothing. Idempotent: only ever
 // touches rows that are still NULL.
-const missingUnsub = db.prepare(
-  'SELECT id FROM users WHERE unsubToken IS NULL OR unsubToken = ?'
-).all('') as { id: string }[];
-if (missingUnsub.length > 0) {
-  const setUnsub = db.prepare('UPDATE users SET unsubToken = ? WHERE id = ?');
-  db.transaction(() => {
-    for (const u of missingUnsub) setUnsub.run(randomUUID(), u.id);
-  })();
-  console.log(`[db] backfilled unsubToken for ${missingUnsub.length} user(s)`);
+// Wrapped like every other statement in this block. A dead unsubscribe link
+// is worth repairing but not worth refusing to boot over -- this runs at
+// import time, so anything thrown here takes the server down and stops the
+// migrations below it from running at all.
+try {
+  const missingUnsub = db.prepare(
+    'SELECT id FROM users WHERE unsubToken IS NULL OR unsubToken = ?'
+  ).all('') as { id: string }[];
+  if (missingUnsub.length > 0) {
+    const setUnsub = db.prepare('UPDATE users SET unsubToken = ? WHERE id = ?');
+    db.transaction(() => {
+      for (const u of missingUnsub) setUnsub.run(randomUUID(), u.id);
+    })();
+    console.log(`[db] backfilled unsubToken for ${missingUnsub.length} user(s)`);
+  }
+} catch (err) {
+  console.error('[db] unsubToken backfill skipped:', (err as Error).message);
 }
 
 try {

@@ -273,21 +273,34 @@ function optionalAuth(req: AuthRequest, _res: Response, next: NextFunction) {
 // ===== AUTH =====
 
 /**
- * A fresh 24-hour email-confirmation token, replacing any the user already has.
+ * The user's live 24-hour email-confirmation token, minting one if they have
+ * none that still works.
  *
- * The delete is the point: verifying issues a 30-day session, so every
- * outstanding token is a live login link for that account. Handing out a
- * second one without retiring the first leaves two doors open. Both the
- * resend route and the nudge's unverified branch go through here so they
- * cannot drift apart on that.
+ * Reuse rather than replace, because the caller sends mail *after* this
+ * returns and that send can fail. Deleting first meant a Brevo rejection left
+ * the person with a link in their inbox that no longer worked and no
+ * replacement on the way -- and even on success, the older mail they had
+ * already received went dead the moment the newer one was minted. Re-sending
+ * the same link is the safer thing and is just as good: it is the same 24-hour
+ * window either way.
+ *
+ * Expired rows are cleared as we go, so a user still only ever has one live
+ * token -- verifying issues a 30-day session, so each one is a working login
+ * link for that account and two open doors is one too many.
  */
 function mintVerificationToken(userId: string): string {
-  db.prepare('DELETE FROM email_verifications WHERE userId = ?').run(userId);
+  const now = new Date().toISOString();
+  db.prepare('DELETE FROM email_verifications WHERE userId = ? AND expiresAt <= ?').run(userId, now);
+  const live = db.prepare(
+    'SELECT token FROM email_verifications WHERE userId = ? ORDER BY expiresAt DESC LIMIT 1'
+  ).get(userId) as { token: string } | undefined;
+  if (live) return live.token;
+
   const token = randomUUID() + '-' + randomUUID();
   const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
   db.prepare(
     'INSERT INTO email_verifications (token, userId, expiresAt, createdAt) VALUES (?, ?, ?, ?)'
-  ).run(token, userId, expiresAt, new Date().toISOString());
+  ).run(token, userId, expiresAt, now);
   return token;
 }
 
@@ -890,6 +903,7 @@ router.post('/api/opportunities', requireAuth, (req: AuthRequest, res: Response)
         return res.status(400).json({ error: `Keep this to ${LIMITS.steps} steps or fewer` });
       }
       for (const s of steps) {
+        if (typeof s !== 'string') return res.status(400).json({ error: 'Each step must be text' });
         const stepError = getLengthError('step', s);
         if (stepError) return res.status(400).json({ error: stepError });
       }
@@ -1123,6 +1137,10 @@ router.put('/api/opportunities/:id', requireAuth, (req: AuthRequest, res: Respon
         return res.status(400).json({ error: `Keep this to ${LIMITS.steps} steps or fewer` });
       }
       for (const st of steps) {
+        // Explicit, because getLengthError only inspects strings -- a number
+        // or object slipped straight through it, was stored as JSON, and then
+        // reached a renderer that calls .split on it.
+        if (typeof st !== 'string') return res.status(400).json({ error: 'Each step must be text' });
         const stepError = getLengthError('step', st);
         if (stepError) return res.status(400).json({ error: stepError });
       }
@@ -1576,6 +1594,7 @@ const NUDGE_TARGETS = `
   WHERE accountType = 'volunteer'
     AND onboardingCompletedAt IS NULL
     AND banned = 0
+    AND email NOT LIKE '%@example.com'
     AND (onboardingNudgedAt IS NULL OR onboardingNudgedAt < ?)
 `;
 
@@ -1673,25 +1692,25 @@ router.get('/api/admin/onboarding-nudge', requireAdmin, (_req: Request, res: Res
     // breakdown always adds up to `pending`. Order matters: a placeholder
     // address is checked first, then never-confirmed, then unsubscribed, so
     // nobody lands in two buckets at once the way they used to.
-    const placeholderAddress = count("AND email LIKE '%@example.com'");
-    const unverifiedEmail = count("AND email NOT LIKE '%@example.com' AND emailVerified = 0");
-    const unsubscribed = count(
-      "AND email NOT LIKE '%@example.com' AND emailVerified = 1 AND emailReminders = 0"
-    );
+    const unverifiedEmail = count('AND emailVerified = 0');
+    const unsubscribed = count('AND emailVerified = 1 AND emailReminders = 0');
     // Everyone left gets the questionnaire email.
-    const emailable = count(
-      "AND email NOT LIKE '%@example.com' AND emailVerified = 1 AND emailReminders = 1"
-    );
+    const emailable = count('AND emailVerified = 1 AND emailReminders = 1');
 
+    // Still-outstanding only. Counting people who have since answered made the
+    // card promise they would be asked again after the cooldown, which is not
+    // true -- answering removes them for good.
     const alreadyNudged = (db.prepare(
-      "SELECT COUNT(*) as c FROM users WHERE accountType='volunteer' AND onboardingNudgedAt IS NOT NULL"
+      `SELECT COUNT(*) as c FROM users
+       WHERE accountType='volunteer' AND onboardingNudgedAt IS NOT NULL
+         AND onboardingCompletedAt IS NULL AND banned = 0`
     ).get() as any).c;
 
     // Named, not just counted. The owner has to decide case by case whether to
     // reach these two some other way, and "2 unsubscribed" does not let them.
     const unsubscribedNames = (db.prepare(
       `SELECT username, email ${NUDGE_TARGETS}
-         AND email NOT LIKE '%@example.com' AND emailVerified = 1 AND emailReminders = 0
+         AND emailVerified = 1 AND emailReminders = 0
        ORDER BY username LIMIT 25`
     ).all(cutoff) as any[]).map(u => ({ username: u.username, email: u.email }));
 
@@ -1701,7 +1720,7 @@ router.get('/api/admin/onboarding-nudge', requireAdmin, (_req: Request, res: Res
       verificationEmailable: unverifiedEmail,
       alreadyNudged,
       cooldownDays: NUDGE_COOLDOWN_DAYS,
-      skipped: { unverifiedEmail, unsubscribed, placeholderAddress },
+      skipped: { unverifiedEmail, unsubscribed },
       unsubscribedNames,
     });
   } catch (err: any) {

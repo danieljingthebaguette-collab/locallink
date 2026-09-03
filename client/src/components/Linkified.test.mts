@@ -1,6 +1,6 @@
 /** The step strings here are copied verbatim from the live board. Run: npx tsx <this file> */
 import assert from 'node:assert';
-const URL_RE = /(https?:\/\/[^\s<>()"']+[^\s<>()"'.,;:!?])/g;
+const URL_RE = /(https?:\/\/[^\s<>()"'@\/]*[^\s<>()"'@\/.,;:!?](?:\/[^\s<>()"']*[^\s<>()"'.,;:!?])?)/g;
 const urls = (t: string) => t.split(URL_RE).filter((_, i) => i % 2 === 1);
 
 assert.deepStrictEqual(
@@ -25,4 +25,15 @@ assert.deepStrictEqual(urls('Email your resume to linghui.tai@gmail.com'), [], '
 assert.deepStrictEqual(urls('Orientation'), []);
 assert.deepStrictEqual(urls('Click javascript:alert(1) now'), [], 'javascript: never matches');
 assert.deepStrictEqual(urls('data:text/html;base64,PHN2Zz4='), [], 'data: never matches');
-console.log('OK  Linkified: all 8 live step strings handled, no unsafe scheme matched');
+// A host with an "@" in it reads as one site and goes to another. The link
+// must point where its text appears to, with the rest left as plain text.
+assert.deepStrictEqual(urls('Go to https://google.com@evil.com/x now'), ['https://google.com'],
+  'the host must stop at an @, so the link cannot lie about its destination');
+assert.deepStrictEqual(urls('https://example.org/a@b?to=x@y.com'), ['https://example.org/a@b?to=x@y.com'],
+  'an @ after the first slash is part of a legitimate path or query');
+// A bare host with no path still has to work.
+assert.deepStrictEqual(urls('See https://example.org and go'), ['https://example.org']);
+assert.deepStrictEqual(urls('See https://example.org.'), ['https://example.org'],
+  'a sentence-ending stop is not part of a bare host');
+
+console.log('OK  Linkified: live step strings, unsafe schemes, and deceptive hosts all handled');
