@@ -36,7 +36,8 @@ export default function OnboardingQuestionnaire({ suppressed }: { suppressed?: b
   const { toast } = useToast();
   const {
     isLoggedIn, currentUser, submitOnboarding,
-    onboardingPromptDismissed: dismissed, hideOnboardingPrompt, requestOnboardingReminder,
+    onboardingPromptDismissed: dismissed, onboardingRequested: requested,
+    hideOnboardingPrompt, requestOnboardingReminder,
   } = useAuthStore();
   const [step, setStep] = useState<Step>(0);
   const [hoursSoFar, setHoursSoFar] = useState('');
@@ -49,8 +50,19 @@ export default function OnboardingQuestionnaire({ suppressed }: { suppressed?: b
   const [goalEvents, setGoalEvents] = useState('');
   const [saving, setSaving] = useState(false);
 
+  // hasSeenWelcome gates the prompt appearing on its own, so a brand-new
+  // volunteer meets the "Here's how it works" card before being asked about
+  // themselves. Nothing sequenced the two, and this modal is fixed and
+  // full-screen, so it simply covered the card and reappeared behind it on
+  // skip. Existing accounts are unaffected -- the column was added DEFAULT 1
+  // and only new registrations start at 0.
+  //
+  // onboardingRequested overrides that gate. Someone who taps the bell or
+  // follows the link in the nudge email has asked for this outright, and
+  // first-run tidiness is no reason to refuse them.
   const open = !suppressed && !dismissed && isLoggedIn
     && currentUser?.accountType === 'volunteer'
+    && (currentUser?.hasSeenWelcome || requested)
     && !currentUser?.onboardingCompletedAt;
 
   // Always reopens on step 1. Answers are only ever written by an explicit

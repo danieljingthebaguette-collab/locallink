@@ -54,6 +54,10 @@ interface AuthState {
   // drives the render, since writing localStorage/sessionStorage doesn't by
   // itself trigger React to re-render anything.
   onboardingPromptDismissed: boolean;
+  /** True once the questionnaire has been asked for deliberately -- a bell tap
+   *  or the link in the nudge email -- as opposed to the prompt appearing on
+   *  its own. An explicit request outranks the first-run gating. */
+  onboardingRequested: boolean;
   showOnboardingPrompt: () => void;
   hideOnboardingPrompt: () => void;
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string; needsVerification?: boolean; suspended?: boolean; email?: string }>;
@@ -78,10 +82,11 @@ export const useAuthStore = create<AuthState>((set) => {
     currentUser: initialUser,
     loading: false,
     onboardingPromptDismissed: sessionStorage.getItem(ONBOARDING_DISMISS_KEY) === '1',
+    onboardingRequested: false,
 
     showOnboardingPrompt: () => {
       sessionStorage.removeItem(ONBOARDING_DISMISS_KEY);
-      set({ onboardingPromptDismissed: false });
+      set({ onboardingPromptDismissed: false, onboardingRequested: true });
     },
     hideOnboardingPrompt: () => {
       sessionStorage.setItem(ONBOARDING_DISMISS_KEY, '1');

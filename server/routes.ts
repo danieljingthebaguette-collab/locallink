@@ -712,7 +712,15 @@ router.post('/api/me/onboarding', requireAuth, (req: AuthRequest, res: Response)
     // skip created -- leaving that notification unread forever even though
     // the thing it was reminding about is now done. Same dedup id as
     // remind-later, so this is a no-op when it was never created.
-    db.prepare("UPDATE notifications SET read = 1 WHERE id = ?").run(`onboarding-reminder-${req.userId}`);
+    // Every outstanding reminder, not just the one with the fixed id. An admin
+    // writing their own wording through the bell creates a row with its own
+    // id, so keying on the fixed one left those unread forever -- the bell
+    // still said "Answer it now" about a questionnaire that was already
+    // answered, and tapping it did nothing, because the modal refuses to open
+    // once onboardingCompletedAt is set.
+    db.prepare(
+      "UPDATE notifications SET read = 1 WHERE userId = ? AND type = 'onboarding_reminder'"
+    ).run(req.userId);
 
     const updated = db.prepare(
       'SELECT onboardingHoursSoFar, onboardingInterests, onboardingMajors, onboardingGoalHours, onboardingGoalEvents, onboardingTowns, onboardingAvailability, onboardingCompletedAt FROM users WHERE id = ?'

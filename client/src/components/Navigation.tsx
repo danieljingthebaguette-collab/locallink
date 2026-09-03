@@ -288,7 +288,7 @@ export default function Navigation() {
                                     {/* Every other notification reports something that
                                         already happened; this one is asking for a minute
                                         of their time, and nothing on the row said so. */}
-                                    {n.type === 'onboarding_reminder' && (
+                                    {n.type === 'onboarding_reminder' && !currentUser?.onboardingCompletedAt && (
                                       <span className="text-xs font-semibold text-primary mt-1 block">Answer it now →</span>
                                     )}
                                     <p className="text-[11px] text-muted-foreground mt-0.5">{formatTimeAgo(n.createdAt)}</p>
