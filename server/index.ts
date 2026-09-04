@@ -82,6 +82,16 @@ const uploadsPath = dbPath
 app.use('/uploads', express.static(uploadsPath, {
   maxAge: '30d',
   immutable: true,
+  setHeaders(res) {
+    // Belt and braces around the checks in routes.ts. Even if a file that is
+    // not really an image ever reaches this folder, these headers stop the
+    // browser treating it as a page on our own origin -- which is what made
+    // the old upload hole an account takeover rather than a nuisance.
+    // Sandboxed, no scripts, and offered as a download rather than rendered.
+    res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Disposition', 'inline');
+  },
 }));
 
 // ── OG preview tags for social crawlers ──────────────────────────────────────

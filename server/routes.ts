@@ -21,13 +21,54 @@ if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
-// Multer config — store on disk with unique filenames, images only, 5 MB max
+// The four formats a browser renders as a picture and cannot execute. SVG is
+// deliberately absent: it is a document, it can carry script, and it would
+// reopen exactly the hole the rest of this block closes.
+const ALLOWED_IMAGE_TYPES: Record<string, string> = {
+  'image/jpeg': '.jpg',
+  'image/png': '.png',
+  'image/gif': '.gif',
+  'image/webp': '.webp',
+};
+
+/** The first bytes of a real file of each type. */
+const MAGIC: { ext: string; bytes: number[] }[] = [
+  { ext: '.jpg',  bytes: [0xFF, 0xD8, 0xFF] },
+  { ext: '.png',  bytes: [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A] },
+  { ext: '.gif',  bytes: [0x47, 0x49, 0x46, 0x38] },
+];
+
+/** True when the file on disk really is the picture it claims to be.
+ *  WebP is RIFF....WEBP, so it needs a look at bytes 8-11 rather than a prefix. */
+function looksLikeRealImage(filePath: string): boolean {
+  let fd: number | undefined;
+  try {
+    fd = fs.openSync(filePath, 'r');
+    const head = Buffer.alloc(12);
+    const read = fs.readSync(fd, head, 0, 12, 0);
+    if (read < 4) return false;
+    if (MAGIC.some(m => m.bytes.every((b, i) => head[i] === b))) return true;
+    return head.toString('ascii', 0, 4) === 'RIFF' && head.toString('ascii', 8, 12) === 'WEBP';
+  } catch {
+    return false;
+  } finally {
+    if (fd !== undefined) { try { fs.closeSync(fd); } catch { /* ignore */ } }
+  }
+}
+
+// Multer config — store on disk with unique filenames, images only, 5 MB max.
+//
+// The extension is taken from our own table, never from the uploaded
+// filename, and the declared type must be one of the four above. Previously
+// both came from whatever the sender supplied: a file called "x.html"
+// labelled "image/png" was accepted and then served back from our own domain
+// as a real web page, which is a working account-takeover against anyone who
+// opened the link. The bytes are checked as well, in handleUpload.
 const storage = multer.diskStorage({
   destination: uploadsDir,
   filename: (_req, file, cb) => {
     const unique = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    const ext = path.extname(file.originalname).toLowerCase();
-    cb(null, `${unique}${ext}`);
+    cb(null, `${unique}${ALLOWED_IMAGE_TYPES[file.mimetype] ?? '.bin'}`);
   },
 });
 
@@ -35,10 +76,10 @@ const upload = multer({
   storage,
   limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
-    if (file.mimetype.startsWith('image/')) {
+    if (ALLOWED_IMAGE_TYPES[file.mimetype]) {
       cb(null, true);
     } else {
-      cb(new Error('Only image files are allowed'));
+      cb(new Error('Only JPG, PNG, GIF or WebP images are allowed'));
     }
   },
 });
@@ -1223,11 +1264,14 @@ router.delete('/api/opportunities/:id', requireAuth, async (req: AuthRequest, re
 router.get('/api/favorites', requireAuth, (req: AuthRequest, res: Response) => {
   try {
     const userId = req.userId!;
+    // No email column. Nothing on the client has ever displayed it -- the
+    // favourites list renders a name and an avatar letter -- so it was only
+    // ever an address sitting in a response waiting to be read.
     const favorites = db.prepare(`
-      SELECT u.id, u.username, u.email, u.accountType, u.createdAt
+      SELECT u.id, u.username, u.accountType, u.createdAt
       FROM favorites f
       JOIN users u ON f.orgId = u.id
-      WHERE f.userId = ?
+      WHERE f.userId = ? AND u.accountType = 'organization'
       ORDER BY f.createdAt DESC
     `).all(userId);
     return res.json(favorites);
@@ -1243,7 +1287,13 @@ router.post('/api/favorites/:orgId', requireAuth, (req: AuthRequest, res: Respon
     const { orgId } = req.params;
     if (userId === orgId) return res.status(400).json({ error: 'Cannot favorite yourself' });
 
-    const org = db.prepare('SELECT id FROM users WHERE id = ?').get(orgId);
+    // Must actually be an organization. Checking only that the row exists let
+    // any account favourite a *volunteer* -- and since the read below joins the
+    // users table, that turned this into a way to look up another volunteer's
+    // email address. The ids to feed it were public on the board.
+    const org = db.prepare(
+      "SELECT id FROM users WHERE id = ? AND accountType = 'organization'"
+    ).get(orgId);
     if (!org) return res.status(404).json({ error: 'Organization not found' });
 
     const existing = db.prepare('SELECT 1 FROM favorites WHERE userId = ? AND orgId = ?').get(userId, orgId);
@@ -2062,7 +2112,24 @@ router.post('/api/upload', requireAuth, upload.single('image'), (req: Request, r
   if (!req.file) {
     return res.status(400).json({ error: 'No file uploaded' });
   }
+  // The declared type got it this far; the bytes decide whether it stays.
+  // Anyone can put "image/png" on a request header, so without this the
+  // extension we chose above would simply be a lie wrapped around a script.
+  if (!looksLikeRealImage(req.file.path)) {
+    try { fs.unlinkSync(req.file.path); } catch { /* nothing to clean up */ }
+    return res.status(400).json({ error: "That file isn't a JPG, PNG, GIF or WebP image" });
+  }
   return res.json({ url: `/uploads/${req.file.filename}` });
+});
+
+/** Turns multer's own failures into a message someone can act on.
+ *  Without this they reached the global handler as a bare 500. */
+router.use('/api/upload', (err: any, _req: Request, res: Response, next: NextFunction) => {
+  if (!err) return next();
+  if (err.code === 'LIMIT_FILE_SIZE') {
+    return res.status(400).json({ error: 'That image is over the 5 MB limit' });
+  }
+  return res.status(400).json({ error: err.message || 'That file could not be uploaded' });
 });
 
 // ===== HEALTH =====
