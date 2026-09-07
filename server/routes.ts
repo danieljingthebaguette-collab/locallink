@@ -6,9 +6,9 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
-import { randomUUID } from 'crypto';
+import { randomUUID, randomBytes } from 'crypto';
 import { toAppLocalString } from './time.js';
-import { sendVerificationEmail, sendPasswordResetEmail, sendSignupNotificationEmail, sendPostApprovedEmail, sendPostDeniedEmail, sendEventCancelledEmail, sendEventReminderEmail, sendOnboardingNudgeEmail, sendVerifyThenSurveyEmail } from './email.js';
+import { sendVerificationEmail, sendPasswordResetEmail, sendSignupNotificationEmail, sendPostApprovedEmail, sendPostDeniedEmail, sendEventCancelledEmail, sendEventReminderEmail, sendOnboardingNudgeEmail, sendVerifyThenSurveyEmail, sendHourApprovalRequest, sendHourDecisionNotice } from './email.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -2342,5 +2342,358 @@ router.put('/api/admin/users/:id/verify', requireAdmin, (req: Request, res: Resp
   }
 });
 
+
+// ═══════════════════════════════ HOUR TRACKING ═══════════════════════════════
+//
+// A volunteer records what they did, the organization confirms it from an email
+// with no account, and confirmed hours become a certificate a school can check.
+
+/** Squashed organization name, so "Arm in Arm" and "arm  in  ARM" are one
+ *  organization rather than two. */
+const orgKeyOf = (s: string) => s.trim().toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+
+const isOrgConfirmed = (key: string) =>
+  !!db.prepare('SELECT 1 FROM confirmed_orgs WHERE orgKey = ?').get(key);
+
+/** Events the volunteer signed up for that have already happened and have no
+ *  hours logged against them yet. This is the list behind the one-tap "log the
+ *  hours for this" button -- the whole reason the tracker belongs inside the
+ *  site rather than beside it. */
+/** The volunteer's own hours target. Null clears it. */
+router.put('/api/me/goal-hours', requireAuth, (req: AuthRequest, res: Response) => {
+  const raw = req.body?.goalHours;
+  const goal = raw === null || raw === undefined || raw === '' ? null : Number(raw);
+  if (goal !== null && (!Number.isFinite(goal) || goal <= 0 || goal > 10000)) {
+    return res.status(400).json({ error: 'Enter a number of hours between 1 and 10000' });
+  }
+  db.prepare('UPDATE users SET goalHours = ? WHERE id = ?').run(goal, req.userId);
+  return res.json({ goalHours: goal });
+});
+
+router.get('/api/hours/loggable', requireAuth, (req: AuthRequest, res: Response) => {
+  try {
+    const rows = db.prepare(`
+      SELECT o.id, o.title, o.date, o.duration, o.hostName, o.location
+      FROM signups s
+      JOIN opportunities o ON o.id = s.opportunityId
+      WHERE s.userId = ?
+        AND o.date < ?
+        AND NOT EXISTS (
+          SELECT 1 FROM hour_logs h WHERE h.opportunityId = o.id AND h.volunteerId = ?
+        )
+      ORDER BY o.date DESC
+      LIMIT 25
+    `).all(req.userId, new Date().toISOString(), req.userId) as any[];
+    return res.json(rows);
+  } catch (err: any) {
+    console.error('[hours/loggable]', err);
+    return res.status(500).json({ error: 'Could not load your past events' });
+  }
+});
+
+router.get('/api/hours', requireAuth, (req: AuthRequest, res: Response) => {
+  try {
+    const rows = db.prepare(`
+      SELECT h.*, (SELECT 1 FROM confirmed_orgs c WHERE c.orgKey = h.orgKey) AS orgConfirmed
+      FROM hour_logs h WHERE h.volunteerId = ?
+      ORDER BY h.serviceDate DESC, h.submittedAt DESC
+    `).all(req.userId) as any[];
+
+    const counted = rows.filter(r => r.status === 'approved' || r.status === 'adjusted');
+    const hoursOf = (r: any) => (r.approvedHours ?? r.hours) as number;
+    const user = db.prepare('SELECT goalHours FROM users WHERE id = ?').get(req.userId) as any;
+
+    return res.json({
+      logs: rows.map(r => ({
+        id: r.id, opportunityId: r.opportunityId, orgName: r.orgName,
+        orgConfirmed: !!r.orgConfirmed, activity: r.activity, serviceDate: r.serviceDate,
+        hours: r.hours, status: r.status, approvedHours: r.approvedHours,
+        approverName: r.approverName, approverNote: r.approverNote,
+        submittedAt: r.submittedAt, decidedAt: r.decidedAt,
+      })),
+      totals: {
+        confirmed: counted.reduce((s, r) => s + hoursOf(r), 0),
+        fromConfirmedOrgs: counted.filter(r => r.orgConfirmed).reduce((s, r) => s + hoursOf(r), 0),
+        waiting: rows.filter(r => r.status === 'pending').reduce((s, r) => s + r.hours, 0),
+        goalHours: user?.goalHours ?? null,
+      },
+    });
+  } catch (err: any) {
+    console.error('[hours]', err);
+    return res.status(500).json({ error: 'Could not load your hours' });
+  }
+});
+
+router.post('/api/hours', requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const user = db.prepare('SELECT id, username, email, accountType FROM users WHERE id = ?')
+      .get(req.userId) as any;
+    if (user.accountType !== 'volunteer') {
+      return res.status(403).json({ error: 'Only volunteer accounts can log hours' });
+    }
+
+    const { opportunityId, orgName, approverEmail, approverName, activity, serviceDate, hours } = req.body ?? {};
+
+    // Logging against a real event fills in the organization and date from the
+    // post itself, so those cannot disagree with what was actually posted.
+    let resolvedOrg = String(orgName ?? '').trim();
+    let resolvedDate = String(serviceDate ?? '');
+    if (opportunityId) {
+      const opp = db.prepare('SELECT id, hostName, date FROM opportunities WHERE id = ?')
+        .get(opportunityId) as any;
+      if (!opp) return res.status(404).json({ error: 'That opportunity no longer exists' });
+      const signedUp = db.prepare('SELECT 1 FROM signups WHERE opportunityId = ? AND userId = ?')
+        .get(opportunityId, user.id);
+      if (!signedUp) {
+        return res.status(403).json({ error: 'You can only log hours for events you signed up for' });
+      }
+      const already = db.prepare('SELECT 1 FROM hour_logs WHERE opportunityId = ? AND volunteerId = ?')
+        .get(opportunityId, user.id);
+      if (already) return res.status(409).json({ error: 'You have already logged hours for that event' });
+      resolvedOrg = opp.hostName;
+      resolvedDate = String(opp.date).slice(0, 10);
+    }
+
+    if (!resolvedOrg) return res.status(400).json({ error: 'Who did you volunteer with?' });
+    if (!String(activity ?? '').trim()) return res.status(400).json({ error: 'Say briefly what you did' });
+    if (String(activity).length > 300) return res.status(400).json({ error: 'Keep that under 300 characters' });
+
+    const email = String(approverEmail ?? '').trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ error: 'Enter a valid email for the person who can confirm this' });
+    }
+    if (email === String(user.email).toLowerCase()) {
+      return res.status(400).json({ error: 'Someone else has to confirm your hours, not you' });
+    }
+
+    const n = Number(hours);
+    if (!Number.isFinite(n) || n <= 0 || n > 24) {
+      return res.status(400).json({ error: 'Hours must be between 0 and 24 for a single day' });
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(resolvedDate)) {
+      return res.status(400).json({ error: 'Pick the date you volunteered' });
+    }
+    if (resolvedDate > new Date().toISOString().slice(0, 10)) {
+      return res.status(400).json({ error: 'That date is in the future' });
+    }
+
+    const id = randomUUID();
+    const token = randomUUID().replace(/-/g, '') + randomUUID().replace(/-/g, '');
+    const now = new Date().toISOString();
+    const volunteerName = user.username;
+
+    db.prepare(`
+      INSERT INTO hour_logs
+        (id, volunteerId, opportunityId, orgName, orgKey, activity, serviceDate, hours,
+         status, approverEmail, approverName, approvalToken, tokenExpiresAt, submittedAt)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?)
+    `).run(id, user.id, opportunityId || null, resolvedOrg, orgKeyOf(resolvedOrg),
+      String(activity).trim(), resolvedDate, n, email,
+      String(approverName ?? '').trim() || null, token,
+      new Date(Date.now() + 30 * 864e5).toISOString(), now);
+
+    sendHourApprovalRequest({
+      to: email, approverName: String(approverName ?? '').trim() || null,
+      volunteerName, orgName: resolvedOrg, activity: String(activity).trim(),
+      serviceDate: resolvedDate, hours: n, token,
+    }).catch(e => console.error('[email] hour approval request failed:', e.message));
+
+    return res.json({ id, status: 'pending' });
+  } catch (err: any) {
+    console.error('[hours:create]', err);
+    return res.status(500).json({ error: 'Could not save those hours' });
+  }
+});
+
+/** Withdrawing deletes rather than edits. The approval email already sent
+ *  describes the numbers in this record, so an edit would leave the two
+ *  disagreeing about what is being approved. */
+router.delete('/api/hours/:id', requireAuth, (req: AuthRequest, res: Response) => {
+  const row = db.prepare('SELECT volunteerId, status FROM hour_logs WHERE id = ?').get(req.params.id) as any;
+  if (!row) return res.status(404).json({ error: 'Not found' });
+  if (row.volunteerId !== req.userId) return res.status(403).json({ error: 'Not yours to remove' });
+  if (row.status !== 'pending') {
+    return res.status(400).json({ error: 'Hours that have been decided cannot be removed' });
+  }
+  db.prepare('DELETE FROM hour_logs WHERE id = ?').run(req.params.id);
+  return res.json({ success: true });
+});
+
+// ─── the approver's side: no account, one link, one use ───
+
+router.get('/api/approve-hours/:token', (req: Request, res: Response) => {
+  const row = db.prepare(`
+    SELECT h.*, u.username AS volunteerName
+    FROM hour_logs h JOIN users u ON u.id = h.volunteerId
+    WHERE h.approvalToken = ?
+  `).get(req.params.token) as any;
+  if (!row) return res.status(404).json({ error: 'This link is not valid.' });
+  if (new Date(row.tokenExpiresAt) < new Date()) {
+    return res.status(410).json({ error: 'This link has expired. Ask the volunteer to submit again.' });
+  }
+  return res.json({
+    volunteerName: row.volunteerName, orgName: row.orgName, activity: row.activity,
+    serviceDate: row.serviceDate, hours: row.hours, approverName: row.approverName,
+  });
+});
+
+router.post('/api/approve-hours/:token', async (req: Request, res: Response) => {
+  try {
+    const { decision, hours, note, approverName } = req.body ?? {};
+    if (!['approve', 'adjust', 'reject'].includes(decision)) {
+      return res.status(400).json({ error: 'Choose approve, adjust or reject' });
+    }
+    const row = db.prepare(`
+      SELECT h.*, u.email AS volunteerEmail FROM hour_logs h
+      JOIN users u ON u.id = h.volunteerId WHERE h.approvalToken = ?
+    `).get(req.params.token) as any;
+    if (!row) return res.status(404).json({ error: 'This link is not valid.' });
+    if (new Date(row.tokenExpiresAt) < new Date()) {
+      return res.status(410).json({ error: 'This link has expired.' });
+    }
+
+    let status = decision === 'reject' ? 'rejected' : decision === 'adjust' ? 'adjusted' : 'approved';
+    let finalHours = row.hours;
+    if (decision === 'adjust') {
+      const n = Number(hours);
+      if (!Number.isFinite(n) || n < 0 || n > 24) {
+        return res.status(400).json({ error: 'Enter a number of hours between 0 and 24' });
+      }
+      finalHours = n;
+      if (n === row.hours) status = 'approved'; // same number is an approval, not a change
+    }
+
+    // Clearing the token makes the link single use, so a forwarded email cannot
+    // have its decision overwritten by whoever receives it next.
+    db.prepare(`
+      UPDATE hour_logs SET status = ?, approvedHours = ?, approverNote = ?,
+        approverName = COALESCE(?, approverName), decidedAt = ?, approvalToken = NULL
+      WHERE id = ?
+    `).run(status, decision === 'reject' ? 0 : finalHours,
+      String(note ?? '').trim().slice(0, 300) || null,
+      String(approverName ?? '').trim() || null, new Date().toISOString(), row.id);
+
+    sendHourDecisionNotice({
+      to: row.volunteerEmail, orgName: row.orgName, status,
+      hours: finalHours, note: String(note ?? '').trim() || null,
+    }).catch(e => console.error('[email] hour decision notice failed:', e.message));
+
+    db.prepare(
+      'INSERT INTO notifications (id, userId, type, message, read, createdAt) VALUES (?, ?, ?, ?, 0, ?)'
+    ).run(randomUUID(), row.volunteerId, 'hours_decided',
+      status === 'rejected'
+        ? `${row.orgName} did not confirm your ${row.hours} hours.`
+        : `${row.orgName} confirmed ${finalHours} hours. They now count toward your certificate.`,
+      new Date().toISOString());
+
+    return res.json({ success: true, status, hours: decision === 'reject' ? 0 : finalHours });
+  } catch (err: any) {
+    console.error('[approve-hours]', err);
+    return res.status(500).json({ error: 'Could not record that decision' });
+  }
+});
+
+// ─── certificates ───
+
+/** A code someone reads off paper and types. No I, O, 0 or 1 -- those are the
+ *  characters people get wrong. */
+function makeCertCode(): string {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const pick = () => Array.from(randomBytes(4)).map(b => alphabet[b % alphabet.length]).join('');
+  return `${pick()}-${pick()}`;
+}
+
+router.post('/api/certificates', requireAuth, (req: AuthRequest, res: Response) => {
+  try {
+    const user = db.prepare('SELECT id, username, accountType FROM users WHERE id = ?')
+      .get(req.userId) as any;
+    if (user.accountType !== 'volunteer') return res.status(403).json({ error: 'Volunteer accounts only' });
+
+    const rows = db.prepare(`
+      SELECT h.*, (SELECT 1 FROM confirmed_orgs c WHERE c.orgKey = h.orgKey) AS orgConfirmed
+      FROM hour_logs h
+      WHERE h.volunteerId = ? AND h.status IN ('approved', 'adjusted')
+      ORDER BY h.serviceDate ASC
+    `).all(user.id) as any[];
+    if (rows.length === 0) {
+      return res.status(400).json({ error: 'You need at least one confirmed entry before making a certificate' });
+    }
+
+    const hoursOf = (r: any) => (r.approvedHours ?? r.hours) as number;
+    const total = rows.reduce((s, r) => s + hoursOf(r), 0);
+    const confirmedTotal = rows.filter(r => r.orgConfirmed).reduce((s, r) => s + hoursOf(r), 0);
+    const id = randomUUID();
+    let code = makeCertCode();
+    while (db.prepare('SELECT 1 FROM certificates WHERE code = ?').get(code)) code = makeCertCode();
+
+    db.transaction(() => {
+      db.prepare(`INSERT INTO certificates
+        (id, volunteerId, code, holderName, totalHours, confirmedOrgHours, issuedAt)
+        VALUES (?, ?, ?, ?, ?, ?, ?)`)
+        .run(id, user.id, code, user.username, total, confirmedTotal, new Date().toISOString());
+      const entry = db.prepare(`INSERT INTO certificate_entries
+        (certificateId, hourLogId, orgName, orgConfirmed, activity, serviceDate, hours, approverName, decidedAt)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+      for (const r of rows) {
+        entry.run(id, r.id, r.orgName, r.orgConfirmed ? 1 : 0, r.activity,
+          r.serviceDate, hoursOf(r), r.approverName, r.decidedAt);
+      }
+    })();
+
+    return res.json({ id, code });
+  } catch (err: any) {
+    console.error('[certificates]', err);
+    return res.status(500).json({ error: 'Could not make that certificate' });
+  }
+});
+
+router.get('/api/certificates', requireAuth, (req: AuthRequest, res: Response) => {
+  return res.json(db.prepare(
+    'SELECT id, code, totalHours, confirmedOrgHours, issuedAt, revokedAt FROM certificates WHERE volunteerId = ? ORDER BY issuedAt DESC'
+  ).all(req.userId));
+});
+
+/** Public on purpose. A teacher holding a printed certificate has no account
+ *  here, and asking them to make one is the fastest way to have it disbelieved. */
+router.get('/api/verify-hours/:code', (req: Request, res: Response) => {
+  const cert = db.prepare('SELECT * FROM certificates WHERE code = ?')
+    .get(String(req.params.code).trim().toUpperCase()) as any;
+  if (!cert) return res.status(404).json({ error: 'No certificate with that code.' });
+  const entries = db.prepare(
+    'SELECT orgName, orgConfirmed, activity, serviceDate, hours, approverName FROM certificate_entries WHERE certificateId = ? ORDER BY serviceDate ASC'
+  ).all(cert.id) as any[];
+  return res.json({
+    holderName: cert.holderName, totalHours: cert.totalHours,
+    confirmedOrgHours: cert.confirmedOrgHours, issuedAt: cert.issuedAt,
+    revoked: !!cert.revokedAt,
+    entries: entries.map(e => ({ ...e, orgConfirmed: !!e.orgConfirmed })),
+  });
+});
+
+// ─── admin: which organizations are confirmed real ───
+
+router.get('/api/admin/hour-orgs', requireAdmin, (_req: Request, res: Response) => {
+  const rows = db.prepare(`
+    SELECT h.orgKey, MAX(h.orgName) AS orgName, COUNT(*) AS entries,
+           SUM(CASE WHEN h.status IN ('approved','adjusted') THEN 1 ELSE 0 END) AS confirmedEntries,
+           (SELECT 1 FROM confirmed_orgs c WHERE c.orgKey = h.orgKey) AS confirmed
+    FROM hour_logs h GROUP BY h.orgKey ORDER BY confirmed ASC, COUNT(*) DESC
+  `).all() as any[];
+  return res.json(rows.map(r => ({ ...r, confirmed: !!r.confirmed })));
+});
+
+router.post('/api/admin/hour-orgs/:key/confirm', requireAdmin, (req: AuthRequest, res: Response) => {
+  const key = String(req.params.key);
+  const confirm = req.body?.confirmed !== false;
+  const row = db.prepare('SELECT orgName FROM hour_logs WHERE orgKey = ? LIMIT 1').get(key) as any;
+  if (!row) return res.status(404).json({ error: 'No hours logged against that organization' });
+  if (confirm) {
+    db.prepare('INSERT OR REPLACE INTO confirmed_orgs (orgKey, orgName, confirmedBy, confirmedAt) VALUES (?, ?, ?, ?)')
+      .run(key, row.orgName, req.userId, new Date().toISOString());
+  } else {
+    db.prepare('DELETE FROM confirmed_orgs WHERE orgKey = ?').run(key);
+  }
+  return res.json({ success: true, confirmed: confirm });
+});
 
 export default router;

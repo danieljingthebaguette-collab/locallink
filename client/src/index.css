@@ -226,3 +226,11 @@ html {
     transition-duration: 0.01ms !important;
   }
 }
+
+
+/* Printing a certificate should produce the certificate, not the site around
+   it. Anything chrome-like opts out with .no-print. */
+@media print {
+  .no-print, nav, header, footer { display: none !important; }
+  body { background: #fff !important; }
+}
