@@ -128,6 +128,87 @@ db.exec(`
     claimedBy TEXT DEFAULT NULL
   );
 
+  -- ── Hour tracking ──────────────────────────────────────────────────────
+  --
+  -- A student logs what they did, the organization confirms it from an email,
+  -- and the confirmed total becomes a certificate their school can check.
+  --
+  -- hour_logs.opportunityId is what makes this worth having inside the site
+  -- rather than beside it: hours logged against a real posted event already
+  -- know the organization, the date and the expected length, so the volunteer
+  -- confirms a filled-in form instead of writing one. It is nullable because
+  -- volunteering done outside LocalLink still counts on the same certificate.
+  --
+  -- Everything about who confirms an entry is captured when it is submitted
+  -- and never editable afterwards. A volunteer who could change approverEmail
+  -- after the real supervisor had seen it could route the approval to a friend,
+  -- and the certificate would be worth nothing.
+  CREATE TABLE IF NOT EXISTS hour_logs (
+    id             TEXT PRIMARY KEY,
+    volunteerId    TEXT NOT NULL,
+    opportunityId  TEXT DEFAULT NULL,
+    orgName        TEXT NOT NULL,
+    orgKey         TEXT NOT NULL,
+    activity       TEXT NOT NULL,
+    serviceDate    TEXT NOT NULL,
+    hours          REAL NOT NULL,
+    status         TEXT NOT NULL DEFAULT 'pending',
+    approvedHours  REAL DEFAULT NULL,
+    approverName   TEXT DEFAULT NULL,
+    approverEmail  TEXT NOT NULL,
+    approverNote   TEXT DEFAULT NULL,
+    approvalToken  TEXT UNIQUE DEFAULT NULL,
+    tokenExpiresAt TEXT DEFAULT NULL,
+    submittedAt    TEXT NOT NULL,
+    decidedAt      TEXT DEFAULT NULL,
+    FOREIGN KEY (volunteerId) REFERENCES users(id) ON DELETE CASCADE
+  );
+
+  -- Which organizations we have confirmed are genuinely real. This is the whole
+  -- trust tier: hours approved by a confirmed organization are marked as such on
+  -- a certificate, and everything else is labelled honestly as approved by a
+  -- named person. Keyed by a squashed name so "Arm in Arm" and "arm in arm" are
+  -- one organization rather than two.
+  CREATE TABLE IF NOT EXISTS confirmed_orgs (
+    orgKey      TEXT PRIMARY KEY,
+    orgName     TEXT NOT NULL,
+    confirmedBy TEXT,
+    confirmedAt TEXT NOT NULL
+  );
+
+  -- A certificate is a snapshot, not a live view. Once one has been handed to a
+  -- teacher it must keep saying what it said that day, even if an entry is later
+  -- removed -- so every line is copied in rather than joined at read time.
+  CREATE TABLE IF NOT EXISTS certificates (
+    id          TEXT PRIMARY KEY,
+    volunteerId TEXT NOT NULL,
+    code        TEXT NOT NULL UNIQUE,
+    holderName  TEXT NOT NULL,
+    totalHours  REAL NOT NULL,
+    confirmedOrgHours REAL NOT NULL,
+    issuedAt    TEXT NOT NULL,
+    revokedAt   TEXT DEFAULT NULL,
+    FOREIGN KEY (volunteerId) REFERENCES users(id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS certificate_entries (
+    certificateId TEXT NOT NULL,
+    hourLogId     TEXT NOT NULL,
+    orgName       TEXT NOT NULL,
+    orgConfirmed  INTEGER NOT NULL,
+    activity      TEXT NOT NULL,
+    serviceDate   TEXT NOT NULL,
+    hours         REAL NOT NULL,
+    approverName  TEXT,
+    decidedAt     TEXT,
+    FOREIGN KEY (certificateId) REFERENCES certificates(id) ON DELETE CASCADE
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_hourlogs_volunteer ON hour_logs(volunteerId, serviceDate);
+  CREATE INDEX IF NOT EXISTS idx_hourlogs_status    ON hour_logs(status);
+  CREATE INDEX IF NOT EXISTS idx_hourlogs_org       ON hour_logs(orgKey, status);
+  CREATE INDEX IF NOT EXISTS idx_certentries_cert   ON certificate_entries(certificateId);
+
 `);
 
 // Migrate: birth year, for working out whether a volunteer is a minor.
@@ -387,6 +468,15 @@ try {
   db.prepare('SELECT hasSeenWelcome FROM users LIMIT 1').get();
 } catch {
   db.exec('ALTER TABLE users ADD COLUMN hasSeenWelcome INTEGER DEFAULT 1');
+}
+
+// Migrate: the volunteer's own hours target, for the tracker's progress bar.
+// Nullable on purpose -- a bar with no target is decoration, so it only shows
+// once someone has said what they are aiming for.
+try {
+  db.prepare('SELECT goalHours FROM users LIMIT 1').get();
+} catch {
+  db.exec('ALTER TABLE users ADD COLUMN goalHours REAL DEFAULT NULL');
 }
 
 // Migrate: add unsubToken to users (UUID used in unsubscribe link)

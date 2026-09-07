@@ -20,6 +20,10 @@ import Terms from "@/pages/terms";
 import Privacy from "@/pages/privacy";
 import NotFound from "@/pages/not-found";
 import OrgProfilePage from "@/pages/org-profile";
+import HoursPage from '@/pages/hours';
+import CertificatePage from '@/pages/certificate';
+import ApproveHoursPage from '@/pages/approve-hours';
+import CheckCertificatePage from '@/pages/check-certificate';
 import JoinPage from "@/pages/join";
 
 /**
@@ -52,6 +56,13 @@ function Router() {
       <Route path="/privacy" component={Privacy} />
       <Route path="/org/:id" component={OrgProfilePage} />
       <Route path="/join/:slug" component={JoinPage} />
+      {/* Hour tracking. approve-hours and check are open to people with no
+          account at all — a supervisor confirming, and a teacher checking. */}
+      <Route path="/hours" component={HoursPage} />
+      <Route path="/certificate" component={CertificatePage} />
+      <Route path="/approve-hours/:token" component={ApproveHoursPage} />
+      <Route path="/check" component={CheckCertificatePage} />
+      <Route path="/check/:code" component={CheckCertificatePage} />
       <Route component={NotFound} />
     </Switch>
   );

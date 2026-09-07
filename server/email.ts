@@ -290,6 +290,78 @@ export async function sendEventReminderEmail(
 }
 
 
+/** A small key/value block for the facts an approver needs to see at a glance. */
+function factPanel(rows: [string, string][]): string {
+  return `<table style="width:100%;border-collapse:collapse;background:${BRAND.panel};border-radius:${BRAND.radius};margin:0 0 20px">
+    ${rows.map(([k, v]) => `<tr>
+      <td style="padding:9px 16px;font-size:13px;color:${BRAND.muted};white-space:nowrap">${k}</td>
+      <td style="padding:9px 16px;font-size:14px;color:${BRAND.ink};font-weight:600">${v}</td>
+    </tr>`).join('')}
+  </table>`;
+}
+
+/**
+ * The email the whole hour tracker depends on.
+ *
+ * It goes to a supervisor who has very likely never heard of LocalLink, so it
+ * explains itself in the first sentence and is actionable without an account.
+ * Asking them to sign up first is the fastest way to have hours never confirmed.
+ */
+export async function sendHourApprovalRequest(opts: {
+  to: string; approverName: string | null; volunteerName: string; orgName: string;
+  activity: string; serviceDate: string; hours: number; token: string;
+}): Promise<void> {
+  const base = `${APP_URL}/approve-hours/${opts.token}`;
+  const dateStr = new Date(`${opts.serviceDate}T12:00:00`).toLocaleDateString('en-US', {
+    weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
+  });
+  const who = opts.approverName ? escapeHtml(opts.approverName) : 'there';
+  await sendEmail(
+    opts.to,
+    `${opts.volunteerName} says they volunteered ${opts.hours} hours with you`,
+    layout(
+      `<h1 style="font-family:${BRAND.headingFont};font-size:22px;font-weight:700;color:${BRAND.ink};margin:0 0 14px;letter-spacing:-0.01em">Hi ${who}</h1>
+       <p style="font-size:15px;line-height:1.65;color:${BRAND.body};margin:0 0 16px"><strong>${escapeHtml(opts.volunteerName)}</strong> has logged volunteer hours with ${escapeHtml(opts.orgName)} and named you as the person who can confirm them. It takes one click and you do not need an account.</p>
+       ${factPanel([
+         ['Volunteer', escapeHtml(opts.volunteerName)],
+         ['What they did', escapeHtml(opts.activity)],
+         ['Date', dateStr],
+         ['Hours claimed', String(opts.hours)],
+       ])}
+       <div style="margin:0 0 18px">${button(`${base}?decision=approve`, `Yes, ${opts.hours} hours is right`)}</div>
+       <p style="font-size:14px;line-height:1.8;color:${BRAND.body};margin:0">Not quite right?<br>
+         <a href="${base}?decision=adjust" style="color:${BRAND.primary}">Change the number of hours</a><br>
+         <a href="${base}?decision=reject" style="color:${BRAND.primary}">They did not volunteer with us</a></p>`,
+      `You were named by the volunteer as the person who could confirm this. If that is wrong, choose the last option and we will not ask you again.`
+    ),
+    `Hi,\n\n${opts.volunteerName} logged ${opts.hours} volunteer hours with ${opts.orgName} and named you as the person who can confirm them. You do not need an account.\n\nWhat they did: ${opts.activity}\nDate: ${dateStr}\nHours claimed: ${opts.hours}\n\nYes, that is right: ${base}?decision=approve\nChange the hours: ${base}?decision=adjust\nThey did not volunteer with us: ${base}?decision=reject`,
+  );
+}
+
+/** Tells the volunteer what the organization decided. */
+export async function sendHourDecisionNotice(opts: {
+  to: string; orgName: string; status: string; hours: number; note: string | null;
+}): Promise<void> {
+  const headline = opts.status === 'approved' ? 'Your hours were confirmed'
+    : opts.status === 'adjusted' ? 'Your hours were confirmed, with a change'
+    : 'Your hours were not confirmed';
+  const body = opts.status === 'approved'
+    ? `${escapeHtml(opts.orgName)} confirmed your ${opts.hours} hours. They now count toward your certificate.`
+    : opts.status === 'adjusted'
+    ? `${escapeHtml(opts.orgName)} confirmed your hours but recorded <strong>${opts.hours}</strong> rather than the number you entered. The confirmed figure is the one that counts.`
+    : `${escapeHtml(opts.orgName)} did not confirm these hours. If you think that is a mistake, speak to them directly &mdash; we cannot change their answer.`;
+  await sendEmail(
+    opts.to, headline,
+    layout(
+      `<h1 style="font-family:${BRAND.headingFont};font-size:22px;font-weight:700;color:${BRAND.ink};margin:0 0 14px;letter-spacing:-0.01em">${headline}</h1>
+       <p style="font-size:15px;line-height:1.65;color:${BRAND.body};margin:0 0 16px">${body}</p>
+       ${opts.note ? factPanel([['Their note', escapeHtml(opts.note)]]) : ''}
+       ${button(`${APP_URL}/hours`, 'See my hours')}`
+    ),
+    `${headline}\n\n${opts.orgName} — ${opts.hours} hours.${opts.note ? `\n\nTheir note: ${opts.note}` : ''}\n\n${APP_URL}/hours`,
+  );
+}
+
 /**
  * Asks a volunteer who has not answered the questionnaire to fill it in. Not a
  * one-off: the sender holds a cooldown, so someone who never answers and never

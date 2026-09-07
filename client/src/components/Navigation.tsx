@@ -3,13 +3,16 @@ import { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { useAuthStore, useNotificationStore } from '@/lib/store';
-import { Home, Calendar, Info, User, LogOut, Shield, Bell, Users, X, Trash2, Edit3, UserMinus, RefreshCw, CheckCircle2, XCircle, Sun, Moon, Sparkles, MessageSquare } from 'lucide-react';
+import { Home, Calendar, Info, User, LogOut, Shield, Bell, Users, X, Trash2, Edit3, UserMinus, RefreshCw, CheckCircle2, XCircle, Sun, Moon, Sparkles, MessageSquare, Clock } from 'lucide-react';
 import Logo from './Logo';
 import { useScrolled } from '@/hooks/use-scrolled';
 
 const NAV_ITEMS = [
   { path: '/', label: 'Home', mobileLabel: 'Home', icon: Home },
   { path: '/my-events', label: 'My Events', mobileLabel: 'Events', icon: Calendar },
+  // Volunteers only -- an organization confirms hours from the email we send
+  // them and has nothing to do on this page. Filtered at both render sites.
+  { path: '/hours', label: 'My Hours', mobileLabel: 'Hours', icon: Clock, volunteerOnly: true },
   { path: '/about', label: 'About', mobileLabel: 'About', icon: Info },
   { path: '/profile', label: 'Profile', mobileLabel: 'Profile', icon: User },
 ];
@@ -17,6 +20,13 @@ const NAV_ITEMS = [
 export default function Navigation() {
   const [location, navigate] = useLocation();
   const { isLoggedIn, currentUser, logout, showOnboardingPrompt } = useAuthStore();
+
+  // "My Hours" is for volunteers. An organization confirms hours from the
+  // email we send and has nothing to do on that page, so showing it to them
+  // would just be another dead end in the menu.
+  const visibleNavItems = NAV_ITEMS.filter(
+    item => !item.volunteerOnly || (isLoggedIn && currentUser?.accountType === 'volunteer')
+  );
   const { notifications, unreadCount, fetchNotifications, markRead, markAllRead } = useNotificationStore();
   const [notifOpen, setNotifOpen] = useState(false);
   const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'));
@@ -134,7 +144,7 @@ export default function Navigation() {
                   style={{ left: navIndicator.left, width: navIndicator.width }}
                 />
               )}
-              {NAV_ITEMS.map((item) => {
+              {visibleNavItems.map((item) => {
                 const active = location === item.path;
                 return (
                   <button
@@ -358,7 +368,7 @@ export default function Navigation() {
       {/* Mobile Bottom Nav */}
       <nav className="fixed bottom-0 left-0 right-0 bg-background border-t border-border z-50 lg:hidden">
         <div className="container mx-auto px-2 flex items-center justify-around">
-          {NAV_ITEMS.map((item) => {
+          {visibleNavItems.map((item) => {
             const Icon = item.icon;
             return (
               <button
