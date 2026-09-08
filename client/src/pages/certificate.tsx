@@ -2,12 +2,13 @@ import { useEffect, useState } from 'react';
 import { useLocation } from 'wouter';
 import { Award, ShieldCheck, Printer, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { useAuthStore } from '@/lib/store';
 import { formatDay as fmt } from '@/lib/utils';
 
 interface Cert { id: string; code: string; totalHours: number; confirmedOrgHours: number; issuedAt: string }
-interface Entry { orgName: string; orgConfirmed: boolean; activity: string; serviceDate: string; hours: number; approverName: string | null }
+interface Entry { orgName: string; orgConfirmed: boolean; activity: string; serviceDate: string; hours: number; approverName: string | null; approverEmail?: string | null; approverKind?: string | null }
 interface Full { holderName: string; totalHours: number; confirmedOrgHours: number; issuedAt: string; entries: Entry[] }
 
 async function call<T>(path: string, opts: RequestInit = {}): Promise<T> {
@@ -28,6 +29,11 @@ export default function CertificatePage() {
   const [certs, setCerts] = useState<Cert[] | null>(null);
   const [showing, setShowing] = useState<{ code: string; data: Full } | null>(null);
   const [busy, setBusy] = useState(false);
+  // Asked for once, here, at the only moment it matters. There is no real-name
+  // field on an account -- username is all this site has ever stored -- and a
+  // "Verified Service Record" reading jsmith2027 is worth nothing to a school.
+  const [askName, setAskName] = useState(false);
+  const [fullName, setFullName] = useState('');
 
   const load = () => call<Cert[]>('/api/certificates').then(setCerts)
     .catch(e => toast({ title: e.message, variant: 'destructive' }));
@@ -41,10 +47,17 @@ export default function CertificatePage() {
   async function issue() {
     setBusy(true);
     try {
-      const { code } = await call<{ code: string }>('/api/certificates', { method: 'POST' });
+      const { code } = await call<{ code: string }>('/api/certificates', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(fullName.trim() ? { fullName: fullName.trim() } : {}),
+      });
+      setAskName(false);
       await load(); await open(code);
-    } catch (e: any) { toast({ title: e.message, variant: 'destructive' }); }
-    finally { setBusy(false); }
+    } catch (e: any) {
+      if (e.message === 'NEED_NAME') { setAskName(true); return; }
+      toast({ title: e.message, variant: 'destructive' });
+    } finally { setBusy(false); }
   }
 
   const open = async (code: string) =>
@@ -56,7 +69,7 @@ export default function CertificatePage() {
   if (showing) {
     const { code, data } = showing;
     return (
-      <div className="max-w-3xl mx-auto px-4 py-8">
+      <div className="max-w-3xl mx-auto px-4 py-8 pb-24">
         <div className="no-print mb-5 flex flex-wrap items-center gap-2">
           <Button variant="outline" className="rounded-md" onClick={() => setShowing(null)}>
             <ArrowLeft className="w-4 h-4 mr-1.5" /> Back
@@ -105,12 +118,18 @@ export default function CertificatePage() {
                     <td className="py-2.5 pr-3 whitespace-nowrap">{fmt(e.serviceDate)}</td>
                     <td className="py-2.5 pr-3">
                       <span className="block text-foreground">{e.orgName}</span>
-                      {e.orgConfirmed ? (
+                      {e.approverKind === 'locallink_org' ? (
                         <span className="inline-flex items-center gap-1 text-xs font-semibold text-green-700 dark:text-green-400">
-                          <ShieldCheck className="w-3 h-3" /> Confirmed organization
+                          <ShieldCheck className="w-3 h-3" /> Confirmed by the organization on LocalLink
+                        </span>
+                      ) : e.approverKind === 'org_domain' ? (
+                        <span className="inline-flex items-center gap-1 text-xs font-semibold text-green-700 dark:text-green-400">
+                          <ShieldCheck className="w-3 h-3" /> Confirmed by {e.approverEmail}
                         </span>
                       ) : (
-                        <span className="text-xs text-muted-foreground">Approved by a named person</span>
+                        <span className="text-xs text-muted-foreground">
+                          Confirmed by {e.approverEmail ?? 'a named person'} — a personal email address
+                        </span>
                       )}
                     </td>
                     <td className="py-2.5 pr-3">{e.activity}</td>
@@ -125,7 +144,7 @@ export default function CertificatePage() {
           {data.confirmedOrgHours < data.totalHours && (
             <p className="mt-5 rounded-md bg-secondary px-4 py-3 text-xs text-muted-foreground">
               <strong className="text-foreground">{data.confirmedOrgHours} of {data.totalHours} hours</strong> are
-              with organizations LocalLink has confirmed are real. The remainder were approved by the
+              were confirmed by the organization itself, or from an organization's own email address. The remainder were confirmed by the
               named person above, whose organization we have not independently confirmed.
             </p>
           )}
@@ -148,7 +167,7 @@ export default function CertificatePage() {
   }
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-8 space-y-6">
+    <div className="max-w-3xl mx-auto px-4 py-8 pb-24 space-y-6">
       <div>
         <h1 className="font-heading text-2xl font-bold text-foreground">Certificate</h1>
         <p className="mt-1 text-sm text-muted-foreground">
@@ -162,8 +181,33 @@ export default function CertificatePage() {
           It takes a snapshot of your confirmed hours right now. Older certificates keep saying what
           they said when you made them, so one you have already handed in never changes.
         </p>
-        <Button className="mt-4 rounded-md" onClick={issue} disabled={busy}>
-          <Award className="w-4 h-4 mr-1.5" /> {busy ? 'Making it…' : 'Make certificate'}
+        {askName && (
+          <div className="mt-4 rounded-md border border-border bg-background p-4">
+            <label htmlFor="cert-name" className="block text-sm font-semibold text-foreground">
+              What name should the certificate show?
+            </label>
+            <p className="mt-1 mb-2 text-xs text-muted-foreground">
+              Your full name, the way your school knows you — not your username. This is what your
+              teacher will read, and it cannot be changed afterwards.
+            </p>
+            <Input
+              id="cert-name"
+              value={fullName}
+              onChange={e => setFullName(e.target.value)}
+              placeholder="Maya Rodriguez"
+              maxLength={80}
+              autoFocus
+              className="rounded-md"
+            />
+          </div>
+        )}
+        <Button
+          className="mt-4 rounded-md"
+          onClick={issue}
+          disabled={busy || (askName && fullName.trim().length < 2)}
+        >
+          <Award className="w-4 h-4 mr-1.5" />
+          {busy ? 'Making it…' : askName ? 'Make certificate' : 'Make certificate'}
         </Button>
       </div>
 

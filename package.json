@@ -10,7 +10,9 @@
     "build": "vite build --config vite.config.ts",
     "start": "node --import tsx server/index.ts",
     "deploy": "npm run build && npm start",
-    "preview": "vite preview --config vite.config.ts"
+    "preview": "vite preview --config vite.config.ts",
+    "check:server": "tsc --noEmit -p tsconfig.server.json",
+    "check": "tsc --noEmit && tsc --noEmit -p tsconfig.server.json"
   },
   "engines": {
     "node": ">=18"

@@ -1,0 +1,17 @@
+{
+  "//": "server/ is not in tsconfig.json's include, so nothing type-checked it. That is how `randomBytes` shipped without an import: a DOM global of the same name made it look fine, and it only failed when the route was actually called. Run: npm run check:server",
+  "include": ["server/**/*"],
+  "exclude": ["node_modules", "dist", "build"],
+  "compilerOptions": {
+    "noEmit": true,
+    "module": "ESNext",
+    "target": "ES2022",
+    "strict": false,
+    "lib": ["esnext"],
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "types": ["node"]
+  }
+}

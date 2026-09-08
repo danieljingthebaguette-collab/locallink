@@ -12,7 +12,7 @@ import db from './db.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 app.set('trust proxy', 1);
-const PORT = process.env.PORT || 3001;
+const PORT = Number(process.env.PORT) || 3001;
 
 // Security headers — sets X-Frame-Options, X-Content-Type-Options, HSTS, etc.
 // helmet's default policy is script-src 'self', which silently blocks Google's
@@ -110,7 +110,6 @@ app.use('/uploads', express.static(uploadsPath, {
     // not really an image ever reaches this folder, these headers stop the
     // browser treating it as a page on our own origin -- which is what made
     // the old upload hole an account takeover rather than a nuisance.
-    // Sandboxed, no scripts, and offered as a download rather than rendered.
     res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Content-Disposition', 'inline');

@@ -479,6 +479,78 @@ try {
   db.exec('ALTER TABLE users ADD COLUMN goalHours REAL DEFAULT NULL');
 }
 
+// ── Tracker beta ────────────────────────────────────────────────────────────
+
+// The name that belongs on a certificate. A "Verified Service Record" reading
+// jsmith2027 is worth nothing to a school, and username is the only name this
+// table has ever held. Nullable because we ask for it at the moment it is
+// needed -- making a certificate -- rather than adding a field to signup that
+// everyone has to fill in before they have any reason to care.
+try {
+  db.prepare('SELECT fullName FROM users LIMIT 1').get();
+} catch {
+  db.exec('ALTER TABLE users ADD COLUMN fullName TEXT DEFAULT NULL');
+}
+
+// How an entry was confirmed, decided by us rather than typed by anyone:
+//   'locallink_org' the account that posted the event confirmed it
+//   'org_domain'    the approver's address is at an organization's own domain
+//   'personal'      the approver used gmail/outlook/etc -- still counts, said plainly
+// This is the trust tier. It has to be something a student cannot type, which
+// is exactly what the previous version got wrong: it keyed trust on a squashed
+// organization NAME, so typing a confirmed charity's name bought the top tier.
+try {
+  db.prepare('SELECT approverKind FROM hour_logs LIMIT 1').get();
+} catch {
+  db.exec("ALTER TABLE hour_logs ADD COLUMN approverKind TEXT DEFAULT NULL");
+}
+
+// The approver's address with aliases folded away, so "you+dana@gmail.com" and
+// "y.o.u@gmail.com" collapse onto the same inbox. Used to refuse self-approval
+// and to let an admin see one address confirming sixty entries.
+try {
+  db.prepare('SELECT approverEmailNorm FROM hour_logs LIMIT 1').get();
+} catch {
+  db.exec('ALTER TABLE hour_logs ADD COLUMN approverEmailNorm TEXT DEFAULT NULL');
+}
+
+// Where the entry came from: 'roster' means the organization marked attendance
+// and the volunteer typed nothing at all.
+try {
+  db.prepare('SELECT source FROM hour_logs LIMIT 1').get();
+} catch {
+  db.exec("ALTER TABLE hour_logs ADD COLUMN source TEXT NOT NULL DEFAULT 'self'");
+}
+
+// The evidence has to travel onto the certificate, or the record shows only a
+// name the student typed. Printing the actual address is what lets a teacher
+// check it themselves, and it is the cheapest anti-fraud measure available --
+// it costs students and nonprofits nothing.
+try {
+  db.prepare('SELECT approverEmail FROM certificate_entries LIMIT 1').get();
+} catch {
+  db.exec('ALTER TABLE certificate_entries ADD COLUMN approverEmail TEXT DEFAULT NULL');
+  db.exec('ALTER TABLE certificate_entries ADD COLUMN approverKind TEXT DEFAULT NULL');
+}
+
+// One request per event, not one per volunteer. After an event ends the host
+// gets a single email listing everyone who signed up; ticking names confirms
+// them all at once. Twelve emails after a Saturday event was the thing most
+// likely to make an organization stop using this.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS attendance_requests (
+    id            TEXT PRIMARY KEY,
+    opportunityId TEXT NOT NULL,
+    hostId        TEXT NOT NULL,
+    token         TEXT NOT NULL UNIQUE,
+    expiresAt     TEXT NOT NULL,
+    sentAt        TEXT NOT NULL,
+    respondedAt   TEXT DEFAULT NULL,
+    UNIQUE(opportunityId)
+  );
+  CREATE INDEX IF NOT EXISTS idx_attreq_token ON attendance_requests(token);
+`);
+
 // Migrate: add unsubToken to users (UUID used in unsubscribe link)
 try {
   db.prepare('SELECT unsubToken FROM users LIMIT 1').get();

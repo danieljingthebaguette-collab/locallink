@@ -1926,15 +1926,21 @@ function JoinLinksTab({
 // which is exactly what happened the first time round.
 function HourOrgsTab({ toast }: { toast: any }) {
   const [orgs, setOrgs] = useState<any[]>([]);
+  const [flags, setFlags] = useState<{ busyApprovers: any[]; leanRecords: any[] }>({ busyApprovers: [], leanRecords: [] });
   const [loading, setLoading] = useState(true);
   const [busyKey, setBusyKey] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
 
   const load = async () => {
     setLoading(true);
     try {
       const token = localStorage.getItem('locallink_token');
-      const res = await fetch('/api/admin/hour-orgs', { headers: { Authorization: `Bearer ${token}` } });
-      if (res.ok) setOrgs(await res.json());
+      const [a, b] = await Promise.all([
+        fetch('/api/admin/hour-orgs', { headers: { Authorization: `Bearer ${token}` } }),
+        fetch('/api/admin/hour-flags', { headers: { Authorization: `Bearer ${token}` } }),
+      ]);
+      if (a.ok) setOrgs(await a.json());
+      if (b.ok) setFlags(await b.json());
     } catch { /* ignore */ }
     setLoading(false);
   };
@@ -1972,6 +1978,10 @@ function HourOrgsTab({ toast }: { toast: any }) {
   if (loading) return <div className="flex justify-center py-16"><Loader2 className="w-8 h-8 animate-spin text-muted-foreground" /></div>;
 
   const confirmedCount = orgs.filter(o => o.confirmed).length;
+  const shown = query.trim()
+    ? orgs.filter(o => String(o.orgName).toLowerCase().includes(query.trim().toLowerCase()))
+    : orgs;
+  const flagCount = flags.busyApprovers.length + flags.leanRecords.length;
 
   return (
     <div className="space-y-4">
@@ -1980,13 +1990,67 @@ function HourOrgsTab({ toast }: { toast: any }) {
           Organizations <span className="text-muted-foreground font-normal text-base">({confirmedCount} of {orgs.length} confirmed)</span>
         </h2>
         <p className="text-sm text-muted-foreground mt-1 max-w-2xl">
-          Anyone can log hours against any organization. Confirming one here puts a
-          <span className="text-foreground font-medium"> confirmed mark</span> on every certificate
-          carrying their hours. Everything else is labelled
-          <span className="text-foreground font-medium"> "approved by a named person"</span> — it still
-          counts, it is just labelled honestly. Only confirm one you actually know is real.
+          Most of this is automatic: hours confirmed by the organization on LocalLink, or from an
+          address at the organization's own domain, already count as the strong kind schools ask for.
+          The addresses that did the confirming are shown below —
+          <span className="text-green-700 dark:text-green-400 font-medium"> green</span> is an
+          organization,
+          <span className="text-amber-700 dark:text-amber-400 font-medium"> amber</span> is a personal
+          account.
+          <br /><br />
+          Confirming an organization here is the exception automation cannot cover: a real local
+          charity run out of somebody's Gmail. Vouching for it makes its hours count like any other.
+          Only do it for one you actually know is real.
         </p>
       </div>
+
+      {flagCount > 0 && (
+        <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4">
+          <h3 className="font-heading font-semibold text-foreground">Worth a look</h3>
+          <p className="mt-0.5 mb-3 text-xs text-muted-foreground">
+            Patterns, not accusations. Every one of these has an innocent explanation — a parent who
+            really does run the food drive looks exactly like this — so read them, do not act on them
+            automatically.
+          </p>
+          {flags.busyApprovers.length > 0 && (
+            <div className="mb-3">
+              <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground mb-1">
+                One personal address confirming for several students
+              </p>
+              {flags.busyApprovers.map((a: any) => (
+                <p key={a.approverEmail} className="text-sm text-foreground">
+                  {a.approverEmail} — {a.students} students, {a.entries} entries, {a.hours}h
+                </p>
+              ))}
+            </div>
+          )}
+          {flags.leanRecords.length > 0 && (
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground mb-1">
+                Records leaning mostly on personal addresses
+              </p>
+              {flags.leanRecords.map((v: any) => (
+                <p key={v.id} className="text-sm text-foreground">
+                  {v.name} — {v.personal}h of {v.total}h confirmed from personal addresses
+                </p>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {orgs.length > 6 && (
+        <div>
+          <label htmlFor="org-search" className="sr-only">Search organizations</label>
+          <input
+            id="org-search"
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            placeholder="Search organizations…"
+            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+          />
+        </div>
+      )}
 
       {orgs.length === 0 ? (
         <div className="text-center py-16 text-muted-foreground">
@@ -1996,7 +2060,7 @@ function HourOrgsTab({ toast }: { toast: any }) {
         </div>
       ) : (
         <div className="space-y-3">
-          {orgs.map(o => (
+          {shown.map(o => (
             <div key={o.orgKey} className="rounded-2xl bg-card border border-border p-4 flex flex-wrap items-center justify-between gap-3">
               <div className="min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
@@ -2008,8 +2072,23 @@ function HourOrgsTab({ toast }: { toast: any }) {
                   )}
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">
-                  {o.entries} {o.entries === 1 ? 'entry' : 'entries'} logged · {o.confirmedEntries} confirmed by them
+                  {o.entries} {o.entries === 1 ? 'entry' : 'entries'} · {o.confirmedEntries} confirmed ·{' '}
+                  {o.volunteers} {o.volunteers === 1 ? 'volunteer' : 'volunteers'}
+                  {o.rosterEntries > 0 && <> · {o.rosterEntries} from a LocalLink event</>}
                 </p>
+                {o.approverAddresses?.length > 0 && (
+                  <div className="mt-1.5 flex flex-wrap gap-1.5">
+                    {o.approverAddresses.map((a: any) => (
+                      <span key={a.email}
+                        className={cn('rounded px-1.5 py-0.5 text-[11px] font-medium',
+                          a.kind === 'personal'
+                            ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400'
+                            : 'bg-green-500/15 text-green-700 dark:text-green-400')}>
+                        {a.email}{a.n > 1 && ` ×${a.n}`}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
               <Button
                 size="sm"

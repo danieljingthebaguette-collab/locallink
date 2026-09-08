@@ -15,6 +15,7 @@
 import { randomUUID } from 'crypto';
 import db from './db.js';
 import { sendReopenReminderEmail } from './email.js';
+import { sendPendingAttendanceRequests } from './routes.js';
 import { appLocalDay, appLocalHour } from './time.js';
 
 type SignupRow = {
@@ -104,10 +105,24 @@ async function checkAndNotify(): Promise<void> {
 }
 
 /** Call once at server startup to register the hourly interval. */
+/** Ask the host of every finished event who turned up. Runs on the same hourly
+ *  tick as the reopen check -- one timer, not two. */
+async function askWhoCame(): Promise<void> {
+  try {
+    const sent = await sendPendingAttendanceRequests();
+    if (sent > 0) console.log(`[Scheduler] Attendance asked for ${sent} finished event(s).`);
+  } catch (err: any) {
+    console.error('[Scheduler] Attendance request pass failed:', err.message);
+  }
+}
+
 export function startReopenScheduler(): void {
   // Run the first check immediately (deduplication makes this safe on restarts)
   checkAndNotify();
   // Then run every hour
   setInterval(checkAndNotify, 60 * 60 * 1000);
+
+  askWhoCame();
+  setInterval(askWhoCame, 60 * 60 * 1000);
   console.log('[Scheduler] Reopen-reminder scheduler started (checks every hour, fires Sunday 18:xx).');
 }

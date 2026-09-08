@@ -453,3 +453,39 @@ export async function sendOnboardingNudgeEmail(
     { unsubscribeUrl: unsubUrl },
   );
 }
+
+/**
+ * One email per event, not one per volunteer.
+ *
+ * A Saturday event with twelve students used to mean twelve separate approval
+ * emails to the same coordinator. That is the thing most likely to make a small
+ * organization stop using us, and they are the side we can least afford to
+ * lose. This asks once, lists everyone, and is finished in a click.
+ */
+export async function sendAttendanceRequest(opts: {
+  to: string; hostName: string; eventTitle: string; serviceDate: string;
+  hours: number; names: string[]; token: string;
+}): Promise<void> {
+  const link = `${APP_URL}/attendance/${opts.token}`;
+  const dateStr = new Date(`${opts.serviceDate}T12:00:00`).toLocaleDateString('en-US', {
+    weekday: 'long', month: 'long', day: 'numeric',
+  });
+  const n = opts.names.length;
+  const rows = opts.names.map(name =>
+    `<tr><td style="padding:7px 0;border-bottom:1px solid ${BRAND.border};font-size:15px;color:${BRAND.ink}">${escapeHtml(name)}</td></tr>`
+  ).join('');
+
+  await sendEmail(
+    opts.to,
+    `Who came to ${opts.eventTitle}?`,
+    layout(
+      `<h1 style="font-family:${BRAND.headingFont};font-size:22px;font-weight:700;color:${BRAND.ink};margin:0 0 14px;letter-spacing:-0.01em">Hi ${escapeHtml(opts.hostName)}</h1>
+       <p style="font-size:15px;line-height:1.65;color:${BRAND.body};margin:0 0 16px"><strong>${n}</strong> ${n === 1 ? 'person' : 'people'} signed up for <strong>${escapeHtml(opts.eventTitle)}</strong> on ${dateStr}. Tick whoever actually turned up and their hours are recorded — all of them at once. You do not need an account.</p>
+       <table style="width:100%;border-collapse:collapse;margin:0 0 18px">${rows}</table>
+       <p style="font-size:15px;line-height:1.65;color:${BRAND.body};margin:0 0 18px">Everyone is down for <strong>${opts.hours} hours</strong>, which is what your post said. You can change that for anyone who stayed longer or left early.</p>
+       <div style="margin:0 0 18px">${button(link, 'Confirm who came')}</div>`,
+      `This is the only email we will send you about this event. If nobody came, or you would rather not answer, ignoring it is fine — nothing is recorded either way.`
+    ),
+    `Hi ${opts.hostName},\n\n${n} ${n === 1 ? 'person' : 'people'} signed up for ${opts.eventTitle} on ${dateStr}. Tick whoever actually turned up and their hours are recorded, all at once. No account needed.\n\n${opts.names.map(x => `  - ${x}`).join('\n')}\n\nEveryone is down for ${opts.hours} hours, which is what your post said. You can change that for anyone.\n\nConfirm who came: ${link}\n\nThis is the only email we will send about this event. Ignoring it records nothing.`,
+  );
+}

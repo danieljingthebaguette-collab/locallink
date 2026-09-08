@@ -12,9 +12,12 @@ interface HourLog {
   activity: string; serviceDate: string; hours: number;
   status: 'pending' | 'approved' | 'adjusted' | 'rejected';
   approvedHours: number | null; approverName: string | null; approverNote: string | null;
+  approverKind?: string | null; approverEmail?: string | null; source?: string;
+  submittedAt?: string; decidedAt?: string | null;
 }
 interface Totals { confirmed: number; fromConfirmedOrgs: number; waiting: number; goalHours: number | null }
-interface Loggable { id: string; title: string; date: string; duration: number; hostName: string; location: string }
+interface HoursPayload { logs: HourLog[]; totals: Totals; fullName: string | null }
+interface Loggable { id: string; title: string; date: string; duration: number; hostName: string; location: string; hostEmail?: string | null; hostContact?: string | null }
 
 const hoursOf = (l: HourLog) => l.approvedHours ?? l.hours;
 
@@ -41,15 +44,27 @@ const StatusPill = ({ status }: { status: string }) => {
   return <span className={cn('inline-block rounded px-2 py-0.5 text-xs font-semibold', look)}>{label}</span>;
 };
 
-/** The trust tier, said in words rather than signalled by a colour alone. */
-const TrustMark = ({ confirmed }: { confirmed: boolean }) =>
-  confirmed ? (
+/** How an entry was confirmed, in words rather than by colour alone.
+ *  The tier is decided by the server from the post and the address -- never
+ *  from anything typed here -- so this only has to report it honestly. */
+const TrustMark = ({ kind, email }: { kind?: string | null; email?: string | null }) => {
+  if (kind === 'locallink_org') return (
     <span className="inline-flex items-center gap-1 text-xs font-semibold text-green-700 dark:text-green-400">
-      <ShieldCheck className="w-3.5 h-3.5" /> Confirmed organization
+      <ShieldCheck className="w-3.5 h-3.5" /> Confirmed by the organization on LocalLink
     </span>
-  ) : (
-    <span className="text-xs text-muted-foreground">Approved by a named person</span>
   );
+  if (kind === 'org_domain') return (
+    <span className="inline-flex items-center gap-1 text-xs font-semibold text-green-700 dark:text-green-400">
+      <ShieldCheck className="w-3.5 h-3.5" /> Confirmed by {email ?? 'an organization email'}
+    </span>
+  );
+  if (kind === 'personal') return (
+    <span className="text-xs text-muted-foreground">
+      Confirmed by {email ?? 'a personal email address'} — a personal address, so your school may ask more
+    </span>
+  );
+  return <span className="text-xs text-muted-foreground">Not confirmed</span>;
+};
 
 export default function HoursPage() {
   const { isLoggedIn, currentUser } = useAuthStore();
@@ -63,6 +78,12 @@ export default function HoursPage() {
   const [prefill, setPrefill] = useState<Loggable | null>(null);
   const [goalDraft, setGoalDraft] = useState('');
   const [saving, setSaving] = useState(false);
+  // Asked for here because this is where it starts mattering to somebody else:
+  // the organization's attendance list shows this name, and a coordinator
+  // cannot match "rosterC" to anyone who actually turned up.
+  const [fullName, setFullName] = useState<string | null>(null);
+  const [nameDraft, setNameDraft] = useState('');
+  const [savingName, setSavingName] = useState(false);
   const [form, setForm] = useState({
     orgName: '', approverName: '', approverEmail: '', activity: '', serviceDate: '', hours: '',
   });
@@ -71,10 +92,10 @@ export default function HoursPage() {
 
   async function load() {
     const [d, l] = await Promise.all([
-      call<{ logs: HourLog[]; totals: Totals }>('/api/hours'),
+      call<HoursPayload>('/api/hours'),
       call<Loggable[]>('/api/hours/loggable').catch(() => [] as Loggable[]),
     ]);
-    setLogs(d.logs); setTotals(d.totals); setLoggable(l);
+    setLogs(d.logs); setTotals(d.totals); setLoggable(l); setFullName(d.fullName);
     setGoalDraft(d.totals.goalHours ? String(d.totals.goalHours) : '');
   }
 
@@ -85,6 +106,19 @@ export default function HoursPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoggedIn, isVolunteer]);
 
+  async function saveName() {
+    const name = nameDraft.trim();
+    if (name.length < 2) return;
+    setSavingName(true);
+    try {
+      await call('/api/me/full-name', { method: 'PUT', body: JSON.stringify({ fullName: name }) });
+      setFullName(name);
+      toast({ title: 'Saved', description: 'This is the name organizations and your school will see.' });
+    } catch (e: any) {
+      toast({ title: e.message, variant: 'destructive' });
+    } finally { setSavingName(false); }
+  }
+
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm(f => ({ ...f, [k]: e.target.value }));
 
@@ -92,7 +126,9 @@ export default function HoursPage() {
   function startFromEvent(ev: Loggable) {
     setPrefill(ev);
     setForm({
-      orgName: ev.hostName, approverName: '', approverEmail: '',
+      orgName: ev.hostName,
+      approverName: ev.hostContact ?? '',
+      approverEmail: ev.hostEmail ?? '',
       activity: ev.title, serviceDate: ev.date.slice(0, 10), hours: String(ev.duration || ''),
     });
     setOpenForm(true);
@@ -140,7 +176,7 @@ export default function HoursPage() {
 
   if (!isVolunteer) {
     return (
-      <div className="max-w-2xl mx-auto px-4 py-16 text-center">
+      <div className="max-w-2xl mx-auto px-4 py-16 pb-24 text-center">
         <h1 className="font-heading text-2xl font-bold text-foreground">Hours are for volunteer accounts</h1>
         <p className="mt-2 text-muted-foreground">
           Organizations confirm hours from the email we send — there is nothing to set up here.
@@ -156,7 +192,7 @@ export default function HoursPage() {
   const pct = totals.goalHours ? Math.min(100, (totals.confirmed / totals.goalHours) * 100) : 0;
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-8 space-y-6">
+    <div className="max-w-3xl mx-auto px-4 py-8 pb-24 space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="font-heading text-2xl font-bold text-foreground">My hours</h1>
@@ -174,6 +210,36 @@ export default function HoursPage() {
         </div>
       </div>
 
+      {/* Your real name. Not vanity: the organization confirming your hours sees
+          this on their list, and a coordinator cannot match a username to
+          anyone who actually turned up. It is also what goes on the
+          certificate, so it is asked for once and then fixed. */}
+      {fullName === null && (
+        <div className="rounded-2xl border border-primary/30 bg-primary/5 p-5">
+          <label htmlFor="full-name" className="block font-heading font-semibold text-foreground">
+            What is your name?
+          </label>
+          <p className="mt-1 mb-3 text-sm text-muted-foreground">
+            Organizations see this when they confirm your hours, and it is the name printed on your
+            certificate. Your full name, as your school knows you — not your username. You can only
+            set this once.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Input
+              id="full-name"
+              value={nameDraft}
+              onChange={e => setNameDraft(e.target.value)}
+              placeholder="Ava Lin"
+              maxLength={80}
+              className="rounded-md flex-1 min-w-[200px]"
+            />
+            <Button className="rounded-md" onClick={saveName} disabled={savingName || nameDraft.trim().length < 2}>
+              {savingName ? 'Saving…' : 'Save'}
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Progress. Hidden until a target is set — a bar with no target is decoration. */}
       <div className="rounded-2xl bg-card border border-border p-5">
         <div className="flex flex-wrap items-baseline justify-between gap-3">
@@ -186,7 +252,7 @@ export default function HoursPage() {
           </div>
           <label className="flex items-center gap-2 text-xs text-muted-foreground">
             My target
-            <Input value={goalDraft} onChange={e => setGoalDraft(e.target.value)} onBlur={saveGoal}
+            <Input id="goal-hours" value={goalDraft} onChange={e => setGoalDraft(e.target.value)} onBlur={saveGoal}
               inputMode="numeric" placeholder="40" className="w-20 h-9 text-center rounded-md"
               aria-label="Hours target" />
           </label>
@@ -212,8 +278,7 @@ export default function HoursPage() {
 
         {totals.fromConfirmedOrgs < totals.confirmed && (
           <p className="mt-3 text-xs text-muted-foreground">
-            {totals.fromConfirmedOrgs} of those are with organizations LocalLink has confirmed are real.
-            The rest were approved by a named person and are labelled that way on your certificate.
+            {totals.fromConfirmedOrgs} of those were confirmed by the organization itself, or from an organization's own email address — which is the kind schools ask for. The rest were confirmed from a personal address, and your certificate says so.
           </p>
         )}
       </div>
@@ -258,34 +323,34 @@ export default function HoursPage() {
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="sm:col-span-2">
-              <label className="block text-sm font-semibold text-foreground mb-1.5">Who did you volunteer with?</label>
-              <Input value={form.orgName} onChange={set('orgName')} required
+              <label htmlFor="org-name" className="block text-sm font-semibold text-foreground mb-1.5">Who did you volunteer with?</label>
+              <Input id="org-name" value={form.orgName} onChange={set('orgName')} required
                 disabled={!!prefill} placeholder="Arm in Arm" className="rounded-md" />
               {prefill && <p className="mt-1 text-xs text-muted-foreground">Taken from the post, so it matches what was advertised.</p>}
             </div>
             <div>
-              <label className="block text-sm font-semibold text-foreground mb-1.5">Date you volunteered</label>
-              <Input type="date" value={form.serviceDate} onChange={set('serviceDate')} required
+              <label htmlFor="service-date" className="block text-sm font-semibold text-foreground mb-1.5">Date you volunteered</label>
+              <Input id="service-date" type="date" value={form.serviceDate} onChange={set('serviceDate')} required
                 disabled={!!prefill} max={new Date().toISOString().slice(0, 10)} className="rounded-md" />
             </div>
             <div>
-              <label className="block text-sm font-semibold text-foreground mb-1.5">How many hours?</label>
-              <Input value={form.hours} onChange={set('hours')} required inputMode="decimal"
+              <label htmlFor="hours-count" className="block text-sm font-semibold text-foreground mb-1.5">How many hours?</label>
+              <Input id="hours-count" value={form.hours} onChange={set('hours')} required inputMode="decimal"
                 placeholder="3.5" className="rounded-md" />
             </div>
             <div className="sm:col-span-2">
-              <label className="block text-sm font-semibold text-foreground mb-1.5">What did you do?</label>
-              <Input value={form.activity} onChange={set('activity')} required maxLength={300}
+              <label htmlFor="activity" className="block text-sm font-semibold text-foreground mb-1.5">What did you do?</label>
+              <Input id="activity" value={form.activity} onChange={set('activity')} required maxLength={300}
                 placeholder="Sorted and packed food boxes" className="rounded-md" />
               <p className="mt-1 text-xs text-muted-foreground">One line. This appears on your certificate.</p>
             </div>
             <div>
-              <label className="block text-sm font-semibold text-foreground mb-1.5">Who can confirm this?</label>
-              <Input value={form.approverName} onChange={set('approverName')} placeholder="Dana Reed" className="rounded-md" />
+              <label htmlFor="approver-name" className="block text-sm font-semibold text-foreground mb-1.5">Who can confirm this?</label>
+              <Input id="approver-name" value={form.approverName} onChange={set('approverName')} placeholder="Dana Reed" className="rounded-md" />
             </div>
             <div>
-              <label className="block text-sm font-semibold text-foreground mb-1.5">Their email</label>
-              <Input type="email" value={form.approverEmail} onChange={set('approverEmail')} required
+              <label htmlFor="approver-email" className="block text-sm font-semibold text-foreground mb-1.5">Their email</label>
+              <Input id="approver-email" type="email" value={form.approverEmail} onChange={set('approverEmail')} required
                 placeholder="supervisor@organization.org" className="rounded-md" />
               <p className="mt-1 text-xs text-muted-foreground">Not your own — someone else has to confirm it.</p>
             </div>
@@ -327,7 +392,7 @@ export default function HoursPage() {
                   <p className="mt-1.5 rounded bg-secondary px-2.5 py-1.5 text-xs text-foreground">“{l.approverNote}”</p>
                 )}
                 {(l.status === 'approved' || l.status === 'adjusted') && (
-                  <div className="mt-1.5"><TrustMark confirmed={l.orgConfirmed} /></div>
+                  <div className="mt-1.5"><TrustMark kind={l.approverKind} email={l.approverEmail} /></div>
                 )}
               </div>
               <div className="text-right flex-shrink-0">

@@ -24,6 +24,7 @@ import HoursPage from '@/pages/hours';
 import CertificatePage from '@/pages/certificate';
 import ApproveHoursPage from '@/pages/approve-hours';
 import CheckCertificatePage from '@/pages/check-certificate';
+import AttendancePage from '@/pages/attendance';
 import JoinPage from "@/pages/join";
 
 /**
@@ -62,6 +63,7 @@ function Router() {
       <Route path="/certificate" component={CertificatePage} />
       <Route path="/approve-hours/:token" component={ApproveHoursPage} />
       <Route path="/check" component={CheckCertificatePage} />
+      <Route path="/attendance/:token" component={AttendancePage} />
       <Route path="/check/:code" component={CheckCertificatePage} />
       <Route component={NotFound} />
     </Switch>
