@@ -91,3 +91,26 @@ export function getLengthError(field: keyof typeof LIMITS, value: string): strin
   const len = value.trim().length;
   return len > max ? `Keep this under ${max} characters (currently ${len})` : null;
 }
+
+/**
+ * Dates reach us in two shapes and cannot be read the same way.
+ *
+ * A *service date* is a plain day somebody typed — "2026-08-15", no timezone
+ * attached. Handing that to `new Date()` reads it as midnight UTC, which is the
+ * previous evening for everyone in New Jersey, so the day shown is one behind.
+ * Pinning it to local noon avoids that in every timezone.
+ *
+ * An *issued date* is a real moment we recorded — "2026-09-08T00:34:29Z". That
+ * one has to be shown in the reader's own timezone, or a certificate made at
+ * 8pm is stamped tomorrow. On a document a school is meant to trust, a date in
+ * the future reads as a forgery.
+ *
+ * The two are told apart by whether the string carries a timezone at all.
+ */
+export function formatDay(iso: string, style: 'short' | 'long' = 'short'): string {
+  const isRealMoment = /[Zz]$|[+-]\d{2}:?\d{2}$/.test(iso);
+  const d = isRealMoment ? new Date(iso) : new Date(`${iso.slice(0, 10)}T12:00:00`);
+  return d.toLocaleDateString('en-US', style === 'long'
+    ? { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }
+    : { month: 'short', day: 'numeric', year: 'numeric' });
+}

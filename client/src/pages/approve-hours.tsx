@@ -2,15 +2,12 @@ import { useEffect, useState } from 'react';
 import { useRoute } from 'wouter';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { formatDay } from '@/lib/utils';
 
 interface Ask {
   volunteerName: string; orgName: string; activity: string;
   serviceDate: string; hours: number; approverName: string | null;
 }
-
-const fmt = (iso: string) =>
-  new Date(`${iso}T12:00:00`).toLocaleDateString('en-US',
-    { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
 
 /**
  * Where a supervisor lands from their email. No account, nothing to learn.
@@ -99,7 +96,7 @@ export default function ApproveHoursPage() {
       <div className="rounded-2xl bg-card border border-border p-5">
         <dl className="grid grid-cols-[auto_1fr] gap-x-5 gap-y-2.5 text-sm">
           <dt className="text-muted-foreground">What they did</dt><dd className="text-foreground">{ask.activity}</dd>
-          <dt className="text-muted-foreground">Date</dt><dd className="text-foreground">{fmt(ask.serviceDate)}</dd>
+          <dt className="text-muted-foreground">Date</dt><dd className="text-foreground">{formatDay(ask.serviceDate, 'long')}</dd>
           <dt className="text-muted-foreground">Hours claimed</dt>
           <dd className="font-heading text-lg font-bold text-foreground tabular-nums">{ask.hours}</dd>
         </dl>

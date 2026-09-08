@@ -36,9 +36,11 @@ import {
   BadgeCheck,
   Calendar,
   Sparkles,
+  Clock,
+  ShieldCheck,
 } from 'lucide-react';
 
-type Tab = 'overview' | 'users' | 'opportunities' | 'verify' | 'reports' | 'feedback' | 'appeals' | 'join-links';
+type Tab = 'overview' | 'users' | 'opportunities' | 'verify' | 'reports' | 'feedback' | 'appeals' | 'join-links' | 'hour-orgs';
 
 export default function Admin() {
   const [, navigate] = useLocation();
@@ -81,6 +83,7 @@ export default function Admin() {
     { value: 'feedback', label: 'Feedback', icon: <MessageSquare className="w-4 h-4" /> },
     { value: 'appeals', label: 'Appeals', icon: <Scale className="w-4 h-4" /> },
     { value: 'join-links', label: 'Join Links', icon: <Link2 className="w-4 h-4" /> },
+    { value: 'hour-orgs', label: 'Hours', icon: <Clock className="w-4 h-4" /> },
   ];
 
   return (
@@ -223,6 +226,7 @@ export default function Admin() {
         {activeTab === 'reports' && <ReportsTab toast={toast} />}
         {activeTab === 'feedback' && <FeedbackTab toast={toast} />}
         {activeTab === 'appeals' && <AppealsTab toast={toast} onUnbanUser={unbanUser} />}
+        {activeTab === 'hour-orgs' && <HourOrgsTab toast={toast} />}
         {activeTab === 'join-links' && (
           <JoinLinksTab
             links={joinLinks}
@@ -1905,6 +1909,118 @@ function JoinLinksTab({
                   <Trash2 className="w-3 h-3" />
                 </Button>
               </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ===== Hours: which organizations are real =====
+//
+// The whole trust tier lives on this screen. A volunteer can log hours against
+// any organization and any named person can confirm them -- what separates the
+// two is a mark on the certificate, and this is the only place that mark is
+// granted. Without this screen the confirmed tier can never turn on for anyone,
+// which is exactly what happened the first time round.
+function HourOrgsTab({ toast }: { toast: any }) {
+  const [orgs, setOrgs] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busyKey, setBusyKey] = useState<string | null>(null);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const token = localStorage.getItem('locallink_token');
+      const res = await fetch('/api/admin/hour-orgs', { headers: { Authorization: `Bearer ${token}` } });
+      if (res.ok) setOrgs(await res.json());
+    } catch { /* ignore */ }
+    setLoading(false);
+  };
+
+  useEffect(() => { load(); }, []);
+
+  // orgKey is a squashed organization name, so it contains spaces -- it has to
+  // be encoded or the request never reaches the route.
+  const setConfirmed = async (key: string, confirmed: boolean) => {
+    setBusyKey(key);
+    try {
+      const token = localStorage.getItem('locallink_token');
+      const res = await fetch(`/api/admin/hour-orgs/${encodeURIComponent(key)}/confirm`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ confirmed }),
+      });
+      if (res.ok) {
+        setOrgs(list => list.map(o => (o.orgKey === key ? { ...o, confirmed } : o)));
+        toast({
+          title: confirmed ? 'Marked as a real organization' : 'Mark removed',
+          description: confirmed
+            ? 'Hours confirmed by them now carry the confirmed mark.'
+            : 'Their hours are back to "approved by a named person".',
+        });
+      } else {
+        toast({ title: 'That did not save', description: (await res.json()).error, variant: 'destructive' });
+      }
+    } catch {
+      toast({ title: 'That did not save', variant: 'destructive' });
+    }
+    setBusyKey(null);
+  };
+
+  if (loading) return <div className="flex justify-center py-16"><Loader2 className="w-8 h-8 animate-spin text-muted-foreground" /></div>;
+
+  const confirmedCount = orgs.filter(o => o.confirmed).length;
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h2 className="font-heading font-bold text-lg">
+          Organizations <span className="text-muted-foreground font-normal text-base">({confirmedCount} of {orgs.length} confirmed)</span>
+        </h2>
+        <p className="text-sm text-muted-foreground mt-1 max-w-2xl">
+          Anyone can log hours against any organization. Confirming one here puts a
+          <span className="text-foreground font-medium"> confirmed mark</span> on every certificate
+          carrying their hours. Everything else is labelled
+          <span className="text-foreground font-medium"> "approved by a named person"</span> — it still
+          counts, it is just labelled honestly. Only confirm one you actually know is real.
+        </p>
+      </div>
+
+      {orgs.length === 0 ? (
+        <div className="text-center py-16 text-muted-foreground">
+          <Clock className="w-10 h-10 mx-auto mb-3 opacity-30" />
+          <p>No hours have been logged yet.</p>
+          <p className="text-sm mt-1">Organizations appear here as soon as someone logs hours against them.</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {orgs.map(o => (
+            <div key={o.orgKey} className="rounded-2xl bg-card border border-border p-4 flex flex-wrap items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-heading font-semibold text-foreground">{o.orgName}</span>
+                  {o.confirmed && (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-md bg-green-500/10 text-green-600">
+                      <ShieldCheck className="w-3 h-3" /> Confirmed real
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {o.entries} {o.entries === 1 ? 'entry' : 'entries'} logged · {o.confirmedEntries} confirmed by them
+                </p>
+              </div>
+              <Button
+                size="sm"
+                variant={o.confirmed ? 'outline' : 'default'}
+                disabled={busyKey === o.orgKey}
+                onClick={() => setConfirmed(o.orgKey, !o.confirmed)}
+              >
+                {busyKey === o.orgKey
+                  ? <Loader2 className="w-4 h-4 animate-spin" />
+                  : o.confirmed ? 'Remove the mark' : 'Confirm this is real'}
+              </Button>
             </div>
           ))}
         </div>

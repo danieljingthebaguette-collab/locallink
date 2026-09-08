@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { useAuthStore } from '@/lib/store';
-import { cn } from '@/lib/utils';
+import { cn, formatDay as fmt } from '@/lib/utils';
 
 interface HourLog {
   id: string; opportunityId: string | null; orgName: string; orgConfirmed: boolean;
@@ -17,10 +17,6 @@ interface Totals { confirmed: number; fromConfirmedOrgs: number; waiting: number
 interface Loggable { id: string; title: string; date: string; duration: number; hostName: string; location: string }
 
 const hoursOf = (l: HourLog) => l.approvedHours ?? l.hours;
-
-const fmt = (iso: string) =>
-  new Date(`${iso.slice(0, 10)}T12:00:00`).toLocaleDateString('en-US',
-    { month: 'short', day: 'numeric', year: 'numeric' });
 
 async function call<T>(path: string, opts: RequestInit = {}): Promise<T> {
   const headers: Record<string, string> = {};

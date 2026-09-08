@@ -3,13 +3,10 @@ import { useRoute } from 'wouter';
 import { ShieldCheck, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { formatDay as fmt } from '@/lib/utils';
 
 interface Entry { orgName: string; orgConfirmed: boolean; activity: string; serviceDate: string; hours: number; approverName: string | null }
 interface Full { holderName: string; totalHours: number; confirmedOrgHours: number; issuedAt: string; revoked: boolean; entries: Entry[] }
-
-const fmt = (iso: string) =>
-  new Date(`${iso.slice(0, 10)}T12:00:00`).toLocaleDateString('en-US',
-    { month: 'short', day: 'numeric', year: 'numeric' });
 
 /** Deliberately open. A teacher holding a printed certificate has no account
  *  here, and asking them to make one is the fastest way to have it disbelieved. */

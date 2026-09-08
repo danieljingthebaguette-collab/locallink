@@ -4,14 +4,11 @@ import { Award, ShieldCheck, Printer, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { useAuthStore } from '@/lib/store';
+import { formatDay as fmt } from '@/lib/utils';
 
 interface Cert { id: string; code: string; totalHours: number; confirmedOrgHours: number; issuedAt: string }
 interface Entry { orgName: string; orgConfirmed: boolean; activity: string; serviceDate: string; hours: number; approverName: string | null }
 interface Full { holderName: string; totalHours: number; confirmedOrgHours: number; issuedAt: string; entries: Entry[] }
-
-const fmt = (iso: string) =>
-  new Date(`${iso.slice(0, 10)}T12:00:00`).toLocaleDateString('en-US',
-    { month: 'short', day: 'numeric', year: 'numeric' });
 
 async function call<T>(path: string, opts: RequestInit = {}): Promise<T> {
   const headers: Record<string, string> = {};
