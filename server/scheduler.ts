@@ -15,7 +15,7 @@
 import { randomUUID } from 'crypto';
 import db from './db.js';
 import { sendReopenReminderEmail } from './email.js';
-import { sendPendingAttendanceRequests } from './routes.js';
+import { sendPendingAttendanceRequests, closeAbandonedClocks } from './routes.js';
 import { appLocalDay, appLocalHour } from './time.js';
 
 type SignupRow = {
@@ -124,5 +124,19 @@ export function startReopenScheduler(): void {
 
   askWhoCame();
   setInterval(askWhoCame, 60 * 60 * 1000);
+
+  // Clocks nobody scanned out of. A dead battery and a walk-out look identical
+  // from here, so both get the posted length and both are flagged rather than
+  // judged.
+  const sweepClocks = () => {
+    try {
+      const n = closeAbandonedClocks();
+      if (n > 0) console.log(`[Scheduler] Closed ${n} clock(s) nobody scanned out of.`);
+    } catch (err: any) {
+      console.error('[Scheduler] Clock sweep failed:', err.message);
+    }
+  };
+  sweepClocks();
+  setInterval(sweepClocks, 60 * 60 * 1000);
   console.log('[Scheduler] Reopen-reminder scheduler started (checks every hour, fires Sunday 18:xx).');
 }

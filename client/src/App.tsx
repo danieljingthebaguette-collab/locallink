@@ -25,6 +25,8 @@ import CertificatePage from '@/pages/certificate';
 import ApproveHoursPage from '@/pages/approve-hours';
 import CheckCertificatePage from '@/pages/check-certificate';
 import AttendancePage from '@/pages/attendance';
+import ScanPage from '@/pages/scan';
+import EventCodePage from '@/pages/event-code';
 import JoinPage from "@/pages/join";
 
 /**
@@ -64,6 +66,8 @@ function Router() {
       <Route path="/approve-hours/:token" component={ApproveHoursPage} />
       <Route path="/check" component={CheckCertificatePage} />
       <Route path="/attendance/:token" component={AttendancePage} />
+      <Route path="/scan/:code" component={ScanPage} />
+      <Route path="/event-code/:id" component={EventCodePage} />
       <Route path="/check/:code" component={CheckCertificatePage} />
       <Route component={NotFound} />
     </Switch>

@@ -533,6 +533,46 @@ try {
   db.exec('ALTER TABLE certificate_entries ADD COLUMN approverKind TEXT DEFAULT NULL');
 }
 
+// ── Scanning in and out ─────────────────────────────────────────────────────
+//
+// Each event carries two codes with deliberately different powers.
+//
+// printedCode is static and goes on a sheet taped to a table. It can only START
+// a clock, because volunteers arrive over twenty minutes and nobody should have
+// to stand at the door holding a phone up for all of it.
+//
+// codeSecret backs the LIVE code on the organizer's phone, which redraws every
+// 30 seconds and can start or STOP a clock. The code itself is never stored --
+// it is derived from this secret and the current half-minute -- so it cannot
+// leak from here.
+//
+// The split is the security. A photographed printed code opens a clock that its
+// holder cannot close without standing next to the organizer, and an unclosed
+// clock pays the posted length and appears on the organizer's list marked as
+// never scanned out. Copying the printed code earns a flag, not hours.
+try {
+  db.prepare('SELECT printedCode FROM opportunities LIMIT 1').get();
+} catch {
+  db.exec('ALTER TABLE opportunities ADD COLUMN printedCode TEXT DEFAULT NULL');
+  db.exec('ALTER TABLE opportunities ADD COLUMN codeSecret TEXT DEFAULT NULL');
+  db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_opp_printedcode ON opportunities(printedCode)');
+}
+
+// A running clock is an hour_logs row with status 'running' and no endedAt.
+// Reusing the same table rather than adding a sessions table keeps one place
+// where a volunteer's hours live, and one place to look when they disagree
+// with it. hours stays 0 until the clock closes.
+try {
+  db.prepare('SELECT startedAt FROM hour_logs LIMIT 1').get();
+} catch {
+  db.exec('ALTER TABLE hour_logs ADD COLUMN startedAt TEXT DEFAULT NULL');
+  db.exec('ALTER TABLE hour_logs ADD COLUMN endedAt TEXT DEFAULT NULL');
+  // 'scan' the volunteer scanned out, 'auto' we closed it at the posted length,
+  // 'organizer' a human fixed it afterwards.
+  db.exec('ALTER TABLE hour_logs ADD COLUMN closedBy TEXT DEFAULT NULL');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_hourlogs_running ON hour_logs(status, opportunityId)');
+}
+
 // One request per event, not one per volunteer. After an event ends the host
 // gets a single email listing everyone who signed up; ticking names confirms
 // them all at once. Twelve emails after a Saturday event was the thing most

@@ -7,6 +7,7 @@ import { formatDay } from '@/lib/utils';
 import { cn } from '@/lib/utils';
 
 interface Person { id: string; name: string }
+interface Unclosed { logId: string; id: string; name: string; hours: number }
 interface Ask {
   eventTitle: string;
   serviceDate: string;
@@ -14,6 +15,7 @@ interface Ask {
   hostName: string;
   alreadyAnswered: boolean;
   roster: Person[];
+  unclosed: Unclosed[];
 }
 
 /**
@@ -36,6 +38,10 @@ export default function AttendancePage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [done, setDone] = useState<number | null>(null);
+  // People who started their time and never finished it. We already gave them
+  // the posted hours; this is where the organizer takes it back off anyone who
+  // was not actually there.
+  const [wasThere, setWasThere] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     fetch(`/api/attendance/${token}`)
@@ -49,11 +55,15 @@ export default function AttendancePage() {
         const hrs: Record<string, string> = {};
         for (const p of d.roster) { all[p.id] = true; hrs[p.id] = String(d.hours); }
         setPicked(all); setHours(hrs);
+        const keep: Record<string, boolean> = {};
+        for (const p of d.unclosed ?? []) keep[p.logId] = true;
+        setWasThere(keep);
       })
       .catch((e: Error) => setLoadError(e.message));
   }, [token]);
 
   const chosen = ask ? ask.roster.filter(p => picked[p.id]) : [];
+  const striking = ask ? (ask.unclosed ?? []).filter(p => !wasThere[p.logId]).length : 0;
 
   async function submit() {
     setError(''); setBusy(true);
@@ -63,11 +73,12 @@ export default function AttendancePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           present: chosen.map(p => ({ userId: p.id, hours: Number(hours[p.id]) || ask!.hours })),
+          remove: (ask!.unclosed ?? []).filter(p => !wasThere[p.logId]).map(p => p.logId),
         }),
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error);
-      setDone(d.confirmed);
+      setDone(d.confirmed + (d.removed ?? 0));
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -130,8 +141,9 @@ export default function AttendancePage() {
           {formatDay(ask.serviceDate)}
         </p>
         <p className="mt-3 text-sm text-muted-foreground">
-          Everyone below signed up. Untick anyone who did not turn up, then press the button.
-          You do not need an account.
+          {ask.roster.length > 0
+            ? 'Untick anyone who did not turn up, then press the button. You do not need an account.'
+            : 'Just one thing to check. You do not need an account.'}
         </p>
 
         {error && (
@@ -140,6 +152,51 @@ export default function AttendancePage() {
           </div>
         )}
 
+        {/* Started their time and never finished it. We already credited them
+            with the posted hours, so this is the organizer taking it back off
+            anyone who was not there -- which is the only thing that catches
+            somebody who photographed the printed sheet and scanned from home. */}
+        {(ask.unclosed ?? []).length > 0 && (
+          <div className="mt-5 rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4">
+            <h2 className="font-heading font-semibold text-foreground">Never finished their time</h2>
+            <p className="mt-1 mb-3 text-sm text-muted-foreground">
+              These people started but never scanned out, so we recorded the {ask.hours} hours the
+              event was posted for. Untick anyone who was not really there and it comes straight
+              back off.
+            </p>
+            <div className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
+              {(ask.unclosed ?? []).map(p => {
+                const on = !!wasThere[p.logId];
+                return (
+                  <button
+                    key={p.logId}
+                    type="button"
+                    role="checkbox"
+                    aria-checked={on}
+                    onClick={() => setWasThere(v => ({ ...v, [p.logId]: !on }))}
+                    className="flex min-h-[52px] w-full cursor-pointer items-center gap-3 p-3 text-left"
+                  >
+                    <span
+                      aria-hidden="true"
+                      className={cn(
+                        'flex h-6 w-6 shrink-0 items-center justify-center rounded-md border-2 transition-colors',
+                        on ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-background'
+                      )}
+                    >
+                      {on && <Check className="h-4 w-4" strokeWidth={3} />}
+                    </span>
+                    <span className={cn('flex-1 text-[15px]', on ? 'text-foreground' : 'text-muted-foreground line-through')}>
+                      {p.name}
+                    </span>
+                    <span className="shrink-0 text-sm tabular-nums text-muted-foreground">{p.hours}h</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {ask.roster.length > 0 && (
         <div className="mt-5 divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card">
           {ask.roster.map(p => {
             const on = !!picked[p.id];
@@ -186,20 +243,24 @@ export default function AttendancePage() {
             );
           })}
         </div>
+        )}
 
         <div className="mt-5">
-          <Button onClick={submit} disabled={busy || chosen.length === 0} className="h-12 w-full text-base">
+          <Button onClick={submit} disabled={busy} className="h-12 w-full text-base">
             {busy ? (
               <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Recording…</>
+            ) : striking > 0 && chosen.length === 0 ? (
+              <>Take {striking} {striking === 1 ? 'person' : 'people'} off</>
             ) : chosen.length === 0 ? (
-              'Nobody came'
+              'Nobody else came'
             ) : (
-              <><Users className="mr-2 h-4 w-4" /> Confirm {chosen.length} {chosen.length === 1 ? 'person' : 'people'}</>
+              <><Users className="mr-2 h-4 w-4" /> Confirm {chosen.length} {chosen.length === 1 ? 'person' : 'people'}
+                {striking > 0 && `, remove ${striking}`}</>
             )}
           </Button>
-          {chosen.length === 0 && (
+          {chosen.length === 0 && striking === 0 && (
             <p className="mt-2 text-center text-xs text-muted-foreground">
-              If nobody turned up, you can simply close this — nothing is recorded either way.
+              If everything above is right, you can simply close this — nothing changes either way.
             </p>
           )}
         </div>

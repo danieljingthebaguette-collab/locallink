@@ -1,6 +1,7 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import db from './db.js';
 import { sameInbox, normaliseEmail, approverKindFor, isStrong } from './hours.js';
+import { newEventSecret, newPrintedCode, liveCodeFor, secondsLeft, verifyLiveCode } from './eventcodes.js';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import multer from 'multer';
@@ -3029,7 +3030,8 @@ router.post('/api/admin/hour-orgs/:key/confirm', requireAdmin, (req: AuthRequest
 // advertised for, and who signed up. The volunteer types nothing at all, and
 // there is correspondingly nothing for them to forge.
 
-/** Rows the host is asked about: everyone signed up who has no hours yet. */
+/** Signed up, but no hours at all -- never scanned, or came without a phone.
+ *  The organizer can add them. */
 function rosterFor(opportunityId: string) {
   return db.prepare(`
     SELECT u.id, COALESCE(u.fullName, u.username) AS name
@@ -3045,6 +3047,22 @@ function rosterFor(opportunityId: string) {
   `).all(opportunityId) as { id: string; name: string }[];
 }
 
+/**
+ * Scanned in and never scanned out. We gave them the posted length because a
+ * dead battery and a walk-out look identical from here -- but somebody who
+ * photographed the printed sheet and scanned it from home looks identical too,
+ * and this list is the only thing that catches them. It is why the email exists.
+ */
+function unclosedFor(opportunityId: string) {
+  return db.prepare(`
+    SELECT h.id AS logId, h.volunteerId AS id, COALESCE(u.fullName, u.username) AS name,
+           h.hours, h.startedAt
+    FROM hour_logs h JOIN users u ON u.id = h.volunteerId
+    WHERE h.opportunityId = ? AND h.closedBy = 'auto'
+    ORDER BY name COLLATE NOCASE
+  `).all(opportunityId) as any[];
+}
+
 router.get('/api/attendance/:token', (req: Request, res: Response) => {
   const reqRow = db.prepare(`
     SELECT a.*, o.title, o.date, o.duration, o.hostName
@@ -3055,14 +3073,14 @@ router.get('/api/attendance/:token', (req: Request, res: Response) => {
   if (new Date(reqRow.expiresAt) < new Date()) {
     return res.status(410).json({ error: 'This link has expired.' });
   }
-  const roster = rosterFor(reqRow.opportunityId);
   return res.json({
     eventTitle: reqRow.title,
     serviceDate: String(reqRow.date).slice(0, 10),
     hours: Number(reqRow.duration) || 1,
     hostName: reqRow.hostName,
     alreadyAnswered: !!reqRow.respondedAt,
-    roster,
+    roster: rosterFor(reqRow.opportunityId),
+    unclosed: unclosedFor(reqRow.opportunityId),
   });
 });
 
@@ -3096,6 +3114,7 @@ router.post('/api/attendance/:token', (req: Request, res: Response) => {
     const approverEmail = String(reqRow.hostEmail || '').toLowerCase();
 
     let added = 0;
+    let removed = 0;
     db.transaction(() => {
       const insert = db.prepare(`
         INSERT INTO hour_logs
@@ -3125,10 +3144,32 @@ router.post('/api/attendance/:token', (req: Request, res: Response) => {
           now);
         added++;
       }
+      // Anyone the organizer says was not there. Their auto-closed entry is
+      // removed outright rather than marked rejected: nothing was ever
+      // confirmed about it, so there is nothing to keep a record of.
+      const strike: string[] = Array.isArray(req.body?.remove) ? req.body.remove : [];
+      if (strike.length) {
+        const del = db.prepare("DELETE FROM hour_logs WHERE id = ? AND opportunityId = ? AND closedBy = 'auto'");
+        const tell = db.prepare(
+          'INSERT INTO notifications (id, userId, type, message, read, createdAt) VALUES (?, ?, ?, ?, 0, ?)'
+        );
+        const owners = db.prepare('SELECT id, volunteerId FROM hour_logs WHERE opportunityId = ? AND closedBy = \'auto\'')
+          .all(reqRow.opportunityId) as any[];
+        const ownerOf = new Map(owners.map(o => [o.id, o.volunteerId]));
+        for (const logId of strike) {
+          const who = ownerOf.get(String(logId));
+          if (!who) continue;
+          del.run(String(logId), reqRow.opportunityId);
+          tell.run(randomUUID(), who, 'hours_decided',
+            `${reqRow.hostName} removed your hours for ${reqRow.title}. They did not have you down as attending.`,
+            now);
+          removed++;
+        }
+      }
       db.prepare('UPDATE attendance_requests SET respondedAt = ? WHERE id = ?').run(now, reqRow.id);
     })();
 
-    return res.json({ success: true, confirmed: added });
+    return res.json({ success: true, confirmed: added, removed });
   } catch (err: any) {
     console.error('[attendance]', err);
     return res.status(500).json({ error: 'Could not record that' });
@@ -3163,7 +3204,11 @@ export async function sendPendingAttendanceRequests(): Promise<number> {
   let sent = 0;
   for (const opp of due) {
     const roster = rosterFor(opp.id);
-    if (roster.length === 0) continue;
+    const unclosed = unclosedFor(opp.id);
+    // Only when there is something to ask. If everyone scanned in and out
+    // cleanly there is nothing to say, and an email that says nothing is how a
+    // coordinator learns to ignore us.
+    if (roster.length === 0 && unclosed.length === 0) continue;
     if (opp.emailReminders === 0) continue; // they unsubscribed; respect it
 
     const token = randomBytes(32).toString('hex');
@@ -3185,6 +3230,7 @@ export async function sendPendingAttendanceRequests(): Promise<number> {
         serviceDate: String(opp.date).slice(0, 10),
         hours: Number(opp.duration) || 1,
         names: roster.map(r => r.name),
+        unclosedNames: unclosed.map(r => r.name),
         token,
       });
       sent++;
@@ -3198,6 +3244,181 @@ export async function sendPendingAttendanceRequests(): Promise<number> {
     }
   }
   return sent;
+}
+
+// ─── scanning in and out ───
+//
+// The QR on the printed sheet encodes  /scan/<printedCode>
+// The QR on the organizer's phone encodes  /scan/<printedCode>?k=<liveCode>
+//
+// So scanning the sheet identifies the event and nothing else, while scanning
+// the phone also proves the scanner was standing in front of it within the last
+// half minute. That is the whole difference between being able to open a clock
+// and being able to close one.
+
+/** Mint an event's codes the first time its organizer asks for them. */
+function codesFor(oppId: string): { printedCode: string; codeSecret: string } {
+  const row = db.prepare('SELECT printedCode, codeSecret FROM opportunities WHERE id = ?')
+    .get(oppId) as any;
+  if (row?.printedCode && row?.codeSecret) return row;
+  const printedCode = newPrintedCode();
+  const codeSecret = newEventSecret();
+  db.prepare('UPDATE opportunities SET printedCode = ?, codeSecret = ? WHERE id = ?')
+    .run(printedCode, codeSecret, oppId);
+  return { printedCode, codeSecret };
+}
+
+/** What the organizer needs on screen: the sheet to print, and the live code. */
+router.get('/api/events/:id/codes', requireAuth, (req: AuthRequest, res: Response) => {
+  const opp = db.prepare('SELECT id, title, date, duration, hostId FROM opportunities WHERE id = ?')
+    .get(req.params.id) as any;
+  if (!opp) return res.status(404).json({ error: 'That event does not exist' });
+  if (opp.hostId !== req.userId && !req.isAdmin) {
+    return res.status(403).json({ error: 'Only the organization that posted this event can show its codes' });
+  }
+  const { printedCode, codeSecret } = codesFor(opp.id);
+  const running = db.prepare(
+    "SELECT COUNT(*) AS n FROM hour_logs WHERE opportunityId = ? AND status = 'running'"
+  ).get(opp.id) as any;
+  return res.json({
+    eventTitle: opp.title,
+    serviceDate: String(opp.date).slice(0, 10),
+    hours: Number(opp.duration) || 1,
+    printedCode,
+    liveCode: liveCodeFor(codeSecret),
+    secondsLeft: secondsLeft(),
+    running: Number(running.n),
+  });
+});
+
+/** What a volunteer sees the moment they scan, before doing anything. */
+router.get('/api/scan/:code', requireAuth, (req: AuthRequest, res: Response) => {
+  const opp = db.prepare(
+    'SELECT id, title, date, duration, hostName FROM opportunities WHERE printedCode = ?'
+  ).get(String(req.params.code)) as any;
+  if (!opp) return res.status(404).json({ error: 'That code does not belong to any event.' });
+
+  const mine = db.prepare(
+    'SELECT id, status, startedAt, endedAt, hours, approvedHours FROM hour_logs WHERE opportunityId = ? AND volunteerId = ?'
+  ).get(opp.id, req.userId) as any;
+
+  return res.json({
+    eventTitle: opp.title,
+    orgName: opp.hostName,
+    postedHours: Number(opp.duration) || 1,
+    serviceDate: String(opp.date).slice(0, 10),
+    state: !mine ? 'none' : mine.status === 'running' ? 'running' : 'done',
+    startedAt: mine?.startedAt ?? null,
+    hours: mine ? (mine.approvedHours ?? mine.hours) : null,
+  });
+});
+
+router.post('/api/scan/:code', requireAuth, (req: AuthRequest, res: Response) => {
+  try {
+    const user = db.prepare('SELECT id, username, fullName, accountType FROM users WHERE id = ?')
+      .get(req.userId) as any;
+    if (user.accountType !== 'volunteer') {
+      return res.status(403).json({ error: 'Only volunteer accounts can scan in' });
+    }
+    const opp = db.prepare(`
+      SELECT o.id, o.title, o.date, o.duration, o.hostName, o.hostId, o.codeSecret,
+             u.email AS hostEmail, u.username AS hostUsername
+      FROM opportunities o LEFT JOIN users u ON u.id = o.hostId
+      WHERE o.printedCode = ?
+    `).get(String(req.params.code)) as any;
+    if (!opp) return res.status(404).json({ error: 'That code does not belong to any event.' });
+
+    // Present at the organizer's phone within the last half minute?
+    const liveOk = !!opp.codeSecret && verifyLiveCode(opp.codeSecret, String(req.body?.liveCode ?? ''));
+
+    const mine = db.prepare(
+      'SELECT id, status, startedAt FROM hour_logs WHERE opportunityId = ? AND volunteerId = ?'
+    ).get(opp.id, req.userId) as any;
+    const now = new Date();
+    const posted = Number(opp.duration) || 1;
+
+    // ── closing ──
+    if (mine && mine.status === 'running') {
+      if (!liveOk) {
+        return res.status(403).json({
+          error: 'To finish, scan the code on the organizer\'s phone. The printed sheet can only start your time.',
+          code: 'NEEDS_LIVE',
+        });
+      }
+      const startedMs = new Date(mine.startedAt).getTime();
+      const raw = (now.getTime() - startedMs) / 36e5;
+      // Round to the nearest quarter hour, never above the posted length plus a
+      // little -- an event that advertised three hours cannot pay eight because
+      // somebody left their clock running in the car park.
+      const hours = Math.max(0.25, Math.min(Math.round(raw * 4) / 4, posted + 2));
+      db.prepare(`
+        UPDATE hour_logs
+        SET status = 'approved', hours = ?, approvedHours = ?, endedAt = ?, decidedAt = ?,
+            closedBy = 'scan'
+        WHERE id = ?
+      `).run(hours, hours, now.toISOString(), now.toISOString(), mine.id);
+      db.prepare(
+        'INSERT INTO notifications (id, userId, type, message, read, createdAt) VALUES (?, ?, ?, ?, 0, ?)'
+      ).run(randomUUID(), user.id, 'hours_decided',
+        `${opp.hostName} confirmed ${hours} hours for ${opp.title}. They now count toward your certificate.`,
+        now.toISOString());
+      return res.json({ state: 'done', hours });
+    }
+
+    if (mine) return res.status(409).json({ error: 'Your time for this event is already recorded.' });
+
+    // ── opening ──
+    // Either code opens a clock. The printed sheet exists precisely so that
+    // arriving does not require finding the organizer first.
+    const startedAt = now.toISOString();
+    db.prepare(`
+      INSERT INTO hour_logs
+        (id, volunteerId, opportunityId, orgName, orgKey, activity, serviceDate, hours,
+         status, approverEmail, approverEmailNorm, approverKind, source, approverName,
+         startedAt, submittedAt)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 0, 'running', ?, ?, 'locallink_org', 'scan', ?, ?, ?)
+    `).run(randomUUID(), user.id, opp.id, opp.hostName, orgKeyOf(opp.hostName), opp.title,
+      String(opp.date).slice(0, 10),
+      String(opp.hostEmail || '').toLowerCase() || null,
+      opp.hostEmail ? normaliseEmail(opp.hostEmail) : null,
+      opp.hostUsername || opp.hostName, startedAt, startedAt);
+
+    return res.json({ state: 'running', startedAt });
+  } catch (err: any) {
+    console.error('[scan]', err);
+    return res.status(500).json({ error: 'Could not record that scan' });
+  }
+});
+
+/**
+ * Close clocks nobody scanned out of.
+ *
+ * A dead battery and a deliberate walk-out look identical from here, so both get
+ * the posted length and both are flagged to the organizer rather than judged by
+ * us. Runs on the hourly tick.
+ */
+export function closeAbandonedClocks(): number {
+  const cutoff = new Date(Date.now() - 12 * 36e5).toISOString();
+  const rows = db.prepare(`
+    SELECT h.id, h.volunteerId, h.orgName, o.title, o.duration
+    FROM hour_logs h JOIN opportunities o ON o.id = h.opportunityId
+    WHERE h.status = 'running' AND h.startedAt < ?
+  `).all(cutoff) as any[];
+
+  const now = new Date().toISOString();
+  for (const r of rows) {
+    const hours = Number(r.duration) || 1;
+    db.prepare(`
+      UPDATE hour_logs SET status = 'approved', hours = ?, approvedHours = ?,
+        endedAt = ?, decidedAt = ?, closedBy = 'auto' WHERE id = ?
+    `).run(hours, hours, now, now, r.id);
+    db.prepare(
+      'INSERT INTO notifications (id, userId, type, message, read, createdAt) VALUES (?, ?, ?, ?, 0, ?)'
+    ).run(randomUUID(), r.volunteerId, 'hours_decided',
+      `You did not scan out of ${r.title}, so we recorded the ${hours} hours the event was posted for. ${r.orgName} can correct this.`,
+      now);
+  }
+  return rows.length;
 }
 
 export default router;

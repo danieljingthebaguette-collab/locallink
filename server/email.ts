@@ -481,24 +481,30 @@ export async function sendOnboardingNudgeEmail(
  */
 export async function sendAttendanceRequest(opts: {
   to: string; hostName: string; eventTitle: string; serviceDate: string;
-  hours: number; names: string[]; token: string;
+  hours: number; names: string[]; unclosedNames?: string[]; token: string;
 }): Promise<void> {
   const link = `${APP_URL}/attendance/${opts.token}`;
   const dateStr = new Date(`${opts.serviceDate}T12:00:00`).toLocaleDateString('en-US', {
     weekday: 'long', month: 'long', day: 'numeric',
   });
   const n = opts.names.length;
+  const u = opts.unclosedNames?.length ?? 0;
   const rows = opts.names.map(name =>
     `<tr><td style="padding:7px 0;border-bottom:1px solid ${BRAND.border};font-size:15px;color:${BRAND.ink}">${escapeHtml(name)}</td></tr>`
   ).join('');
 
   await sendEmail(
     opts.to,
-    `Who came to ${opts.eventTitle}?`,
+    u > 0 && n === 0
+      ? `Did everyone finish at ${opts.eventTitle}?`
+      : `Who came to ${opts.eventTitle}?`,
     layout(
       `<h1 style="font-family:${BRAND.headingFont};font-size:22px;font-weight:700;color:${BRAND.ink};margin:0 0 14px;letter-spacing:-0.01em">Hi ${escapeHtml(opts.hostName)}</h1>
        <p style="font-size:15px;line-height:1.65;color:${BRAND.body};margin:0 0 16px"><strong>${n}</strong> ${n === 1 ? 'person' : 'people'} signed up for <strong>${escapeHtml(opts.eventTitle)}</strong> on ${dateStr}. Tick whoever actually turned up and their hours are recorded — all of them at once. You do not need an account.</p>
-       <table style="width:100%;border-collapse:collapse;margin:0 0 18px">${rows}</table>
+       ${n > 0 ? `<table style="width:100%;border-collapse:collapse;margin:0 0 18px">${rows}</table>` : ''}
+       ${u > 0 ? `<p style="font-size:15px;line-height:1.65;color:${BRAND.body};margin:0 0 8px"><strong>${u}</strong> ${u === 1 ? 'person' : 'people'} started their time but never finished it, so we recorded the hours the event was posted for. If ${u === 1 ? 'they were' : 'any of them were'} not really there, you can take it off:</p>
+       <table style="width:100%;border-collapse:collapse;margin:0 0 18px">${(opts.unclosedNames ?? []).map(name =>
+         `<tr><td style="padding:7px 0;border-bottom:1px solid ${BRAND.border};font-size:15px;color:${BRAND.ink}">${escapeHtml(name)}</td></tr>`).join('')}</table>` : ''}
        <p style="font-size:15px;line-height:1.65;color:${BRAND.body};margin:0 0 18px">Everyone is down for <strong>${opts.hours} hours</strong>, which is what your post said. You can change that for anyone who stayed longer or left early.</p>
        <div style="margin:0 0 18px">${button(link, 'Confirm who came')}</div>`,
       `This is the only email we will send you about this event. If nobody came, or you would rather not answer, ignoring it is fine — nothing is recorded either way.`

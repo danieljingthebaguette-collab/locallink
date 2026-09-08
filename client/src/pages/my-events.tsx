@@ -12,7 +12,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { MapPin, Clock, Users, Calendar, XCircle, Loader2, Edit3, Trash2, ChevronUp, X, Save, Upload, Plus } from 'lucide-react';
+import { MapPin, Clock, Users, Calendar, XCircle, Loader2, Edit3, Trash2, ChevronUp, X, Save, Upload, Plus , QrCode } from 'lucide-react';
 import CreatePostModal from '@/components/CreatePostModal';
 import CropEditor, {
   type ImageTransform,
@@ -405,6 +405,16 @@ export default function MyEvents() {
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
+                        {/* The codes people scan. Put first because on the day of
+                            the event it is the only one that matters. */}
+                        <button
+                          onClick={() => navigate(`/event-code/${opp.id}`)}
+                          className="p-2 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary transition-colors"
+                          title="Show the scan-in codes"
+                          aria-label={`Show the scan-in codes for ${opp.title}`}
+                        >
+                          <QrCode className="w-4 h-4" />
+                        </button>
                         <button
                           onClick={() => editingId === opp.id ? setEditingId(null) : startEdit(opp)}
                           className="p-2 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary transition-colors"

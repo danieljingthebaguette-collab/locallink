@@ -10,6 +10,21 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuthStore } from '@/lib/store';
 import Logo from '@/components/Logo';
 
+/**
+ * Where to land after signing in.
+ *
+ * Someone who scanned a QR code at an event and got bounced here should come
+ * back to that code, not to the board. Standing in a car park re-scanning a
+ * poster because the sign-in forgot where you were going is exactly the kind of
+ * friction that makes people give up on the whole thing.
+ */
+function afterLogin(): string {
+  const saved = sessionStorage.getItem('locallink_after_login');
+  sessionStorage.removeItem('locallink_after_login');
+  // Only ever an in-site path, never a full URL somebody could have planted.
+  return saved && saved.startsWith('/') && !saved.startsWith('//') ? saved : '/';
+}
+
 export default function Account() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
@@ -121,7 +136,7 @@ export default function Account() {
       const result = await login(formData.email, formData.password);
       if (result.success) {
         toast({ title: 'Logged in successfully!' });
-        navigate('/');
+        navigate(afterLogin());
       } else if (result.needsVerification) {
         // Email not verified — show inline resend prompt instead of a generic error
         setUnverifiedEmail(result.email || formData.email);
@@ -148,7 +163,7 @@ export default function Account() {
           if (signedIn.success) {
             toast({ title: 'Welcome to LocalLink!' });
             // The board shows the first-run walkthrough via hasSeenWelcome
-            navigate('/');
+            navigate(afterLogin());
           } else {
             toast({ title: 'Account created!', description: 'You can now log in.' });
             setIsLoginMode(true);
