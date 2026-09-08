@@ -21,13 +21,42 @@ import { createHmac, randomBytes, timingSafeEqual } from 'crypto';
  * cannot be leaked from the database because it does not live there.
  */
 
-/** 30 seconds. Long enough to scan, too short to text to a friend and have it
- *  still work by the time they open it. */
+/** A fresh code is drawn every 30 seconds, so the organizer's screen is always
+ *  showing something recent and there is no long-lived secret on the table. */
 export const WINDOW_SECONDS = 30;
 
-/** How many windows either side we accept. One covers a phone whose clock is a
- *  few seconds out, and someone who started scanning as the code turned over. */
-const SKEW_WINDOWS = 1;
+/**
+ * But each code keeps working for two minutes after it appears.
+ *
+ * The two are deliberately different. Thirty seconds of validity assumes
+ * everyone scanning is quick and confident with a phone, and plenty of people
+ * are not -- an older volunteer, someone with shaky hands, anyone fumbling in
+ * the cold at the end of a shift. Failing them at the last step, after they
+ * have done the work, is a worse outcome than the fraud this window is guarding
+ * against.
+ *
+ * So codes overlap: at any moment the last four are all accepted. The cost is
+ * that a texted screenshot stays usable for up to two minutes instead of one,
+ * which is a real widening -- but the accomplice still has to be logged in and
+ * waiting, and a far easier attack (two people sharing one phone) is open
+ * anyway. Spending accessibility to close the harder door while the easier one
+ * stands open would buy nothing.
+ */
+export const CODE_LIFETIME_SECONDS = 120;
+
+/**
+ * How many past windows a code stays good for.
+ *
+ * Note the ceil rather than a subtraction. A code appears at some point inside
+ * its window and is used at some point inside a later one, so accepting N
+ * windows back guarantees only (N-1) x 30 seconds of life -- the unlucky code
+ * is the one drawn just before a boundary. Rounding up is what makes two
+ * minutes a floor for every code rather than a best case for some of them.
+ */
+const LIFETIME_WINDOWS = Math.ceil(CODE_LIFETIME_SECONDS / WINDOW_SECONDS);
+
+/** One window forward, for a phone whose clock runs slightly fast. */
+const FORWARD_WINDOWS = 1;
 
 /** No I, O, 0 or 1 — the organizer may end up reading this out loud. */
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -60,16 +89,18 @@ export function secondsLeft(atMs: number = Date.now()): number {
 }
 
 /**
- * Is this what the organizer's phone showed recently?
+ * Is this what the organizer's phone showed in the last two minutes?
  *
- * Compared without leaking timing, and only against the current window plus one
- * either side. Anything older has expired, which is the entire point.
+ * Compared without leaking timing. Anything older than the lifetime has
+ * expired, which is the entire point -- but the lifetime is generous enough
+ * that nobody is punished for being slow with a camera.
  */
 export function verifyLiveCode(secret: string, given: string, atMs: number = Date.now()): boolean {
   const candidate = String(given ?? '').trim().toUpperCase();
   if (candidate.length !== 6) return false;
   const given_ = Buffer.from(candidate);
-  for (let d = -SKEW_WINDOWS; d <= SKEW_WINDOWS; d++) {
+  // Walk back over every code still inside its lifetime, plus one ahead.
+  for (let d = -LIFETIME_WINDOWS; d <= FORWARD_WINDOWS; d++) {
     const expect = Buffer.from(liveCodeFor(secret, atMs + d * WINDOW_SECONDS * 1000));
     if (expect.length === given_.length && timingSafeEqual(expect, given_)) return true;
   }
@@ -94,12 +125,31 @@ if (process.argv[1] && process.argv[1].endsWith('eventcodes.ts')) {
   eq(liveCodeFor(secret, now), liveCodeFor(secret, now + 1000),
      'stable within its own 30-second window');
 
-  // The whole security property: a texted screenshot goes stale.
+  // A code has to outlive the person scanning it, however slow they are...
   const code = liveCodeFor(secret, now);
   eq(verifyLiveCode(secret, code, now), true, 'the code on screen works');
   eq(verifyLiveCode(secret, code, now + 20_000), true, 'still works twenty seconds later');
-  eq(verifyLiveCode(secret, code, now + 120_000), false, 'DEAD two minutes later — a texted photo is useless');
-  eq(verifyLiveCode(secret, code, now - 120_000), false, 'and cannot be used ahead of time');
+  eq(verifyLiveCode(secret, code, now + 60_000), true, 'still works a minute later — no rush');
+  eq(verifyLiveCode(secret, code, now + 119_000), true, 'still works at one fifty-nine');
+
+  // The unlucky code: drawn a moment before its window turns over, so it has
+  // the least life of any. Two minutes has to hold for this one too, or the
+  // promise is only true on average.
+  const lateInWindow = now + WINDOW_SECONDS * 1000 - 1000;
+  const unlucky = liveCodeFor(secret, lateInWindow);
+  eq(verifyLiveCode(secret, unlucky, lateInWindow + 119_000), true,
+     'even a code drawn a second before the turnover lasts two minutes');
+
+  // ...and then stop, or the window it opens never closes.
+  eq(verifyLiveCode(secret, code, now + 160_000), false, 'DEAD not long after');
+  eq(verifyLiveCode(secret, code, now + 600_000), false, 'and long dead ten minutes later');
+  eq(verifyLiveCode(secret, code, now - 120_000), false, 'cannot be used ahead of time');
+
+  // Codes overlap on purpose: several are live at once, which is what buys the
+  // slow scanner their two minutes.
+  const older = liveCodeFor(secret, now - 60_000);
+  eq(older !== code, true, 'a code from a minute ago is a different code');
+  eq(verifyLiveCode(secret, older, now), true, 'and it still works — the windows overlap');
 
   eq(verifyLiveCode(newEventSecret(), code, now), false, "another event's code does not work here");
   eq(verifyLiveCode(secret, 'ABCDEF', now), false, 'a guess does not work');

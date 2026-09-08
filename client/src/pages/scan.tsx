@@ -37,8 +37,9 @@ function elapsed(fromIso: string, nowMs: number): string {
  * Where a volunteer lands after scanning either code.
  *
  * The printed sheet can only start their time. Finishing needs the code on the
- * organizer's phone, which is redrawn every thirty seconds — so a screenshot
- * texted to someone at home is dead long before they can use it.
+ * organizer's phone, which is redrawn every thirty seconds and stops working two
+ * minutes after it appears — long enough that nobody is punished for being slow
+ * with a camera, short enough that a texted screenshot goes stale.
  */
 export default function ScanPage() {
   const [, params] = useRoute('/scan/:code');
@@ -138,8 +139,8 @@ export default function ScanPage() {
                 <QrCode className="w-6 h-6 mx-auto text-muted-foreground" />
                 <p className="mt-2 text-sm text-foreground font-medium">Scan the organizer's phone to finish</p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  The printed sheet can only start your time. Ask the organizer to show their code when
-                  you leave — it changes every 30 seconds, so it has to be scanned there and then.
+                  The printed sheet can only start your time. Ask the organizer to show their code
+                  when you leave — you have a couple of minutes to scan it, so there is no rush.
                 </p>
               </div>
             )}

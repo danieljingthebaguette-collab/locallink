@@ -112,8 +112,10 @@ export default function EventCodePage() {
           />
         </div>
         <p className="mt-2 text-xs text-muted-foreground">
-          Changes in {left}s. This is the only code that can finish someone's time — which is why a
-          photo of it is useless half a minute later.
+          {/* {left} counts down to the NEXT code. Phrasing it as "a new code
+              every {left}s" read as though the interval itself were shrinking. */}
+          Next code in {left}s. Each one keeps working for two minutes after it appears, so nobody
+          has to rush. This is the only code that can finish someone's time.
         </p>
       </div>
 
