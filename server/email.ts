@@ -1,5 +1,22 @@
 const BREVO_API_KEY = process.env.BREVO_API_KEY || '';
 const FROM_EMAIL = process.env.EMAIL_FROM || 'linklocal2@gmail.com';
+
+// Brevo cannot DKIM-sign gmail.com and gmail.com's SPF does not authorise
+// Brevo's servers, so a From: address at a free provider fails DMARC on every
+// message. Gmail and Yahoo have enforced this for bulk senders since 2024, and
+// a nonprofit on Microsoft 365 will see these quarantined. That matters more
+// here than anywhere else on the site: the hour tracker is entirely dependent
+// on one email reaching a supervisor who has never heard of us. This cannot be
+// fixed in code -- it needs a domain we control plus its DNS records -- so the
+// least we can do is say so at boot rather than let it fail silently.
+if (/@(gmail|googlemail|yahoo|hotmail|outlook|live|aol|icloud)\./i.test(FROM_EMAIL)) {
+  console.warn(
+    `[EMAIL WARNING] EMAIL_FROM is "${FROM_EMAIL}", a free-provider address. ` +
+    'Mail sent through Brevo from it will fail DMARC and is likely to be junked ' +
+    'or rejected outright. Set EMAIL_FROM to an address on a domain you control ' +
+    '(e.g. no-reply@localnetlink.com) and add Brevo\'s SPF/DKIM records to its DNS.'
+  );
+}
 const FROM_NAME = 'LocalLink';
 /** Replies to a one-to-one admin message should reach the admin, not a
  *  no-reply box. Empty when unset, and then Reply-To is simply omitted. */
