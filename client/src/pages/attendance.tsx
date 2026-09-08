@@ -37,7 +37,7 @@ export default function AttendancePage() {
   const [hours, setHours] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [done, setDone] = useState<number | null>(null);
+  const [done, setDone] = useState<{ confirmed: number; removed: number } | null>(null);
   // People who started their time and never finished it. We already gave them
   // the posted hours; this is where the organizer takes it back off anyone who
   // was not actually there.
@@ -78,7 +78,7 @@ export default function AttendancePage() {
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error);
-      setDone(d.confirmed + (d.removed ?? 0));
+      setDone({ confirmed: d.confirmed ?? 0, removed: d.removed ?? 0 });
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -119,9 +119,19 @@ export default function AttendancePage() {
               {done ? 'Thank you — that is recorded' : 'This has already been answered'}
             </h1>
             <p className="mt-2 text-sm text-muted-foreground">
-              {done
-                ? `${done} ${done === 1 ? 'person has' : 'people have'} had their hours confirmed, and they have been told.`
-                : 'Someone has already confirmed who came to this event.'}
+              {/* Confirming and removing are opposite things, and saying
+                  "confirmed" after somebody's hours were taken away is a lie
+                  about the one thing this page exists to get right. */}
+              {!done
+                ? 'Someone has already confirmed who came to this event.'
+                : [
+                    done.confirmed > 0
+                      ? `${done.confirmed} ${done.confirmed === 1 ? 'person has' : 'people have'} had their hours confirmed`
+                      : null,
+                    done.removed > 0
+                      ? `${done.removed} ${done.removed === 1 ? 'person has' : 'people have'} had hours taken off`
+                      : null,
+                  ].filter(Boolean).join(', and ') + '. Everyone affected has been told.'}
             </p>
             <p className="mt-4 text-xs text-muted-foreground">
               Nothing else is needed from you, and we will not email you about this event again.
@@ -251,8 +261,12 @@ export default function AttendancePage() {
               <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Recording…</>
             ) : striking > 0 && chosen.length === 0 ? (
               <>Take {striking} {striking === 1 ? 'person' : 'people'} off</>
+            ) : chosen.length === 0 && (ask.unclosed ?? []).length > 0 ? (
+              // Nothing unticked and nobody to add: they are agreeing with what
+              // is on screen, not saying the event was empty.
+              'That all looks right'
             ) : chosen.length === 0 ? (
-              'Nobody else came'
+              'Nobody came'
             ) : (
               <><Users className="mr-2 h-4 w-4" /> Confirm {chosen.length} {chosen.length === 1 ? 'person' : 'people'}
                 {striking > 0 && `, remove ${striking}`}</>
@@ -260,7 +274,7 @@ export default function AttendancePage() {
           </Button>
           {chosen.length === 0 && striking === 0 && (
             <p className="mt-2 text-center text-xs text-muted-foreground">
-              If everything above is right, you can simply close this — nothing changes either way.
+              You can also just close this — nothing changes either way.
             </p>
           )}
         </div>
