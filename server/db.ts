@@ -533,6 +533,61 @@ try {
   db.exec('ALTER TABLE certificate_entries ADD COLUMN approverKind TEXT DEFAULT NULL');
 }
 
+// The inbox an account's address actually reaches, with plus-tags and Gmail
+// dots folded away. Registration compared raw strings, so j.smith@gmail.com and
+// jsmith@gmail.com were two accounts on one inbox -- which quietly undid the
+// alias folding used everywhere else to stop somebody confirming their own
+// hours. Not a UNIQUE index: existing duplicates are real accounts belonging to
+// real people, and a migration that refuses to run is worse than the problem.
+try {
+  db.prepare('SELECT emailNorm FROM users LIMIT 1').get();
+} catch {
+  db.exec('ALTER TABLE users ADD COLUMN emailNorm TEXT DEFAULT NULL');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_users_emailnorm ON users(emailNorm)');
+}
+// Backfill in SQL so it costs nothing on a database that already has it.
+try {
+  db.exec(`
+    UPDATE users SET emailNorm =
+      CASE
+        WHEN lower(substr(email, instr(email,'@')+1)) IN ('gmail.com','googlemail.com')
+          THEN replace(
+                 CASE WHEN instr(substr(lower(email),1,instr(email,'@')-1),'+') > 0
+                      THEN substr(lower(email),1,instr(lower(email),'+')-1)
+                      ELSE substr(lower(email),1,instr(email,'@')-1) END,
+                 '.', '') || '@gmail.com'
+        ELSE
+          CASE WHEN instr(substr(lower(email),1,instr(email,'@')-1),'+') > 0
+               THEN substr(lower(email),1,instr(lower(email),'+')-1)
+               ELSE substr(lower(email),1,instr(email,'@')-1) END
+          || '@' || lower(substr(email, instr(email,'@')+1))
+      END
+    WHERE emailNorm IS NULL AND email LIKE '%@%'
+  `);
+} catch (err) {
+  console.error('[migration] emailNorm backfill skipped:', (err as Error).message);
+}
+
+// Whether this organization may run tracker sessions that never appear on the
+// board at all.
+//
+// It has to be separate from users.verified, which is a display badge granted
+// automatically to anyone who registers through a join link -- and from the
+// per-post approval queue, which a session by definition never enters.
+//
+// This flag IS the check. Account type is a one-way self-serve switch, so
+// without it any student could become an "organization", mint a QR, scan
+// themselves in, and land in the highest trust tier with nobody having looked
+// at them. The post queue was quietly doing that job for board events; nothing
+// was doing it for sessions, because sessions did not exist yet.
+try {
+  db.prepare('SELECT trackerVerified FROM users LIMIT 1').get();
+} catch {
+  db.exec('ALTER TABLE users ADD COLUMN trackerVerified INTEGER DEFAULT 0');
+  db.exec('ALTER TABLE users ADD COLUMN trackerVerifiedAt TEXT DEFAULT NULL');
+  db.exec('ALTER TABLE users ADD COLUMN trackerVerifiedBy TEXT DEFAULT NULL');
+}
+
 // ── Scanning in and out ─────────────────────────────────────────────────────
 //
 // Each event carries two codes with deliberately different powers.

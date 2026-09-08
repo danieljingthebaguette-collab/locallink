@@ -393,7 +393,14 @@ router.post('/api/auth/register', async (req: Request, res: Response) => {
       // Invalid or already-claimed slug — just proceed normally (don't block registration)
     }
 
-    const existing = db.prepare('SELECT id FROM users WHERE email = ? OR username = ?').get(email, username);
+    // Compare the inbox this address actually reaches, not the characters
+    // typed. Otherwise j.smith@gmail.com registers alongside jsmith@gmail.com,
+    // one person holds two verified accounts on one inbox, and every check
+    // elsewhere that folds aliases is working from a false premise.
+    const emailNorm = normaliseEmail(email);
+    const existing = db.prepare(
+      'SELECT id FROM users WHERE emailNorm = ? OR email = ? OR username = ?'
+    ).get(emailNorm, email, username);
     if (existing) {
       return res.status(409).json({ error: 'User already exists' });
     }
@@ -410,7 +417,7 @@ router.post('/api/auth/register', async (req: Request, res: Response) => {
 
     db.prepare(
       'INSERT INTO users (id, username, email, emailNorm, password, isAdmin, emailVerified, accountType, hasSeenWelcome, unsubToken, verified, notifyOnInterest, birthYear, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)'
-    ).run(id, username, email, normaliseEmail(email), hashedPassword, isAdmin, emailVerified, resolvedAccountType, 0, unsubToken, verified, resolvedBirthYear, createdAt);
+    ).run(id, username, email, emailNorm, hashedPassword, isAdmin, emailVerified, resolvedAccountType, 0, unsubToken, verified, resolvedBirthYear, createdAt);
 
     // If registered via join link, claim it
     if (joinLink) {
@@ -3271,11 +3278,26 @@ function codesFor(oppId: string): { printedCode: string; codeSecret: string } {
 
 /** What the organizer needs on screen: the sheet to print, and the live code. */
 router.get('/api/events/:id/codes', requireAuth, (req: AuthRequest, res: Response) => {
-  const opp = db.prepare('SELECT id, title, date, duration, hostId FROM opportunities WHERE id = ?')
+  const opp = db.prepare('SELECT id, title, date, duration, hostId, status FROM opportunities WHERE id = ?')
     .get(req.params.id) as any;
   if (!opp) return res.status(404).json({ error: 'That event does not exist' });
   if (opp.hostId !== req.userId && !req.isAdmin) {
     return res.status(403).json({ error: 'Only the organization that posted this event can show its codes' });
+  }
+  // A board post has already been through the approval queue, so somebody has
+  // looked at it. A session has not been through anything -- the organization
+  // flag is the only review it ever gets, so it is checked here as well as at
+  // creation, because verification can be withdrawn after a session exists.
+  // Every code, not only the postless ones. Approving a plausible post says
+  // the post looks fine; it does not say anybody checked who is behind it, and
+  // the codes are what mint top-tier hours.
+  if (!requireTrackerVerified(req, res)) return;
+  // Codes for a post still waiting in the queue would print a sheet for an
+  // event that may never be approved, and nobody can sign up to it meanwhile.
+  if (opp.status === 'pending') {
+    return res.status(409).json({
+      error: 'This post is still waiting to be approved. Codes appear once it is live.',
+    });
   }
   const { printedCode, codeSecret } = codesFor(opp.id);
   const running = db.prepare(
@@ -3322,12 +3344,24 @@ router.post('/api/scan/:code', requireAuth, (req: AuthRequest, res: Response) =>
       return res.status(403).json({ error: 'Only volunteer accounts can scan in' });
     }
     const opp = db.prepare(`
-      SELECT o.id, o.title, o.date, o.duration, o.hostName, o.hostId, o.codeSecret,
+      SELECT o.id, o.title, o.date, o.duration, o.hostName, o.hostId, o.codeSecret, o.adultsOnly,
              u.email AS hostEmail, u.username AS hostUsername
       FROM opportunities o LEFT JOIN users u ON u.id = o.hostId
       WHERE o.printedCode = ?
     `).get(String(req.params.code)) as any;
     if (!opp) return res.status(404).json({ error: 'That code does not belong to any event.' });
+
+    // The 18+ flag was enforced when someone pressed Interested and nowhere
+    // else, so scanning walked straight past it. An organization sets that flag
+    // because the work is not safe for a minor -- power tools, late shifts --
+    // which makes this a safety gate rather than a funnel, and it belongs on
+    // every route that can put somebody on site.
+    if (opp.adultsOnly) {
+      const me = db.prepare('SELECT birthYear FROM users WHERE id = ?').get(req.userId) as any;
+      if (isMinor(me?.birthYear) === true) {
+        return res.status(403).json({ error: 'This event is marked 18+ by the organization.' });
+      }
+    }
 
     // Present at the organizer's phone within the last half minute?
     const liveOk = !!opp.codeSecret && verifyLiveCode(opp.codeSecret, String(req.body?.liveCode ?? ''));
@@ -3348,10 +3382,21 @@ router.post('/api/scan/:code', requireAuth, (req: AuthRequest, res: Response) =>
       }
       const startedMs = new Date(mine.startedAt).getTime();
       const raw = (now.getTime() - startedMs) / 36e5;
+      // The day ceiling lived only in the self-report route, so scanning into
+      // several events walked straight past it. A day has the same number of
+      // hours in it however the entries were created.
+      const serviceDate = String(opp.date).slice(0, 10);
+      const already = db.prepare(`
+        SELECT COALESCE(SUM(CASE WHEN status = 'rejected' THEN 0
+                                 ELSE COALESCE(approvedHours, hours) END), 0) AS total
+        FROM hour_logs WHERE volunteerId = ? AND serviceDate = ? AND id != ?
+      `).get(user.id, serviceDate, mine.id) as any;
       // Round to the nearest quarter hour, never above the posted length plus a
       // little -- an event that advertised three hours cannot pay eight because
       // somebody left their clock running in the car park.
-      const hours = Math.max(0.25, Math.min(Math.round(raw * 4) / 4, posted + 2));
+      const DAY_CEILING = 16;
+      const room = Math.max(0, DAY_CEILING - Number(already.total));
+      const hours = Math.max(0.25, Math.min(Math.round(raw * 4) / 4, posted + 2, room || 0.25));
       db.prepare(`
         UPDATE hour_logs
         SET status = 'approved', hours = ?, approvedHours = ?, endedAt = ?, decidedAt = ?,
@@ -3421,5 +3466,125 @@ export function closeAbandonedClocks(): number {
   }
   return rows.length;
 }
+
+// ─── tracker sessions: hours without a post on the board ───
+//
+// A session is an opportunity with status 'unlisted'. The board only ever
+// selects status = 'approved', so it never appears there, while every path that
+// matters -- codes, scanning, the roster, the attendance flag list, the hours
+// themselves -- looks a session up by id or printed code and works unchanged.
+// One new status value instead of a second set of tables to keep in step.
+
+/** The gate. Sessions skip the post-approval queue entirely, so this flag is
+ *  the only thing between a self-declared "organization" and the top trust
+ *  tier. Checked on creation AND on every code fetch, because verification can
+ *  be taken away again. */
+function requireTrackerVerified(req: AuthRequest, res: Response): boolean {
+  const me = db.prepare('SELECT accountType, trackerVerified FROM users WHERE id = ?')
+    .get(req.userId) as any;
+  if (me?.accountType !== 'organization') {
+    res.status(403).json({ error: 'Only organization accounts can run tracker sessions' });
+    return false;
+  }
+  if (!me.trackerVerified && !req.isAdmin) {
+    res.status(403).json({
+      error: 'NOT_VERIFIED',
+      message: 'We check every organization before its codes work. This usually takes a day.',
+    });
+    return false;
+  }
+  return true;
+}
+
+router.get('/api/tracker-sessions', requireAuth, (req: AuthRequest, res: Response) => {
+  const me = db.prepare('SELECT accountType, trackerVerified FROM users WHERE id = ?')
+    .get(req.userId) as any;
+  const rows = db.prepare(`
+    SELECT o.id, o.title, o.date, o.duration, o.location,
+           (SELECT COUNT(*) FROM hour_logs h WHERE h.opportunityId = o.id) AS scanned,
+           (SELECT COUNT(*) FROM hour_logs h WHERE h.opportunityId = o.id AND h.status = 'running') AS running
+    FROM opportunities o
+    WHERE o.hostId = ? AND o.status = 'unlisted'
+    ORDER BY o.date DESC
+  `).all(req.userId) as any[];
+  return res.json({
+    verified: !!me?.trackerVerified || !!req.isAdmin,
+    accountType: me?.accountType ?? null,
+    sessions: rows,
+  });
+});
+
+router.post('/api/tracker-sessions', requireAuth, (req: AuthRequest, res: Response) => {
+  try {
+    if (!requireTrackerVerified(req, res)) return;
+
+    const title = String(req.body?.title ?? '').trim();
+    const location = String(req.body?.location ?? '').trim();
+    const date = String(req.body?.date ?? '').trim();
+    const duration = Number(req.body?.duration);
+
+    if (title.length < 3 || title.length > 120) {
+      return res.status(400).json({ error: 'Give the session a name people will recognise' });
+    }
+    if (!location) return res.status(400).json({ error: 'Where is it?' });
+    if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(date)) {
+      return res.status(400).json({ error: 'Pick the date and time it starts' });
+    }
+    if (!Number.isFinite(duration) || duration <= 0 || duration > 12) {
+      return res.status(400).json({ error: 'How long is it? Up to 12 hours.' });
+    }
+    // The posted length is what an unfinished clock pays out, and what caps a
+    // finished one -- so it is not decoration and cannot be left open.
+
+    const host = db.prepare('SELECT username FROM users WHERE id = ?').get(req.userId) as any;
+    const id = randomUUID();
+    db.prepare(`
+      INSERT INTO opportunities
+        (id, title, description, category, location, town, date, duration, spots, spotsRemaining,
+         spotsType, hostId, hostName, popularity, tags, steps, createdAt, status)
+      VALUES (?, ?, ?, ?, ?, NULL, ?, ?, 0, 0, 'none', ?, ?, 0, '[]', '[]', ?, 'unlisted')
+    `).run(id, title, 'Tracker session — not listed on the board.', 'Community Dev',
+      location, date, duration, req.userId, host?.username ?? 'Unknown', new Date().toISOString());
+
+    return res.json({ id });
+  } catch (err: any) {
+    console.error('[tracker-sessions]', err);
+    return res.status(500).json({ error: 'Could not create that session' });
+  }
+});
+
+// ─── admin: which organizations may run sessions ───
+
+router.get('/api/admin/tracker-orgs', requireAdmin, (_req: Request, res: Response) => {
+  const rows = db.prepare(`
+    SELECT u.id, u.username, u.email, u.orgEmail, u.orgWebsite, u.orgPhone, u.orgDescription,
+           u.trackerVerified, u.trackerVerifiedAt, u.createdAt,
+           (SELECT COUNT(*) FROM opportunities o WHERE o.hostId = u.id AND o.status = 'approved') AS boardPosts,
+           (SELECT COUNT(*) FROM opportunities o WHERE o.hostId = u.id AND o.status = 'unlisted') AS sessions,
+           (SELECT COUNT(*) FROM hour_logs h JOIN opportunities o ON o.id = h.opportunityId
+             WHERE o.hostId = u.id) AS hoursLogged
+    FROM users u
+    WHERE u.accountType = 'organization' AND (u.banned IS NULL OR u.banned = 0)
+    ORDER BY u.trackerVerified ASC, u.createdAt DESC
+  `).all() as any[];
+  return res.json(rows.map(r => ({ ...r, trackerVerified: !!r.trackerVerified })));
+});
+
+router.post('/api/admin/tracker-orgs/:id/verify', requireAdmin, (req: AuthRequest, res: Response) => {
+  const on = req.body?.verified !== false;
+  const target = db.prepare("SELECT id, username FROM users WHERE id = ? AND accountType = 'organization'")
+    .get(req.params.id) as any;
+  if (!target) return res.status(404).json({ error: 'No such organization' });
+  db.prepare('UPDATE users SET trackerVerified = ?, trackerVerifiedAt = ?, trackerVerifiedBy = ? WHERE id = ?')
+    .run(on ? 1 : 0, on ? new Date().toISOString() : null, on ? req.userId : null, target.id);
+  db.prepare(
+    'INSERT INTO notifications (id, userId, type, message, read, createdAt) VALUES (?, ?, ?, ?, 0, ?)'
+  ).run(randomUUID(), target.id, 'tracker_verified',
+    on
+      ? 'Your organization is verified. You can now run tracker sessions and hand out scan-in codes.'
+      : 'Tracker access has been paused for your organization. Get in touch if that is a mistake.',
+    new Date().toISOString());
+  return res.json({ success: true, verified: on });
+});
 
 export default router;
