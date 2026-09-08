@@ -2587,13 +2587,14 @@ router.get('/api/hours', requireAuth, (req: AuthRequest, res: Response) => {
         activity: r.activity, serviceDate: r.serviceDate,
         hours: r.hours, status: r.status, approvedHours: r.approvedHours,
         approverName: r.approverName, approverNote: r.approverNote,
-        submittedAt: r.submittedAt, decidedAt: r.decidedAt,
+        submittedAt: r.submittedAt, decidedAt: r.decidedAt, startedAt: r.startedAt,
       })),
       fullName: user?.fullName ?? null,
       totals: {
         confirmed: counted.reduce((s, r) => s + hoursOf(r), 0),
         fromConfirmedOrgs: counted.filter(strongEntry).reduce((s, r) => s + hoursOf(r), 0),
         waiting: rows.filter(r => r.status === 'pending').reduce((s, r) => s + r.hours, 0),
+        running: rows.filter(r => r.status === 'running').length,
         goalHours: user?.goalHours ?? null,
       },
     });

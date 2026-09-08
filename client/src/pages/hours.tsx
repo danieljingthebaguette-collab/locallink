@@ -10,16 +10,30 @@ import { cn, formatDay as fmt } from '@/lib/utils';
 interface HourLog {
   id: string; opportunityId: string | null; orgName: string; orgConfirmed: boolean;
   activity: string; serviceDate: string; hours: number;
-  status: 'pending' | 'approved' | 'adjusted' | 'rejected';
+  status: 'running' | 'pending' | 'approved' | 'adjusted' | 'rejected';
   approvedHours: number | null; approverName: string | null; approverNote: string | null;
   approverKind?: string | null; approverEmail?: string | null; source?: string;
-  submittedAt?: string; decidedAt?: string | null;
+  submittedAt?: string; decidedAt?: string | null; startedAt?: string | null;
 }
-interface Totals { confirmed: number; fromConfirmedOrgs: number; waiting: number; goalHours: number | null }
+interface Totals { confirmed: number; fromConfirmedOrgs: number; waiting: number; running: number; goalHours: number | null }
 interface HoursPayload { logs: HourLog[]; totals: Totals; fullName: string | null }
 interface Loggable { id: string; title: string; date: string; duration: number; hostName: string; location: string; hostEmail?: string | null; hostContact?: string | null }
 
 const hoursOf = (l: HourLog) => l.approvedHours ?? l.hours;
+
+/** A clock that is still running has no hours yet -- it had been rendering as
+ *  "0h", which reads as a bug rather than as a clock. */
+function runningFor(startedAt: string | null | undefined, nowMs: number): string {
+  if (!startedAt) return '—';
+  // Timestamps we write are ISO with a Z. Anything that reaches us in SQLite's
+  // "YYYY-MM-DD HH:MM:SS" shape is UTC with nothing saying so, and reading it
+  // as local time silently produces a clock stuck at zero.
+  const iso = /[Zz]|[+-]\d{2}:?\d{2}$/.test(startedAt)
+    ? startedAt
+    : startedAt.replace(' ', 'T') + 'Z';
+  const mins = Math.max(0, Math.floor((nowMs - new Date(iso).getTime()) / 60000));
+  return `${Math.floor(mins / 60)}h ${String(mins % 60).padStart(2, '0')}m`;
+}
 
 async function call<T>(path: string, opts: RequestInit = {}): Promise<T> {
   const headers: Record<string, string> = {};
@@ -35,6 +49,7 @@ async function call<T>(path: string, opts: RequestInit = {}): Promise<T> {
 
 const StatusPill = ({ status }: { status: string }) => {
   const map: Record<string, [string, string]> = {
+    running: ['Clocked in', 'bg-primary/15 text-primary'],
     pending: ['Waiting on them', 'bg-amber-500/15 text-amber-700 dark:text-amber-400'],
     approved: ['Confirmed', 'bg-green-500/15 text-green-700 dark:text-green-400'],
     adjusted: ['Confirmed, hours changed', 'bg-green-500/15 text-green-700 dark:text-green-400'],
@@ -84,6 +99,13 @@ export default function HoursPage() {
   const [fullName, setFullName] = useState<string | null>(null);
   const [nameDraft, setNameDraft] = useState('');
   const [savingName, setSavingName] = useState(false);
+  const [now, setNow] = useState(Date.now());
+
+  // Only ticks while something is actually running.
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(t);
+  }, []);
   const [form, setForm] = useState({
     orgName: '', approverName: '', approverEmail: '', activity: '', serviceDate: '', hours: '',
   });
@@ -249,6 +271,13 @@ export default function HoursPage() {
             {totals.waiting > 0 && (
               <span className="ml-3 text-sm text-amber-700 dark:text-amber-400">{totals.waiting} waiting</span>
             )}
+            {/* A clock still running is in neither total, so without this it
+                disappears from the summary while very much existing. */}
+            {totals.running > 0 && (
+              <span className="ml-3 text-sm font-medium text-primary">
+                {totals.running} clocked in
+              </span>
+            )}
           </div>
           <label className="flex items-center gap-2 text-xs text-muted-foreground">
             My target
@@ -386,7 +415,11 @@ export default function HoursPage() {
                 <p className="mt-1 text-sm text-foreground">{l.activity}</p>
                 <p className="mt-1 text-xs text-muted-foreground">
                   {fmt(l.serviceDate)}
-                  {l.approverName ? ` · ${l.status === 'pending' ? 'waiting on' : 'confirmed by'} ${l.approverName}` : ''}
+                  {l.status === 'running'
+                    ? ' · still running'
+                    : l.approverName
+                      ? ` · ${l.status === 'pending' ? 'waiting on' : 'confirmed by'} ${l.approverName}`
+                      : ''}
                 </p>
                 {l.approverNote && (
                   <p className="mt-1.5 rounded bg-secondary px-2.5 py-1.5 text-xs text-foreground">“{l.approverNote}”</p>
@@ -396,7 +429,14 @@ export default function HoursPage() {
                 )}
               </div>
               <div className="text-right flex-shrink-0">
-                <div className="font-heading text-xl font-bold text-foreground tabular-nums">{hoursOf(l)}h</div>
+                <div className="font-heading text-xl font-bold text-foreground tabular-nums">
+                  {l.status === 'running' ? runningFor(l.startedAt, now) : `${hoursOf(l)}h`}
+                </div>
+                {l.status === 'running' && (
+                  <div className="mt-1 max-w-[9rem] text-xs text-muted-foreground">
+                    Scan the organizer's phone to finish
+                  </div>
+                )}
                 {l.status === 'adjusted' && (
                   <div className="text-xs text-muted-foreground line-through tabular-nums">{l.hours}h claimed</div>
                 )}
