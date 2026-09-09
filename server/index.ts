@@ -30,6 +30,13 @@ app.use(helmet({
       'img-src': ["'self'", 'data:', 'blob:', 'https://lh3.googleusercontent.com'],
     },
   },
+  // Google hands the credential back from a popup it opens, and it needs
+  // window.opener to do it. helmet's default of same-origin severs that:
+  // the popup lands on accounts.google.com/gsi/transform, finds nothing to
+  // talk to, and sits there blank forever with no error anywhere.
+  // allow-popups keeps the protection that matters -- other sites still
+  // cannot open us and reach in -- while letting our own popup answer.
+  crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
 }));
 
 // Rate limiter: max 20 login/register attempts per IP per 15 minutes
