@@ -3369,7 +3369,7 @@ router.post('/api/scan/:code', requireAuth, (req: AuthRequest, res: Response) =>
     }
     const opp = db.prepare(`
       SELECT o.id, o.title, o.date, o.duration, o.hostName, o.hostId, o.codeSecret, o.adultsOnly,
-             u.email AS hostEmail, u.username AS hostUsername
+             o.isRecurring, u.email AS hostEmail, u.username AS hostUsername
       FROM opportunities o LEFT JOIN users u ON u.id = o.hostId
       WHERE o.printedCode = ?
     `).get(String(req.params.code)) as any;
@@ -3438,6 +3438,33 @@ router.post('/api/scan/:code', requireAuth, (req: AuthRequest, res: Response) =>
     if (mine) return res.status(409).json({ error: 'Your time for this event is already recorded.' });
 
     // ── opening ──
+    //
+    // Only around the time the thing is actually happening. Without this a
+    // printed sheet photographed days early opens a clock days early, and since
+    // an abandoned clock closes at the posted length, that is free hours for an
+    // event nobody has attended yet -- the sheet being harmless to copy rests on
+    // it being useless away from the event, and a date is half of "away".
+    //
+    // Generous at both ends on purpose: people arrive early to set up and clocks
+    // get started late by somebody who forgot. Recurring posts are exempt --
+    // their stored date is the first occurrence, so it says nothing about
+    // whether today is one of them.
+    if (!opp.isRecurring) {
+      const startsAt = new Date(opp.date).getTime();
+      const opensAt = startsAt - 2 * 36e5;
+      const closesAt = startsAt + ((Number(opp.duration) || 1) + 6) * 36e5;
+      if (now.getTime() < opensAt) {
+        return res.status(409).json({
+          error: `This has not started yet. Scanning opens a couple of hours before ${opp.title} begins.`,
+        });
+      }
+      if (now.getTime() > closesAt) {
+        return res.status(409).json({
+          error: `${opp.title} finished. If you were there and missed scanning, ask ${opp.hostName} to add you.`,
+        });
+      }
+    }
+
     // Either code opens a clock. The printed sheet exists precisely so that
     // arriving does not require finding the organizer first.
     const startedAt = now.toISOString();

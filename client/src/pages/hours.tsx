@@ -282,7 +282,7 @@ export default function HoursPage() {
           <label className="flex items-center gap-2 text-xs text-muted-foreground">
             My target
             <Input id="goal-hours" value={goalDraft} onChange={e => setGoalDraft(e.target.value)} onBlur={saveGoal}
-              inputMode="numeric" placeholder="40" className="w-20 h-9 text-center rounded-md"
+              inputMode="numeric" placeholder="—" className="w-20 h-9 text-center rounded-md"
               aria-label="Hours target" />
           </label>
         </div>

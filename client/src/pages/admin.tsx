@@ -83,7 +83,7 @@ export default function Admin() {
     { value: 'feedback', label: 'Feedback', icon: <MessageSquare className="w-4 h-4" /> },
     { value: 'appeals', label: 'Appeals', icon: <Scale className="w-4 h-4" /> },
     { value: 'join-links', label: 'Join Links', icon: <Link2 className="w-4 h-4" /> },
-    { value: 'hour-orgs', label: 'Hours', icon: <Clock className="w-4 h-4" /> },
+    { value: 'hour-orgs', label: 'Tracker', icon: <Clock className="w-4 h-4" /> },
   ];
 
   return (
