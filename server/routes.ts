@@ -108,9 +108,25 @@ function safeJsonParse<T>(raw: string | null | undefined, fallback: T): T {
   try { return JSON.parse(raw) as T; } catch { return fallback; }
 }
 
-/** Attach validated tags JSON to an opportunity row */
+/**
+ * Attach validated tags JSON to an opportunity row, and strip the two columns
+ * that must never leave the server.
+ *
+ * The board feed selects `o.*` and spreads it straight to an unauthenticated
+ * response, so every column added to `opportunities` is published by default.
+ * codeSecret is the HMAC key behind the finishing code: with it, anybody can
+ * compute the code the organizer is holding up and close a clock from their
+ * sofa, which is the entire thing the two-code split exists to prevent.
+ * printedCode opens one remotely, and an unclosed clock pays the posted length.
+ *
+ * Deleted here rather than at each call site because this function is the one
+ * funnel all eleven of them pass through -- and because the next column someone
+ * adds will be published too unless the stripping lives where the spreading
+ * does.
+ */
 function withTags(opp: any, signups: string[] = []) {
-  return { ...opp, tags: safeJsonParse<string[]>(opp.tags, []), steps: safeJsonParse<string[]>(opp.steps, []), signups, hostVerified: !!opp.hostVerified };
+  const { codeSecret: _s, printedCode: _p, ...safe } = opp;
+  return { ...safe, tags: safeJsonParse<string[]>(opp.tags, []), steps: safeJsonParse<string[]>(opp.steps, []), signups, hostVerified: !!opp.hostVerified };
 }
 
 /** Whether a volunteer is under 18, derived from the stored year every time
@@ -1266,6 +1282,7 @@ router.delete('/api/opportunities/:id', requireAuth, async (req: AuthRequest, re
     db.transaction(() => {
       db.prepare('DELETE FROM signups WHERE opportunityId = ?').run(oppId);
       db.prepare('DELETE FROM reports WHERE postId = ?').run(oppId);
+      closeClocksForOpportunities([String(oppId)]);
       db.prepare('DELETE FROM opportunities WHERE id = ?').run(oppId);
     })();
     return res.json({ success: true });
@@ -1386,6 +1403,9 @@ router.delete('/api/admin/users/:id', requireAdmin, (req: AuthRequest, res: Resp
         db.prepare('DELETE FROM reports WHERE postId = ?').run(oppId);
       }
       // 3. Their hosted opportunities
+      closeClocksForOpportunities(
+        (db.prepare('SELECT id FROM opportunities WHERE hostId = ?').all(userId) as any[]).map(o => o.id)
+      );
       db.prepare('DELETE FROM opportunities WHERE hostId = ?').run(userId);
       // 4. Their notifications
       db.prepare('DELETE FROM notifications WHERE userId = ?').run(userId);
@@ -1506,6 +1526,7 @@ router.delete('/api/admin/opportunities/:id', requireAdmin, (req: Request, res: 
     db.transaction(() => {
       db.prepare('DELETE FROM signups WHERE opportunityId = ?').run(oppId);
       db.prepare('DELETE FROM reports WHERE postId = ?').run(oppId);
+      closeClocksForOpportunities([String(oppId)]);
       db.prepare('DELETE FROM opportunities WHERE id = ?').run(oppId);
     })();
     return res.json({ success: true });
@@ -3494,17 +3515,67 @@ router.post('/api/scan/:code', requireAuth, (req: AuthRequest, res: Response) =>
  * the posted length and both are flagged to the organizer rather than judged by
  * us. Runs on the hourly tick.
  */
-export function closeAbandonedClocks(): number {
-  const cutoff = new Date(Date.now() - 12 * 36e5).toISOString();
+/**
+ * Close anybody still clocked into an event about to be deleted.
+ *
+ * The sweep would eventually catch them, but not for twelve hours, and until
+ * then the volunteer is staring at a running counter for something that no
+ * longer exists. Deleting a post is the organization's decision; the hours
+ * somebody already stood there and earned are not the organization's to erase,
+ * so they are recorded at the posted length on the way out.
+ */
+function closeClocksForOpportunities(oppIds: string[]): number {
+  if (oppIds.length === 0) return 0;
+  const marks = oppIds.map(() => '?').join(',');
   const rows = db.prepare(`
     SELECT h.id, h.volunteerId, h.orgName, o.title, o.duration
     FROM hour_logs h JOIN opportunities o ON o.id = h.opportunityId
+    WHERE h.status = 'running' AND h.opportunityId IN (${marks})
+  `).all(...oppIds) as any[];
+  if (rows.length === 0) return 0;
+
+  const now = new Date().toISOString();
+  const upd = db.prepare(`
+    UPDATE hour_logs SET status = 'approved', hours = ?, approvedHours = ?,
+      endedAt = ?, decidedAt = ?, closedBy = 'auto' WHERE id = ?
+  `);
+  const tell = db.prepare(
+    'INSERT INTO notifications (id, userId, type, message, read, createdAt) VALUES (?, ?, ?, ?, 0, ?)'
+  );
+  for (const r of rows) {
+    const hours = Number(r.duration) || 1;
+    upd.run(hours, hours, now, now, r.id);
+    tell.run(randomUUID(), r.volunteerId, 'hours_decided',
+      `${r.orgName} removed ${r.title}, so we recorded the ${hours} hours it was posted for. They still count.`,
+      now);
+  }
+  return rows.length;
+}
+
+export function closeAbandonedClocks(): number {
+  const cutoff = new Date(Date.now() - 12 * 36e5).toISOString();
+  // LEFT, not INNER. An inner join meant a clock whose event had been deleted
+  // was never selected and so never closed -- the volunteer watched a counter
+  // climb past a thousand hours captioned "scan the organizer's phone to
+  // finish", for an organizer and an event that no longer existed, with no
+  // route left that would answer them.
+  const rows = db.prepare(`
+    SELECT h.id, h.volunteerId, h.orgName, h.activity, h.startedAt,
+           o.title, o.duration
+    FROM hour_logs h LEFT JOIN opportunities o ON o.id = h.opportunityId
     WHERE h.status = 'running' AND h.startedAt < ?
   `).all(cutoff) as any[];
 
   const now = new Date().toISOString();
   for (const r of rows) {
-    const hours = Number(r.duration) || 1;
+    // With the event gone there is no posted length to fall back on, so use the
+    // time actually elapsed, capped. They did turn up; deleting the post should
+    // not quietly delete their afternoon.
+    const orphaned = r.duration == null;
+    const elapsed = (Date.now() - new Date(r.startedAt).getTime()) / 36e5;
+    const hours = orphaned
+      ? Math.max(0.25, Math.min(Math.round(elapsed * 4) / 4, 8))
+      : Number(r.duration) || 1;
     db.prepare(`
       UPDATE hour_logs SET status = 'approved', hours = ?, approvedHours = ?,
         endedAt = ?, decidedAt = ?, closedBy = 'auto' WHERE id = ?
@@ -3512,7 +3583,9 @@ export function closeAbandonedClocks(): number {
     db.prepare(
       'INSERT INTO notifications (id, userId, type, message, read, createdAt) VALUES (?, ?, ?, ?, 0, ?)'
     ).run(randomUUID(), r.volunteerId, 'hours_decided',
-      `You did not scan out of ${r.title}, so we recorded the ${hours} hours the event was posted for. ${r.orgName} can correct this.`,
+      orphaned
+        ? `${r.orgName} removed the event you were clocked into, so we recorded the ${hours} hours you were there. Get in touch with us if that is wrong.`
+        : `You did not scan out of ${r.title}, so we recorded the ${hours} hours the event was posted for. ${r.orgName} can correct this.`,
       now);
   }
   return rows.length;

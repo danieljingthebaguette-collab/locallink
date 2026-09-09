@@ -2,7 +2,7 @@ import Database from 'better-sqlite3';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { mkdirSync } from 'fs';
-import { randomUUID } from 'crypto';
+import { randomUUID, randomBytes } from 'crypto';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // In production set DB_PATH to a persistent disk location (e.g. /data/locallink.db on Fly.io/Railway)
@@ -577,6 +577,53 @@ try {
   db.prepare('SELECT committedAt FROM signups LIMIT 1').get();
 } catch {
   db.exec('ALTER TABLE signups ADD COLUMN committedAt TEXT DEFAULT NULL');
+}
+
+// Rotate any code secret that was minted before the board stopped publishing
+// it. Every event that had codes while `withTags` spread `o.*` had its HMAC key
+// served to anyone who loaded the front page, so those keys are burned: someone
+// could still be holding one and using it to close clocks from anywhere.
+//
+// A new secret invalidates only the live code, which is regenerated every 30
+// seconds anyway -- an organizer holding the page open sees the next one and
+// notices nothing. Printed sheets keep working, because printedCode is left
+// alone and reprinting every taped-up sheet is not something we can ask for.
+try {
+  db.prepare('SELECT codeSecretRotatedAt FROM opportunities LIMIT 1').get();
+} catch {
+  db.exec('ALTER TABLE opportunities ADD COLUMN codeSecretRotatedAt TEXT DEFAULT NULL');
+}
+
+// Guarded on the DATA, not on the schema, and deliberately so.
+//
+// The first version of this checked whether the column existed and did the
+// rotation inside the same catch. That run added the column and then threw on
+// randomBytes -- which was not imported yet -- so the column was committed, the
+// rotation was not, and every later boot saw the column and skipped the work
+// forever. A migration whose guard is the thing it creates is done the moment
+// it starts, whatever happens next.
+//
+// Asking which rows still need doing costs one indexed scan at boot and cannot
+// be fooled by a crash halfway through.
+try {
+  const stale = db.prepare(
+    'SELECT id FROM opportunities WHERE codeSecret IS NOT NULL AND codeSecretRotatedAt IS NULL'
+  ).all() as { id: string }[];
+  if (stale.length) {
+    const upd = db.prepare(
+      'UPDATE opportunities SET codeSecret = ?, codeSecretRotatedAt = ? WHERE id = ?'
+    );
+    const now = new Date().toISOString();
+    db.transaction(() => {
+      for (const row of stale) upd.run(randomBytes(32).toString('hex'), now, row.id);
+    })();
+    console.warn(
+      `[SECURITY] Rotated ${stale.length} event code secret(s) that the public board feed had ` +
+      'exposed. Live finishing codes have changed; printed sheets are unaffected.'
+    );
+  }
+} catch (err) {
+  console.error('[migration] code secret rotation failed:', (err as Error).message);
 }
 
 // Whether this organization may run tracker sessions that never appear on the
