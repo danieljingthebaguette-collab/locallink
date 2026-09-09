@@ -21,6 +21,7 @@ import Logo from '@/components/Logo';
 function afterLogin(): string {
   const saved = sessionStorage.getItem('locallink_after_login');
   sessionStorage.removeItem('locallink_after_login');
+  sessionStorage.removeItem('locallink_signup_reason');
   // Only ever an in-site path, never a full URL somebody could have planted.
   return saved && saved.startsWith('/') && !saved.startsWith('//') ? saved : '/';
 }
@@ -39,6 +40,9 @@ export default function Account() {
   // button links to, so it lands people on the form they asked for rather than
   // on Login with a "Sign Up" link to find underneath it.
   const wantsSignup = new URLSearchParams(window.location.search).get('signup') === '1';
+  // Set when somebody arrives here by scanning a code at a venue. Telling them
+  // what the account is for is the difference between a form and an errand.
+  const signupReason = sessionStorage.getItem('locallink_signup_reason');
   const [isLoginMode, setIsLoginMode] = useState(!joinPrefill && !wantsSignup);
   // Google verified who they are, but cannot tell us their account type or
   // their age — and we need the year for the 13+ floor.
@@ -282,7 +286,11 @@ export default function Account() {
                 {isLoginMode ? 'Welcome Back' : 'Join LocalLink'}
               </h2>
               <p className="text-muted-foreground text-sm">
-                {isLoginMode ? 'Sign in to continue making a difference' : 'Create your account and start volunteering'}
+                {isLoginMode
+                  ? 'Sign in to continue making a difference'
+                  : signupReason
+                    ? `Create your account ${signupReason}.`
+                    : 'Create your account and start volunteering'}
               </p>
             </div>
 

@@ -3320,6 +3320,24 @@ router.get('/api/events/:id/codes', requireAuth, (req: AuthRequest, res: Respons
   });
 });
 
+/**
+ * Just the name of the thing, for somebody who has scanned and has no account.
+ *
+ * Public on purpose, and safe to be: the code is printed on a sheet taped to a
+ * table at the venue, so anyone who can call this was standing in front of it.
+ * It returns nothing but a title and an organization name -- no roster, no
+ * hours, nobody's name. Without it the signup page can only say "create an
+ * account", which asks somebody in a car park to trust a form that will not say
+ * what it is for.
+ */
+router.get('/api/scan/:code/about', (req: Request, res: Response) => {
+  const opp = db.prepare(
+    'SELECT title, hostName FROM opportunities WHERE printedCode = ?'
+  ).get(String(req.params.code)) as any;
+  if (!opp) return res.status(404).json({ error: 'That code does not belong to any event.' });
+  return res.json({ eventTitle: opp.title, orgName: opp.hostName });
+});
+
 /** What a volunteer sees the moment they scan, before doing anything. */
 router.get('/api/scan/:code', requireAuth, (req: AuthRequest, res: Response) => {
   const opp = db.prepare(
@@ -3718,11 +3736,38 @@ router.post('/api/opportunities/:id/commit', requireAuth, (req: AuthRequest, res
   return res.json({ committedAt: now });
 });
 
-/** Changing your mind has to be as easy as committing, or people stop
- *  committing at all rather than risk being held to it. */
+/**
+ * Changing your mind is easy right up until it stops being fair.
+ *
+ * A commitment a coordinator can plan around is one they can still rely on the
+ * night before. Dropping out an hour beforehand leaves them short with nobody
+ * to call, which is the exact problem this button was meant to solve. So the
+ * cut-off is the day before -- said plainly at the moment somebody commits, not
+ * discovered at the moment they try to leave.
+ */
+const CANCEL_CUTOFF_HOURS = 24;
+
 router.delete('/api/opportunities/:id/commit', requireAuth, (req: AuthRequest, res: Response) => {
+  const oppId = String(req.params.id);
+  const opp = db.prepare('SELECT date, isRecurring, hostName FROM opportunities WHERE id = ?')
+    .get(oppId) as any;
+  if (!opp) return res.status(404).json({ error: 'That event does not exist' });
+
+  // A recurring post has no single date to count back from, so there is nothing
+  // to be late for and nothing to lock.
+  if (!opp.isRecurring) {
+    const startsAt = new Date(opp.date).getTime();
+    const hoursAway = (startsAt - Date.now()) / 36e5;
+    if (hoursAway < CANCEL_CUTOFF_HOURS && hoursAway > -24) {
+      return res.status(409).json({
+        error: 'TOO_LATE',
+        message: `This starts in under ${CANCEL_CUTOFF_HOURS} hours, so ${opp.hostName} is already counting on you. Get in touch with them directly if you cannot make it.`,
+      });
+    }
+  }
+
   db.prepare('UPDATE signups SET committedAt = NULL WHERE opportunityId = ? AND userId = ?')
-    .run(String(req.params.id), req.userId);
+    .run(oppId, req.userId);
   return res.json({ committedAt: null });
 });
 

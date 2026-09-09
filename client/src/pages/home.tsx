@@ -364,11 +364,23 @@ export default function Home() {
 
   async function handleUncommit(oppId: string) {
     const token = localStorage.getItem('locallink_token');
-    await fetch(`/api/opportunities/${oppId}/commit`, {
-      method: 'DELETE',
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    }).catch(() => {});
-    setCommitments(c => c.filter(id => id !== oppId));
+    try {
+      const res = await fetch(`/api/opportunities/${oppId}/commit`, {
+        method: 'DELETE',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) {
+        const d = await res.json();
+        // Optimistically dropping it here would show them as cancelled while
+        // the organization still has them on the roster -- the one mismatch
+        // this whole feature exists to prevent.
+        toast({ title: 'Too close to the day', description: d.message ?? d.error });
+        return;
+      }
+      setCommitments(c => c.filter(id => id !== oppId));
+    } catch {
+      toast({ title: 'Could not do that just now', variant: 'destructive' });
+    }
   }
 
   const DAY_FULL  = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -1829,6 +1841,13 @@ export default function Home() {
                                   Open {selectedCard.hostName}'s signup form →
                                 </a>
                               )}
+                              {!selectedCard.isRecurring && (
+                                <p className="mt-3 text-xs text-white/70">
+                                  Once you commit you can change your mind up until the day before.
+                                  After that {selectedCard.hostName} is counting on you, so you would
+                                  need to contact them directly.
+                                </p>
+                              )}
                               <button
                                 onClick={() => handleCommit(selectedCard.id)}
                                 disabled={committing}
@@ -1843,14 +1862,13 @@ export default function Home() {
                           )}
 
                           {isCommitted(selectedCard) && (
-                            <div className="rounded-2xl bg-white/20 border border-white/40 px-4 py-3 text-center">
-                              <p className="font-semibold text-white">You are on their roster ✓</p>
-                              <p className="mt-0.5 text-xs text-white/70">
-                                {selectedCard.hostName} is expecting you.
+                            <div className="flex items-center justify-between gap-3 rounded-2xl bg-white/20 border border-white/40 px-4 py-2.5">
+                              <p className="text-sm font-semibold text-white">
+                                On their roster ✓ — {selectedCard.hostName} is expecting you
                               </p>
                               <button onClick={() => handleUncommit(selectedCard.id)}
-                                className="mt-2 text-xs text-white/60 underline hover:text-white/85">
-                                I can no longer come
+                                className="shrink-0 text-xs text-white/60 underline hover:text-white/85 cursor-pointer">
+                                Cancel
                               </button>
                             </div>
                           )}

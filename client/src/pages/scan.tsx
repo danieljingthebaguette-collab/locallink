@@ -60,9 +60,20 @@ export default function ScanPage() {
   useEffect(() => {
     if (!isLoggedIn) {
       // Keep where they were going. Scanning a code is the worst possible
-      // moment to lose someone to a sign-in page.
+      // moment to lose somebody to a form.
       sessionStorage.setItem('locallink_after_login', window.location.pathname + window.location.search);
-      navigate('/account');
+      // Somebody scanning a sheet at a venue is far more likely to be new than
+      // to be a returning user who happens to be signed out, so land them on
+      // the register tab rather than on Login with the signup link underneath.
+      // Fetch the name first so the page can say what they are joining for.
+      fetch(`/api/scan/${code}/about`)
+        .then(r => (r.ok ? r.json() : null))
+        .then(d => {
+          if (d) sessionStorage.setItem('locallink_signup_reason',
+            `to record your hours at ${d.eventTitle} with ${d.orgName}`);
+        })
+        .catch(() => {})
+        .finally(() => navigate('/account?signup=1'));
       return;
     }
     call<Scan>(`/api/scan/${code}`).then(setInfo).catch((e: Error) => setLoadError(e.message));
