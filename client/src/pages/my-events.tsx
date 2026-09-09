@@ -57,6 +57,28 @@ function isOppClosed(opp: Opportunity): boolean {
   return !opp.isAvailable && opp.isAvailable !== undefined && opp.isAvailable !== null;
 }
 
+/**
+ * The next time a weekly slot comes round, as a datetime-local string.
+ *
+ * Used when a recurring post is switched to a one-off: the date stored on it is
+ * the first occurrence, typically months back, so carrying it over would hand
+ * the organization an event that is already finished. The next Tuesday at 4pm
+ * is what they almost always mean, and it is still editable.
+ */
+function nextOccurrence(day: number | undefined, time: string | undefined): string {
+  const [h, m] = (time ?? '09:00').split(':').map(Number);
+  const target = day ?? 1;
+  const d = new Date();
+  d.setSeconds(0, 0);
+  d.setHours(h || 0, m || 0);
+  // Always forward: if today is the right day but the time has gone, next week.
+  let ahead = (target - d.getDay() + 7) % 7;
+  if (ahead === 0 && d.getTime() <= Date.now()) ahead = 7;
+  d.setDate(d.getDate() + ahead);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 export default function MyEvents() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
@@ -72,10 +94,11 @@ export default function MyEvents() {
     title: string; description: string; category: Category;
     location: string; date: string; duration: number; spots: number;
     spotsType: 'limited' | 'unlimited' | 'none'; image: string;
+    isRecurring: boolean;
     recurringDay?: number; recurringTime?: string;
     cardTransform: ImageTransform;
     modalTransform: ImageTransform;
-  }>({ title: '', description: '', category: 'volunteer', location: '', date: '', duration: 2, spots: 10, spotsType: 'limited', image: '', cardTransform: DEFAULT_TRANSFORM, modalTransform: DEFAULT_TRANSFORM });
+  }>({ title: '', description: '', category: 'volunteer', location: '', date: '', duration: 2, spots: 10, spotsType: 'limited', image: '', isRecurring: false, cardTransform: DEFAULT_TRANSFORM, modalTransform: DEFAULT_TRANSFORM });
   const [savingEdit, setSavingEdit] = useState(false);
   const [editImageFile, setEditImageFile] = useState<File | null>(null);
   const [editImagePreview, setEditImagePreview] = useState('');
@@ -181,6 +204,7 @@ export default function MyEvents() {
       spots: opp.spots,
       spotsType: (opp.spotsType as 'limited' | 'unlimited' | 'none') || 'limited',
       image: opp.image || '',
+      isRecurring: !!opp.isRecurring,
       recurringDay: opp.recurringDay,
       recurringTime: opp.recurringTime,
       cardTransform: parseImageTransform(opp.cardObjectPosition),
@@ -189,10 +213,11 @@ export default function MyEvents() {
   };
 
   const handleSaveEdit = async (oppId: string) => {
-    const editingOpp = hosted.find(o => o.id === oppId);
-    const isRecurringEdit = !!editingOpp?.isRecurring;
+    // Against the DRAFT, not the saved row: the whole point is that the two
+    // differ while somebody is switching a weekly post to a one-off or back.
+    const wantsRecurring = !!editForm.isRecurring;
     const missingFields = !editForm.title || !editForm.description || !editForm.location
-      || (isRecurringEdit ? !editForm.recurringTime : !editForm.date);
+      || (wantsRecurring ? !editForm.recurringTime : !editForm.date);
     if (missingFields) {
       toast({ title: 'Please fill in all required fields', variant: 'destructive' });
       return;
@@ -214,6 +239,7 @@ export default function MyEvents() {
       spots: editForm.spots,
       spotsType: editForm.spotsType,
       image: imageUrl,
+      isRecurring: !!editForm.isRecurring,
       // Recurring-specific fields — only sent when present
       ...(editForm.recurringDay !== undefined && { recurringDay: editForm.recurringDay }),
       ...(editForm.recurringTime !== undefined && { recurringTime: editForm.recurringTime }),
@@ -473,8 +499,65 @@ export default function MyEvents() {
                             <Input id="my-events-location" value={editForm.location} onChange={(e) => setEditForm({ ...editForm, location: e.target.value })} className="h-10 rounded-xl" />
                           </div>
                         </div>
+                        {/* Switching between the two. Before this the fields
+                            were chosen by what was saved, so a weekly post
+                            offered a day and a time and nothing else, forever --
+                            an organization that stopped running something every
+                            week had to delete it and start again, losing the
+                            post and everyone who had signed up. */}
+                        <div className="space-y-1">
+                          <span className="text-xs font-medium text-muted-foreground">Schedule</span>
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              aria-pressed={!editForm.isRecurring}
+                              onClick={() => setEditForm({
+                                ...editForm,
+                                isRecurring: false,
+                                // Coming from weekly there is no usable date --
+                                // the stored one is the first occurrence, long
+                                // past. Offer the next instance of the day and
+                                // time they were already running.
+                                date: editForm.date && new Date(editForm.date) > new Date()
+                                  ? editForm.date
+                                  : nextOccurrence(editForm.recurringDay, editForm.recurringTime),
+                              })}
+                              className={cn('flex-1 h-10 rounded-xl border text-sm font-semibold transition-colors cursor-pointer',
+                                !editForm.isRecurring
+                                  ? 'bg-foreground text-background border-foreground'
+                                  : 'bg-background text-muted-foreground border-input hover:bg-accent')}
+                            >
+                              One-time
+                            </button>
+                            <button
+                              type="button"
+                              aria-pressed={!!editForm.isRecurring}
+                              onClick={() => setEditForm({
+                                ...editForm,
+                                isRecurring: true,
+                                // Seed the weekly slot from the date they had,
+                                // so the common "same time every week from now
+                                // on" needs no retyping.
+                                recurringDay: editForm.recurringDay ?? (editForm.date ? new Date(editForm.date).getDay() : 1),
+                                recurringTime: editForm.recurringTime
+                                  ?? (editForm.date ? editForm.date.slice(11, 16) : '09:00'),
+                              })}
+                              className={cn('flex-1 h-10 rounded-xl border text-sm font-semibold transition-colors cursor-pointer',
+                                editForm.isRecurring
+                                  ? 'bg-foreground text-background border-foreground'
+                                  : 'bg-background text-muted-foreground border-input hover:bg-accent')}
+                            >
+                              Every week
+                            </button>
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            {editForm.isRecurring
+                              ? 'Repeats weekly and never shows as finished.'
+                              : 'Happens once, on the date below.'}
+                          </p>
+                        </div>
                         <div className="grid grid-cols-3 gap-3">
-                          {opp.isRecurring ? (
+                          {editForm.isRecurring ? (
                             <>
                               <div className="space-y-1">
                                 <label htmlFor="my-events-day-of-week" className="text-xs font-medium text-muted-foreground">Day of Week</label>

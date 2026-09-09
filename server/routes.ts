@@ -1187,6 +1187,34 @@ router.put('/api/opportunities/:id', requireAuth, (req: AuthRequest, res: Respon
     if (duration !== undefined && (typeof duration !== 'number' || duration <= 0)) {
       return res.status(400).json({ error: 'duration must be a positive number' });
     }
+    // Switching a weekly post to a one-off has to come with a real date. The
+    // date already on the row is the first occurrence, usually months back, so
+    // keeping it would hand back an event that is finished the moment it saves
+    // -- no longer merely untidy now that a finished event refuses sign-ups and
+    // refuses scanning.
+    if (isRecurring === false) {
+      const when = date !== undefined ? String(date) : String(opp.date ?? '');
+      const ts = new Date(when).getTime();
+      if (!when || Number.isNaN(ts)) {
+        return res.status(400).json({ error: 'A one-time event needs a date and time' });
+      }
+      if (ts < Date.now()) {
+        return res.status(400).json({
+          error: 'That date has passed. Pick when this one-time event actually happens.',
+        });
+      }
+    }
+
+    // And the other way: a weekly post needs a slot to repeat in. Falling back
+    // to what is stored covers switching without touching the two fields.
+    if (isRecurring === true) {
+      const day = recurringDay !== undefined ? Number(recurringDay) : opp.recurringDay;
+      const time = recurringTime !== undefined ? String(recurringTime) : opp.recurringTime;
+      if (day === null || day === undefined || !time) {
+        return res.status(400).json({ error: 'A weekly event needs a day and a time' });
+      }
+    }
+
     if (recurringDay !== undefined) {
       const day = Number(recurringDay);
       if (!Number.isInteger(day) || day < 0 || day > 6) {
