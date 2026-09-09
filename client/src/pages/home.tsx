@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'wouter';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
-import { cn, getLocationError, getExternalSignupUrlError, getRelativeDay } from '@/lib/utils';
+import { cn, getLocationError, getExternalSignupUrlError, getRelativeDay, hasEnded } from '@/lib/utils';
 import { Linkified, hasLink } from '@/components/Linkified';
 import { Plus, MapPin, Users, Clock, Search, Loader2, Heart, Flag, X, Share2, Edit3, Save, ChevronDown, Star, Trash2, Repeat, Globe, ExternalLink, Sparkles, ClipboardList, Calendar, User, Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -856,7 +856,7 @@ export default function Home() {
                 same modal as any card. Absent entirely when nothing is featured. */}
             {featuredPost && (() => {
               const rs = !!featuredPost.isRecurring ? getRecurringStatus(featuredPost) : null;
-              const isPast = rs ? false : new Date(featuredPost.date) < new Date();
+              const isPast = rs ? false : hasEnded(featuredPost.date, featuredPost.duration, featuredPost.isRecurring);
               const manualClosed = featuredPost.isAvailable === false || (featuredPost.isAvailable as any) === 0;
               const isClosed = manualClosed || (rs ? !rs.isOpen : false);
               return (
@@ -998,7 +998,7 @@ export default function Home() {
                 // Recurring posts are never "past"; their open/closed state is time-computed
                 // !! coerces SQLite 0/1 integers to proper booleans (avoids rendering "0" in JSX)
                 const recurringStatus = !!opp.isRecurring ? getRecurringStatus(opp) : null;
-                const isPast = recurringStatus ? false : new Date(opp.date) < new Date();
+                const isPast = recurringStatus ? false : hasEnded(opp.date, opp.duration, opp.isRecurring);
                 // Manual host-close always wins; for recurring events schedule also contributes
                 const manualClosed = opp.isAvailable === false || (opp.isAvailable as any) === 0;
                 const isClosed = manualClosed || (recurringStatus ? !recurringStatus.isOpen : false);
@@ -1792,7 +1792,7 @@ export default function Home() {
                           </p>
                         );
                       })()}
-                      {!selectedCard.isRecurring && new Date(selectedCard.date) < new Date() ? (
+                      {hasEnded(selectedCard.date, selectedCard.duration, selectedCard.isRecurring) ? (
                         // Ended one-time event — no interest CTA. Recurring posts never end.
                         <div className="rounded-2xl py-3 font-semibold text-center bg-white/10 border border-white/20 text-white/60 text-lg">
                           This event has ended

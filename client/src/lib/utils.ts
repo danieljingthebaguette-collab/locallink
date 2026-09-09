@@ -114,3 +114,23 @@ export function formatDay(iso: string, style: 'short' | 'long' = 'short'): strin
     ? { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }
     : { month: 'short', day: 'numeric', year: 'numeric' });
 }
+
+/**
+ * Has this actually finished?
+ *
+ * Three places compared the START time against now, so an event that was
+ * happening at that moment showed as ended: the board card got an ENDED badge
+ * and the post replaced its buttons with "This event has ended". Harmless while
+ * the only thing you could do was say you were interested beforehand.
+ *
+ * Not harmless now. Somebody standing at the event, phone out, can scan in and
+ * record hours — while the page telling them about it says it is over. A grace
+ * hour past the posted finish, because events run long and this only decides
+ * whether we stop offering things.
+ */
+export function hasEnded(date: string, durationHours?: number | null, isRecurring?: boolean): boolean {
+  if (isRecurring) return false;          // recurring posts never end
+  const start = new Date(date).getTime();
+  if (Number.isNaN(start)) return false;  // unparseable: do not hide the CTA
+  return Date.now() > start + ((Number(durationHours) || 0) + 1) * 36e5;
+}

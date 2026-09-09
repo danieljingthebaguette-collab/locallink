@@ -1035,8 +1035,19 @@ router.post('/api/opportunities/:id/signup', requireAuth, async (req: AuthReques
     // was the only thing stopping this — a direct call still registered
     // interest, and the org got a notification and an email about someone
     // joining an event that already happened. Recurring posts never end.
-    if (!opp.isRecurring && new Date(opp.date) < new Date()) {
-      return res.status(400).json({ error: 'This event has already ended' });
+    //
+    // Against the END, not the start. Comparing the start meant an event that
+    // was happening right then counted as over, so somebody arriving late could
+    // scan in and record hours -- that route allows it, correctly -- while this
+    // one told them the thing they were standing at had ended. Two routes
+    // disagreeing about the same event at the same moment.
+    //
+    // An hour of grace past the posted finish, because events run long.
+    if (!opp.isRecurring) {
+      const endsAt = new Date(opp.date).getTime() + ((Number(opp.duration) || 0) + 1) * 36e5;
+      if (Number.isFinite(endsAt) && Date.now() > endsAt) {
+        return res.status(400).json({ error: 'This event has already ended' });
+      }
     }
 
     const existing = db.prepare('SELECT id FROM signups WHERE opportunityId = ? AND userId = ?').get(oppId, userId);
