@@ -3,6 +3,7 @@ import { useLocation, Redirect } from 'wouter';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import GoogleSignIn from '@/components/GoogleSignIn';
 import { Textarea } from '@/components/ui/textarea';
 import { Mail, Lock, User, MailCheck, Users, Building2, ShieldOff } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
@@ -12,7 +13,7 @@ import Logo from '@/components/Logo';
 export default function Account() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
-  const { isLoggedIn, currentUser, login, register, resendVerification, loading } = useAuthStore();
+  const { isLoggedIn, currentUser, login, register, resendVerification, loading, adoptSession } = useAuthStore();
 
   // Check for a join-link prefill stored by /join/:slug
   const joinPrefill = (() => {
@@ -24,6 +25,12 @@ export default function Account() {
   // on Login with a "Sign Up" link to find underneath it.
   const wantsSignup = new URLSearchParams(window.location.search).get('signup') === '1';
   const [isLoginMode, setIsLoginMode] = useState(!joinPrefill && !wantsSignup);
+  // Google verified who they are, but cannot tell us their account type or
+  // their age — and we need the year for the 13+ floor.
+  const [googleProfile, setGoogleProfile] = useState<{ credential: string; email: string; name: string | null } | null>(null);
+  const [gType, setGType] = useState<'volunteer' | 'organization'>('volunteer');
+  const [gYear, setGYear] = useState('');
+  const [gBusy, setGBusy] = useState(false);
   const [accountType, setAccountType] = useState<'volunteer' | 'organization'>(joinPrefill ? 'organization' : 'volunteer');
   // Year only, never a full date of birth. Organizations aren't people, so
   // they're never asked.
@@ -77,6 +84,30 @@ export default function Account() {
 
     setFieldErrors(errors);
     return Object.keys(errors).length === 0;
+  };
+
+  /** Second half of a new Google signup: the two things Google cannot tell us. */
+  const finishGoogleSignup = async () => {
+    if (!googleProfile) return;
+    setGBusy(true);
+    try {
+      const res = await fetch('/api/auth/google', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          credential: googleProfile.credential,
+          accountType: gType,
+          birthYear: gType === 'volunteer' ? Number(gYear) : undefined,
+        }),
+      });
+      const d = await res.json();
+      if (!res.ok) { toast({ title: d.error || 'That did not work', variant: 'destructive' }); return; }
+      adoptSession(d);
+      toast({ title: 'Welcome to LocalLink!' });
+      navigate('/');
+    } catch {
+      toast({ title: 'Could not finish signing you up', variant: 'destructive' });
+    } finally { setGBusy(false); }
   };
 
   const handleSubmit = async () => {
@@ -239,6 +270,82 @@ export default function Account() {
                 {isLoginMode ? 'Sign in to continue making a difference' : 'Create your account and start volunteering'}
               </p>
             </div>
+
+            {/* Google verified them; these are the two things it cannot tell us.
+                Shown instead of the form rather than beside it, so there is one
+                question on screen at a time. */}
+            {googleProfile ? (
+              <div className="rounded-3xl bg-card border border-border shadow-sm p-8 md:p-10 space-y-5">
+                <div className="rounded-xl border border-border bg-secondary/40 px-4 py-3 text-sm">
+                  <p className="font-semibold text-foreground">
+                    {googleProfile.name ? `Hello ${googleProfile.name}` : 'Almost there'}
+                  </p>
+                  <p className="mt-0.5 text-muted-foreground">
+                    Google confirmed {googleProfile.email}. Two more things and you are in — no
+                    password, and nothing to go and check in your inbox.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <span className="block text-sm font-semibold text-foreground">I am a…</span>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button type="button" onClick={() => setGType('volunteer')}
+                      aria-pressed={gType === 'volunteer'}
+                      className={cn('rounded-xl border p-3 text-left transition-colors cursor-pointer',
+                        gType === 'volunteer' ? 'border-primary bg-primary/5' : 'border-border hover:bg-accent')}>
+                      <span className="block font-semibold text-foreground">Volunteer</span>
+                      <span className="block text-xs text-muted-foreground">Browse and show interest</span>
+                    </button>
+                    <button type="button" onClick={() => setGType('organization')}
+                      aria-pressed={gType === 'organization'}
+                      className={cn('rounded-xl border p-3 text-left transition-colors cursor-pointer',
+                        gType === 'organization' ? 'border-primary bg-primary/5' : 'border-border hover:bg-accent')}>
+                      <span className="block font-semibold text-foreground">Organization</span>
+                      <span className="block text-xs text-muted-foreground">Post opportunities</span>
+                    </button>
+                  </div>
+                </div>
+
+                {gType === 'volunteer' && (
+                  <div className="space-y-2">
+                    <label htmlFor="g-birth-year" className="block text-sm font-semibold text-foreground">
+                      Year you were born
+                    </label>
+                    <select id="g-birth-year" value={gYear} onChange={e => setGYear(e.target.value)}
+                      className="w-full h-11 rounded-xl border border-border bg-background px-3 text-sm">
+                      <option value="">Select a year</option>
+                      {Array.from({ length: 90 }, (_, i) => new Date().getFullYear() - 13 - i).map(y => (
+                        <option key={y} value={y}>{y}</option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-muted-foreground">
+                      Organizations you sign up with can see whether you are under 18, so they can sort
+                      out consent forms and supervision. Nobody else sees it. You need to be at least 13.
+                    </p>
+                  </div>
+                )}
+
+                <Button onClick={finishGoogleSignup}
+                  disabled={gBusy || (gType === 'volunteer' && !gYear)}
+                  className="w-full h-12 rounded-xl text-base font-semibold">
+                  {gBusy ? 'Creating your account…' : 'Finish'}
+                </Button>
+                <button type="button" onClick={() => setGoogleProfile(null)}
+                  className="w-full text-xs text-muted-foreground hover:text-foreground cursor-pointer">
+                  Use a different way to sign in
+                </button>
+              </div>
+            ) : (
+            <>
+            <GoogleSignIn
+              onSignedIn={(user) => {
+                adoptSession(user);
+                toast({ title: 'Logged in successfully!' });
+                navigate('/');
+              }}
+              onNeedsProfile={setGoogleProfile}
+              onError={(m) => toast({ title: m, variant: 'destructive' })}
+            />
 
             <div className="rounded-3xl bg-card border border-border shadow-sm p-8 md:p-10 space-y-5">
               {/* API error */}
@@ -516,6 +623,8 @@ export default function Account() {
                 </button>
               </div>
             </div>
+            </>
+            )}
           </div>
         </div>
       </main>

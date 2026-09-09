@@ -207,6 +207,61 @@ try {
   db.exec("ALTER TABLE users ADD COLUMN notifyOnInterest INTEGER DEFAULT 0");
 }
 
+// ── Signing in with Google ──────────────────────────────────────────────────
+
+// Google's own id for this person. Keyed on `sub` rather than the address
+// because Google says plainly that an email can change and sub cannot, so
+// somebody who renames their Google account is still the same volunteer here.
+try {
+  db.prepare('SELECT googleSub FROM users LIMIT 1').get();
+} catch {
+  db.exec('ALTER TABLE users ADD COLUMN googleSub TEXT DEFAULT NULL');
+  db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_googlesub ON users(googleSub)');
+}
+
+// The inbox an account's address actually reaches, with plus-tags and Gmail
+// dots folded away. Needed so that signing in with Google links to an existing
+// password account on the same inbox instead of quietly making a second one.
+try {
+  db.prepare('SELECT emailNorm FROM users LIMIT 1').get();
+} catch {
+  db.exec('ALTER TABLE users ADD COLUMN emailNorm TEXT DEFAULT NULL');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_users_emailnorm ON users(emailNorm)');
+}
+
+// Backfilled by data, not by schema: a migration guarded on the column it adds
+// is finished the moment it starts, so a crash halfway leaves it permanently
+// "done". Asking which rows still need it costs one scan and cannot be fooled.
+try {
+  db.exec(`
+    UPDATE users SET emailNorm =
+      CASE
+        WHEN lower(substr(email, instr(email,'@')+1)) IN ('gmail.com','googlemail.com')
+          THEN replace(
+                 CASE WHEN instr(substr(lower(email),1,instr(email,'@')-1),'+') > 0
+                      THEN substr(lower(email),1,instr(lower(email),'+')-1)
+                      ELSE substr(lower(email),1,instr(email,'@')-1) END,
+                 '.', '') || '@gmail.com'
+        ELSE
+          CASE WHEN instr(substr(lower(email),1,instr(email,'@')-1),'+') > 0
+               THEN substr(lower(email),1,instr(lower(email),'+')-1)
+               ELSE substr(lower(email),1,instr(email,'@')-1) END
+          || '@' || lower(substr(email, instr(email,'@')+1))
+      END
+    WHERE emailNorm IS NULL AND email LIKE '%@%'
+  `);
+} catch (err) {
+  console.error('[migration] emailNorm backfill skipped:', (err as Error).message);
+}
+
+// The name a real person reads. Google gives us one, so an account made this
+// way has a proper name from the start rather than a handle.
+try {
+  db.prepare('SELECT fullName FROM users LIMIT 1').get();
+} catch {
+  db.exec('ALTER TABLE users ADD COLUMN fullName TEXT DEFAULT NULL');
+}
+
 // One-time backfill: notifyOnInterest shipped defaulting to 0 with no UI
 // toggle, so in-app interest notifications never fired for anyone. New
 // registrations now insert 1 explicitly; flip existing rows too. Idempotent,

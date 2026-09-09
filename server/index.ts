@@ -15,7 +15,22 @@ app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3001;
 
 // Security headers — sets X-Frame-Options, X-Content-Type-Options, HSTS, etc.
-app.use(helmet());
+// helmet's default policy is script-src 'self', which silently blocks Google's
+// sign-in script -- no error, just a button that never appears. These open
+// exactly the Google endpoints the sign-in needs, using the parent /gsi/ URL
+// rather than individual files, which is what Google asks for so their own
+// updates cannot break us.
+app.use(helmet({
+  contentSecurityPolicy: {
+    useDefaults: true,
+    directives: {
+      'script-src': ["'self'", 'https://accounts.google.com/gsi/client'],
+      'frame-src': ["'self'", 'https://accounts.google.com/gsi/'],
+      'connect-src': ["'self'", 'https://accounts.google.com/gsi/'],
+      'img-src': ["'self'", 'data:', 'blob:', 'https://lh3.googleusercontent.com'],
+    },
+  },
+}));
 
 // Rate limiter: max 20 login/register attempts per IP per 15 minutes
 const authLimiter = rateLimit({
@@ -56,6 +71,7 @@ const recoveryLimiter = rateLimit({
 
 // Apply rate limiting to auth endpoints
 app.use('/api/auth/login', authLimiter);
+app.use('/api/auth/google', authLimiter);
 app.use('/api/auth/register', authLimiter);
 app.use('/api/auth/forgot-password', recoveryLimiter);
 app.use('/api/auth/resend-verification', recoveryLimiter);

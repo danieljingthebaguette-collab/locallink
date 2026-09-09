@@ -61,6 +61,7 @@ interface AuthState {
   showOnboardingPrompt: () => void;
   hideOnboardingPrompt: () => void;
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string; needsVerification?: boolean; suspended?: boolean; email?: string }>;
+  adoptSession: (data: any) => void;
   register: (username: string, email: string, password: string, accountType?: string, joinSlug?: string, birthYear?: number) => Promise<{ success: boolean; error?: string; needsVerification?: boolean; email?: string }>;
   resendVerification: (email: string) => Promise<{ success: boolean; error?: string }>;
   forgotPassword: (email: string) => Promise<{ success: boolean; error?: string }>;
@@ -91,6 +92,17 @@ export const useAuthStore = create<AuthState>((set) => {
     hideOnboardingPrompt: () => {
       sessionStorage.setItem(ONBOARDING_DISMISS_KEY, '1');
       set({ onboardingPromptDismissed: true });
+    },
+
+    /** Establish a session from an already-verified payload — the same shape
+     *  /api/auth/login returns. Used by Google sign-in, which has done the
+     *  authenticating elsewhere and only needs the session set up identically,
+     *  rather than a second copy of this that drifts out of step. */
+    adoptSession: (data: any) => {
+      const { token, ...user } = data;
+      localStorage.setItem('locallink_user', JSON.stringify(user));
+      localStorage.setItem('locallink_token', token);
+      set({ isLoggedIn: true, currentUser: user, loading: false });
     },
 
     login: async (email, password) => {

@@ -6,9 +6,10 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
-import { randomUUID } from 'crypto';
+import { randomUUID, randomBytes } from 'crypto';
 import { toAppLocalString } from './time.js';
 import { sendVerificationEmail, sendPasswordResetEmail, sendSignupNotificationEmail, sendPostApprovedEmail, sendPostDeniedEmail, sendEventCancelledEmail, sendEventReminderEmail, sendOnboardingNudgeEmail, sendVerifyThenSurveyEmail } from './email.js';
+import { verifyGoogleToken, usernameFrom, googleEnabled, googleClientId, normaliseEmail } from './google.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -2275,5 +2276,131 @@ router.put('/api/admin/users/:id/verify', requireAdmin, (req: Request, res: Resp
   }
 });
 
+// ─── signing in with Google ───
+//
+// Worth it here for one reason above convenience: Google tells us the address
+// is real, so nobody has to go and find a verification email. Ours currently
+// fails DMARC and may never arrive at all, which makes "check your inbox" the
+// step most likely to lose a volunteer standing at an event.
+
+/** So the client knows whether to render the button at all. */
+router.get('/api/auth/google/enabled', (_req: Request, res: Response) =>
+  res.json({ enabled: googleEnabled(), clientId: googleClientId() || null }));
+
+/**
+ * One route for all three cases: returning, linking, and brand new.
+ *
+ * A new person cannot be created from the Google token alone -- we still need
+ * their account type, and their birth year for the 13+ floor and the 18+ gate
+ * on adults-only events. So they come back a second time with the same token
+ * plus those two answers, and it is re-verified. Nothing half-made is written
+ * in between: an account either exists properly or does not exist.
+ */
+router.post('/api/auth/google', async (req: Request, res: Response) => {
+  try {
+    if (!googleEnabled()) {
+      return res.status(503).json({ error: 'Signing in with Google is not set up yet.' });
+    }
+    const identity = await verifyGoogleToken(String(req.body?.credential ?? ''));
+    if (!identity) {
+      return res.status(401).json({ error: 'That Google sign-in could not be verified.' });
+    }
+
+    const emailNorm = normaliseEmail(identity.email);
+
+    // 1. Seen this Google account before.
+    let user = db.prepare('SELECT * FROM users WHERE googleSub = ?').get(identity.sub) as any;
+
+    // 2. Or an existing password account on the same inbox -- link it.
+    //    Only ever on a verified address. Linking on an unverified one would
+    //    let somebody claim a stranger's volunteer record, and their hours,
+    //    just by adding that address to a Google account and never proving it.
+    if (!user && identity.emailVerified) {
+      const existing = db.prepare(
+        'SELECT * FROM users WHERE emailNorm = ? OR lower(email) = ?'
+      ).get(emailNorm, identity.email) as any;
+      if (existing) {
+        db.prepare('UPDATE users SET googleSub = ?, emailVerified = 1 WHERE id = ?')
+          .run(identity.sub, existing.id);
+        user = { ...existing, googleSub: identity.sub, emailVerified: 1 };
+      }
+    }
+
+    // 3. Nobody yet. Ask the two things Google cannot tell us.
+    if (!user) {
+      if (!identity.emailVerified) {
+        return res.status(403).json({
+          error: 'Google has not verified that email address, so we cannot use it to sign you in.',
+        });
+      }
+      const accountType = req.body?.accountType;
+      const birthYear = req.body?.birthYear;
+      if (accountType !== 'volunteer' && accountType !== 'organization') {
+        return res.json({ needsProfile: true, email: identity.email, name: identity.name });
+      }
+
+      let resolvedBirthYear: number | null = null;
+      if (accountType === 'volunteer') {
+        const year = Number(birthYear);
+        const thisYear = new Date().getFullYear();
+        if (!Number.isInteger(year) || year < 1900 || year > thisYear) {
+          return res.json({ needsProfile: true, email: identity.email, name: identity.name });
+        }
+        if (thisYear - year < 13) {
+          return res.status(403).json({ error: 'You need to be at least 13 to use LocalLink.' });
+        }
+        resolvedBirthYear = year;
+      }
+
+      const taken = (u: string) =>
+        !!db.prepare('SELECT 1 FROM users WHERE username = ?').get(u);
+      const username = usernameFrom(identity.name, identity.email, taken);
+      const id = randomUUID();
+      // No password. Signing in happens through Google, and a random one nobody
+      // holds is better than a placeholder somebody might guess.
+      const placeholder = await bcrypt.hash(randomBytes(32).toString('hex'), SALT_ROUNDS);
+
+      db.prepare(
+        `INSERT INTO users (id, username, email, emailNorm, googleSub, password, isAdmin, emailVerified,
+           accountType, hasSeenWelcome, unsubToken, verified, notifyOnInterest, birthYear, fullName, createdAt)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, 0, ?, 0, 1, ?, ?, ?)`
+      ).run(id, username, identity.email, emailNorm, identity.sub, placeholder,
+        identity.email === ADMIN_EMAIL ? 1 : 0, accountType, randomUUID(),
+        resolvedBirthYear,
+        // Google gave us their actual name, which is what a certificate needs
+        // and what an organization sees on its roster. Asking again would be
+        // asking for something we already have.
+        identity.name, new Date().toISOString());
+
+      user = db.prepare('SELECT * FROM users WHERE id = ?').get(id) as any;
+    }
+
+    if (user.banned) {
+      return res.status(403).json({ error: 'This account has been suspended.' });
+    }
+
+    const token = jwt.sign(
+      { userId: user.id, isAdmin: !!user.isAdmin },
+      JWT_SECRET,
+      { expiresIn: '30d' }
+    );
+    const { password: _pw, ...safeUser } = user;
+    return res.json({
+      ...safeUser,
+      isAdmin: !!user.isAdmin,
+      emailVerified: true,
+      notifyOnInterest: !!user.notifyOnInterest,
+      notifyOnReopen: user.notifyOnReopen !== 0,
+      emailReminders: !!user.emailReminders,
+      hasSeenWelcome: !!user.hasSeenWelcome,
+      verified: !!user.verified,
+      ...onboardingFields(user),
+      token,
+    });
+  } catch (err: any) {
+    console.error('[auth/google]', err);
+    return res.status(500).json({ error: 'Could not sign you in with Google' });
+  }
+});
 
 export default router;
