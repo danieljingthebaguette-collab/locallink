@@ -302,9 +302,17 @@ export default function MyEvents() {
               Hosted Events ({hosted.length})
             </h3>
             {(currentUser.accountType === 'organization' || currentUser.isAdmin) && (
-              <Button onClick={() => setShowCreateModal(true)} className="rounded-md h-9 px-4 text-sm font-semibold gap-1.5">
-                <Plus className="w-4 h-4" /> New Post
-              </Button>
+              <div className="flex gap-2">
+                {/* Hours without a post. Sits beside New Post because it is the
+                    same decision made differently, not a separate product. */}
+                <Button variant="outline" onClick={() => navigate('/sessions')}
+                  className="rounded-md h-9 px-4 text-sm font-semibold gap-1.5">
+                  <QrCode className="w-4 h-4" /> Sessions
+                </Button>
+                <Button onClick={() => setShowCreateModal(true)} className="rounded-md h-9 px-4 text-sm font-semibold gap-1.5">
+                  <Plus className="w-4 h-4" /> New Post
+                </Button>
+              </div>
             )}
           </div>
           {currentUser.accountType === 'volunteer' && !currentUser.isAdmin ? (

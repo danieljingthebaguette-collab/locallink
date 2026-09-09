@@ -1926,6 +1926,10 @@ function JoinLinksTab({
 // which is exactly what happened the first time round.
 function HourOrgsTab({ toast }: { toast: any }) {
   const [orgs, setOrgs] = useState<any[]>([]);
+  // Organization ACCOUNTS, as distinct from the typed organization names below.
+  // This list is the one that decides whether anybody's codes work at all.
+  const [accounts, setAccounts] = useState<any[]>([]);
+  const [busyAccount, setBusyAccount] = useState<string | null>(null);
   const [flags, setFlags] = useState<{ busyApprovers: any[]; leanRecords: any[] }>({ busyApprovers: [], leanRecords: [] });
   const [loading, setLoading] = useState(true);
   const [busyKey, setBusyKey] = useState<string | null>(null);
@@ -1935,12 +1939,14 @@ function HourOrgsTab({ toast }: { toast: any }) {
     setLoading(true);
     try {
       const token = localStorage.getItem('locallink_token');
-      const [a, b] = await Promise.all([
+      const [a, b, c] = await Promise.all([
         fetch('/api/admin/hour-orgs', { headers: { Authorization: `Bearer ${token}` } }),
         fetch('/api/admin/hour-flags', { headers: { Authorization: `Bearer ${token}` } }),
+        fetch('/api/admin/tracker-orgs', { headers: { Authorization: `Bearer ${token}` } }),
       ]);
       if (a.ok) setOrgs(await a.json());
       if (b.ok) setFlags(await b.json());
+      if (c.ok) setAccounts(await c.json());
     } catch { /* ignore */ }
     setLoading(false);
   };
@@ -1949,6 +1955,32 @@ function HourOrgsTab({ toast }: { toast: any }) {
 
   // orgKey is a squashed organization name, so it contains spaces -- it has to
   // be encoded or the request never reaches the route.
+  const setTrackerVerified = async (id: string, verified: boolean, name: string) => {
+    setBusyAccount(id);
+    try {
+      const token = localStorage.getItem('locallink_token');
+      const res = await fetch(`/api/admin/tracker-orgs/${id}/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ verified }),
+      });
+      if (res.ok) {
+        setAccounts(list => list.map(a => (a.id === id ? { ...a, trackerVerified: verified } : a)));
+        toast({
+          title: verified ? `${name} can hand out codes` : `${name}'s codes are paused`,
+          description: verified
+            ? 'Their scan-in codes work from now on, and they have been told.'
+            : 'Their existing codes stop working. Hours already recorded are untouched.',
+        });
+      } else {
+        toast({ title: (await res.json()).error, variant: 'destructive' });
+      }
+    } catch {
+      toast({ title: 'That did not save', variant: 'destructive' });
+    }
+    setBusyAccount(null);
+  };
+
   const setConfirmed = async (key: string, confirmed: boolean) => {
     setBusyKey(key);
     try {
@@ -1985,13 +2017,110 @@ function HourOrgsTab({ toast }: { toast: any }) {
 
   return (
     <div className="space-y-4">
+      {/* The gate that matters most, first. Nobody's codes work until somebody
+          here has looked at them, so a queue that is not obvious is a queue
+          that leaves real organizations waiting. */}
+      {(() => {
+        const waiting = accounts.filter(a => !a.trackerVerified);
+        const cleared = accounts.filter(a => a.trackerVerified);
+        const Row = ({ a }: { a: any }) => (
+          <div className="rounded-xl border border-border bg-background p-3.5">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-heading font-semibold text-foreground">{a.username}</span>
+                  {a.trackerVerified && (
+                    <span className="inline-flex items-center gap-1 rounded-md bg-green-500/10 px-2 py-0.5 text-[11px] font-semibold text-green-600">
+                      <ShieldCheck className="h-3 w-3" /> Codes work
+                    </span>
+                  )}
+                </div>
+                {/* Everything we hold that helps answer "are these people real".
+                    An organization's own contact details, not a volunteer's. */}
+                <p className="mt-1 text-xs text-muted-foreground">{a.email}</p>
+                {a.orgWebsite && (
+                  <a href={a.orgWebsite} target="_blank" rel="noopener noreferrer"
+                    className="mt-0.5 block truncate text-xs text-primary hover:underline">
+                    {a.orgWebsite}
+                  </a>
+                )}
+                {a.orgPhone && <p className="mt-0.5 text-xs text-muted-foreground">{a.orgPhone}</p>}
+                {a.orgDescription && (
+                  <p className="mt-1.5 line-clamp-2 text-xs text-muted-foreground">{a.orgDescription}</p>
+                )}
+                <p className="mt-1.5 text-[11px] text-muted-foreground">
+                  {a.boardPosts} board {a.boardPosts === 1 ? 'post' : 'posts'} ·{' '}
+                  {a.sessions} {a.sessions === 1 ? 'session' : 'sessions'} ·{' '}
+                  {a.hoursLogged} {a.hoursLogged === 1 ? 'entry' : 'entries'} logged ·{' '}
+                  joined {new Date(a.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                </p>
+              </div>
+              <Button
+                size="sm"
+                variant={a.trackerVerified ? 'outline' : 'default'}
+                disabled={busyAccount === a.id}
+                onClick={() => setTrackerVerified(a.id, !a.trackerVerified, a.username)}>
+                {busyAccount === a.id
+                  ? <Loader2 className="h-4 w-4 animate-spin" />
+                  : a.trackerVerified ? 'Pause their codes' : 'They are real — allow codes'}
+              </Button>
+            </div>
+          </div>
+        );
+
+        return (
+          <div className="space-y-4">
+            <div>
+              <h2 className="font-heading font-bold text-lg">
+                Organizations{' '}
+                <span className="text-base font-normal text-muted-foreground">
+                  ({cleared.length} of {accounts.length} can hand out codes)
+                </span>
+              </h2>
+              <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+                Anyone can make an organization account, so this is the check that decides whether
+                their scan-in codes work at all. Hours scanned go on records schools rely on, so
+                allow one only when you actually know they are real — a phone call is enough.
+              </p>
+            </div>
+
+            {waiting.length > 0 && (
+              <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4">
+                <p className="mb-3 text-[11px] font-bold uppercase tracking-widest text-amber-700 dark:text-amber-400">
+                  Waiting on you ({waiting.length})
+                </p>
+                <div className="space-y-2">{waiting.map(a => <Row key={a.id} a={a} />)}</div>
+              </div>
+            )}
+
+            {cleared.length > 0 && (
+              <details className="rounded-2xl border border-border bg-card p-4">
+                <summary className="cursor-pointer text-[11px] font-bold uppercase tracking-widest text-muted-foreground">
+                  Already allowed ({cleared.length})
+                </summary>
+                <div className="mt-3 space-y-2">{cleared.map(a => <Row key={a.id} a={a} />)}</div>
+              </details>
+            )}
+
+            {accounts.length === 0 && (
+              <p className="rounded-2xl border border-border bg-card p-6 text-center text-sm text-muted-foreground">
+                No organization accounts yet.
+              </p>
+            )}
+          </div>
+        );
+      })()}
+
       <div>
         <h2 className="font-heading font-bold text-lg">
-          Organizations <span className="text-muted-foreground font-normal text-base">({confirmedCount} of {orgs.length} confirmed)</span>
+          Hours logged by name{' '}
+          <span className="text-muted-foreground font-normal text-base">({confirmedCount} of {orgs.length} vouched for)</span>
         </h2>
         <p className="text-sm text-muted-foreground mt-1 max-w-2xl">
-          Most of this is automatic: hours confirmed by the organization on LocalLink, or from an
-          address at the organization's own domain, already count as the strong kind schools ask for.
+          These are organization <em>names</em> typed by volunteers logging hours by hand — not the
+          accounts above. Most of it is automatic: hours confirmed by the organization on LocalLink,
+          or from an address at the organization's own domain, already count as the strong kind
+          schools ask for.
           The addresses that did the confirming are shown below —
           <span className="text-green-700 dark:text-green-400 font-medium"> green</span> is an
           organization,
