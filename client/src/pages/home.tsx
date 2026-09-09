@@ -128,7 +128,7 @@ export default function Home() {
   // Host "view interested" list — fetched on demand, not preloaded with the board
   const [showInterestedList, setShowInterestedList] = useState(false);
   const [interestedVolunteers, setInterestedVolunteers] = useState<
-    { username: string; email: string; signedUpAt: string }[] | null
+    { id: number; name: string; signedUpAt: string }[] | null
   >(null);
   const [interestedLoading, setInterestedLoading] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -145,6 +145,11 @@ export default function Home() {
   // without it this only ever described an intention, and the "includes the
   // registration link" label on the next post was skipped past unread.
   const [stepsExpanded, setStepsExpanded] = useState(false);
+  // Interested is a bookmark; committed is a promise, and only the second one
+  // puts you on the organization's roster.
+  const [commitments, setCommitments] = useState<string[]>([]);
+  const [committing, setCommitting] = useState(false);
+  const [showCommitSteps, setShowCommitSteps] = useState(false);
   const scrolled = useScrolled();
   // Signed-out visitors still see the Create Post strip (it prompts sign-up);
   // signed-in volunteers don't, because for them it goes nowhere.
@@ -323,6 +328,48 @@ export default function Home() {
   const formatDate = (d: string) => new Date(d).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
   const formatTime = (d: string) => new Date(d).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
   const isInterested = (opp: Opportunity) => currentUser ? opp.signups.includes(currentUser.id) : false;
+  const isCommitted = (opp: Opportunity) => commitments.includes(opp.id);
+
+  // Fetched separately rather than ridden along on the board feed, which is
+  // public — who has promised to turn up is not something to publish to
+  // everyone reading it.
+  useEffect(() => {
+    if (!isLoggedIn) { setCommitments([]); return; }
+    const token = localStorage.getItem('locallink_token');
+    fetch('/api/me/commitments', { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+      .then(r => (r.ok ? r.json() : []))
+      .then(setCommitments)
+      .catch(() => setCommitments([]));
+  }, [isLoggedIn, currentUser?.id]);
+
+  async function handleCommit(oppId: string) {
+    setCommitting(true);
+    try {
+      const token = localStorage.getItem('locallink_token');
+      const res = await fetch(`/api/opportunities/${oppId}/commit`, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (res.ok) {
+        setCommitments(c => (c.includes(oppId) ? c : [...c, oppId]));
+        setShowCommitSteps(false);
+        toast({ title: "You're on their roster", description: 'The organization knows you are coming.' });
+      } else {
+        toast({ title: (await res.json()).error, variant: 'destructive' });
+      }
+    } catch {
+      toast({ title: 'Could not save that', variant: 'destructive' });
+    } finally { setCommitting(false); }
+  }
+
+  async function handleUncommit(oppId: string) {
+    const token = localStorage.getItem('locallink_token');
+    await fetch(`/api/opportunities/${oppId}/commit`, {
+      method: 'DELETE',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    }).catch(() => {});
+    setCommitments(c => c.filter(id => id !== oppId));
+  }
 
   const DAY_FULL  = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   const DAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -1700,10 +1747,9 @@ export default function Home() {
                             ) : interestedVolunteers && interestedVolunteers.length > 0 ? (
                               <div className="space-y-2 mt-3">
                                 {interestedVolunteers.map(v => (
-                                  <div key={v.email} className="bg-white/10 rounded-xl px-4 py-2.5 flex items-center justify-between gap-3">
+                                  <div key={v.id} className="bg-white/10 rounded-xl px-4 py-2.5 flex items-center justify-between gap-3">
                                     <div className="min-w-0">
-                                      <p className="text-sm font-semibold truncate">{v.username}</p>
-                                      <p className="text-xs text-white/60 truncate">{v.email}</p>
+                                      <p className="text-sm font-semibold truncate">{v.name}</p>
                                     </div>
                                     <p className="text-xs text-white/50 flex-shrink-0">
                                       {new Date(v.signedUpAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
@@ -1754,22 +1800,79 @@ export default function Home() {
                             {showInterestBurst && <InterestBurst />}
                           </div>
 
+                          {/* Interested is a bookmark. This is the promise. The
+                              organization only sees people who make it, which is
+                              what makes their roster worth planning around. */}
+                          {!isCommitted(selectedCard) && !showCommitSteps && (
+                            <button
+                              onClick={() => setShowCommitSteps(true)}
+                              className="w-full rounded-2xl py-3 font-semibold bg-white text-primary text-lg transition-transform hover:scale-[1.02] active:scale-[0.98]">
+                              I'm coming — commit
+                            </button>
+                          )}
+
+                          {!isCommitted(selectedCard) && showCommitSteps && (
+                            <div className="rounded-2xl bg-white/15 border border-white/30 p-4 text-left">
+                              <p className="font-semibold text-white">Before you come</p>
+                              {selectedCard.steps && selectedCard.steps.length > 0 ? (
+                                <ol className="mt-2 space-y-1.5 text-sm text-white/85 list-decimal pl-5">
+                                  {selectedCard.steps.map((st, i) => <li key={i}>{st}</li>)}
+                                </ol>
+                              ) : (
+                                <p className="mt-1.5 text-sm text-white/75">
+                                  {selectedCard.hostName} has not asked for anything in advance — just turn up.
+                                </p>
+                              )}
+                              {selectedCard.externalSignupUrl && (
+                                <a href={selectedCard.externalSignupUrl} target="_blank" rel="noopener noreferrer"
+                                  className="mt-3 flex items-center justify-center gap-2 rounded-xl bg-white/20 hover:bg-white/30 py-2.5 text-sm font-semibold text-white transition-colors">
+                                  Open {selectedCard.hostName}'s signup form →
+                                </a>
+                              )}
+                              <button
+                                onClick={() => handleCommit(selectedCard.id)}
+                                disabled={committing}
+                                className="mt-3 w-full rounded-xl bg-white py-2.5 font-semibold text-primary disabled:opacity-60">
+                                {committing ? 'Saving…' : 'Done — I am coming'}
+                              </button>
+                              <button onClick={() => setShowCommitSteps(false)}
+                                className="mt-1.5 w-full py-1.5 text-xs text-white/60 hover:text-white/80">
+                                Not yet
+                              </button>
+                            </div>
+                          )}
+
+                          {isCommitted(selectedCard) && (
+                            <div className="rounded-2xl bg-white/20 border border-white/40 px-4 py-3 text-center">
+                              <p className="font-semibold text-white">You are on their roster ✓</p>
+                              <p className="mt-0.5 text-xs text-white/70">
+                                {selectedCard.hostName} is expecting you.
+                              </p>
+                              <button onClick={() => handleUncommit(selectedCard.id)}
+                                className="mt-2 text-xs text-white/60 underline hover:text-white/85">
+                                I can no longer come
+                              </button>
+                            </div>
+                          )}
+
                           {/* Viral loop: the moment someone says they're interested
                               is the moment they're most likely to bring a friend along */}
                           <button onClick={() => handleShare(selectedCard.id)}
                             className="w-full rounded-2xl py-2.5 font-semibold bg-white/15 hover:bg-white/25 border border-white/30 text-white text-sm transition-colors flex items-center justify-center gap-2">
                             <Share2 className="w-4 h-4" /> Invite a friend — copy link
                           </button>
-                          {/* Org's own registration page — a separate, clearly distinct control from
-                              the interest confirmation above, so double-tapping "Interested ✓" (which
-                              has no href) can never navigate anywhere. */}
-                          {selectedCard.externalSignupUrl && (
+                          {/* The organization's own form used to sit here as a
+                              standalone button. It now lives inside the commit
+                              panel and the committed card, where it is part of
+                              a sentence rather than a second identical link to
+                              the same place on the same screen. */}
+                          {selectedCard.externalSignupUrl && isCommitted(selectedCard) && (
                             <a
                               href={selectedCard.externalSignupUrl}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="w-full rounded-2xl py-2.5 font-semibold bg-white/15 hover:bg-white/25 border border-white/30 text-white text-sm transition-colors flex items-center justify-center gap-2">
-                              Complete signup with {selectedCard.hostName} →
+                              Open {selectedCard.hostName}'s signup form again →
                             </a>
                           )}
                           <button onClick={() => handleCancelSignup(selectedCard.id)} disabled={signingUp}
@@ -1781,7 +1884,7 @@ export default function Home() {
                         <div className="space-y-2">
                           {/* Disclosure — visible before the click that shares the volunteer's info, not after */}
                           <p className="text-white/50 text-xs text-center">
-                            Your name and email will be shared with the organization hosting this event.
+                            Your name is shared with the organization hosting this event.
                           </p>
                           <motion.button
                             whileHover={{ scale: 1.02 }}

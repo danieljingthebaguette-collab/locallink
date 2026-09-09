@@ -1116,12 +1116,18 @@ router.get('/api/opportunities/:id/interested', requireAuth, (req: AuthRequest, 
       return res.status(403).json({ error: 'Only the host can view interested volunteers' });
     }
 
+    // No email address. This list is read on a phone by whoever runs the
+    // organization, and most of the people on it are minors -- handing their
+    // addresses to an adult stranger is the same shape as the harvesting hole
+    // closed in 95bbaa3, just reached by a different door. A coordinator needs
+    // to know who is coming, not how to contact them privately; anyone who
+    // needs contacting can be reached through the post.
     const volunteers = db.prepare(
-      `SELECT u.username, u.email, s.createdAt AS signedUpAt
+      `SELECT s.id, COALESCE(u.fullName, u.username) AS name, s.createdAt AS signedUpAt
        FROM signups s JOIN users u ON u.id = s.userId
        WHERE s.opportunityId = ?
        ORDER BY s.createdAt ASC`
-    ).all(oppId) as { username: string; email: string; signedUpAt: string }[];
+    ).all(oppId) as { id: number; name: string; signedUpAt: string }[];
 
     return res.json(volunteers);
   } catch (err: any) {
@@ -3467,6 +3473,84 @@ export function closeAbandonedClocks(): number {
   return rows.length;
 }
 
+/**
+ * Who is here, who is missing, who needs sorting out.
+ *
+ * Lives on the codes screen rather than a page of its own, because that screen
+ * is already open on the coordinator's phone while people are arriving, and a
+ * second place to look is a second place to forget.
+ *
+ * No email addresses, no ages, no phone numbers. The four things this list is
+ * for -- knowing who is on site, who never turned up, who left without scanning
+ * out, and who walked up unannounced -- are all answered by a name and a time.
+ * Most of these people are minors and this is read on a phone in a car park.
+ */
+router.get('/api/events/:id/roster', requireAuth, (req: AuthRequest, res: Response) => {
+  const opp = db.prepare('SELECT id, hostId, duration, date FROM opportunities WHERE id = ?')
+    .get(req.params.id) as any;
+  if (!opp) return res.status(404).json({ error: 'That event does not exist' });
+  if (opp.hostId !== req.userId && !req.isAdmin) {
+    return res.status(403).json({ error: 'Only the organization that posted this event can see its roster' });
+  }
+
+  const scans = db.prepare(`
+    SELECT h.id, h.volunteerId, COALESCE(u.fullName, u.username) AS name,
+           h.status, h.startedAt, h.endedAt, h.hours, h.approvedHours, h.closedBy,
+           (SELECT s.committedAt FROM signups s
+             WHERE s.opportunityId = h.opportunityId AND s.userId = h.volunteerId) AS committedAt,
+           EXISTS(SELECT 1 FROM signups s
+                   WHERE s.opportunityId = h.opportunityId AND s.userId = h.volunteerId) AS wasExpected,
+           (SELECT COUNT(*) FROM hour_logs p
+             JOIN opportunities po ON po.id = p.opportunityId
+             WHERE p.volunteerId = h.volunteerId AND po.hostId = ?
+               AND p.id != h.id AND p.status IN ('approved','adjusted')) AS pastWithYou
+    FROM hour_logs h JOIN users u ON u.id = h.volunteerId
+    WHERE h.opportunityId = ?
+    ORDER BY h.startedAt ASC
+  `).all(opp.hostId, opp.id) as any[];
+
+  const shape = (r: any) => ({
+    id: r.id,
+    name: r.name,
+    startedAt: r.startedAt,
+    // Only meaningful when they actually scanned out. An auto-closed clock has
+    // an endedAt too, but it is the hour the sweep ran, not when they left --
+    // showing it would invent a departure time nobody witnessed.
+    endedAt: r.closedBy === 'scan' ? r.endedAt : null,
+    hours: r.approvedHours ?? r.hours,
+    committed: !!r.committedAt,
+    expected: !!r.wasExpected,
+    returning: Number(r.pastWithYou) > 0,
+  });
+
+  const hereNow = scans.filter(r => r.status === 'running').map(shape);
+  const finished = scans.filter(r => r.closedBy === 'scan').map(shape);
+  const neverScannedOut = scans.filter(r => r.closedBy === 'auto').map(shape);
+  // Someone who scanned without ever pressing Interested. Not a problem -- it
+  // is how a walk-up looks -- but the coordinator should know they are there.
+  const walkedUp = scans.filter(r => !r.wasExpected).map(shape);
+
+  // Signed up and no scan at all: either they did not come, or their phone did.
+  const noShow = db.prepare(`
+    SELECT s.id, COALESCE(u.fullName, u.username) AS name, s.committedAt
+    FROM signups s JOIN users u ON u.id = s.userId
+    WHERE s.opportunityId = ?
+      AND NOT EXISTS (SELECT 1 FROM hour_logs h
+                       WHERE h.opportunityId = s.opportunityId AND h.volunteerId = u.id)
+    ORDER BY s.committedAt IS NULL, name COLLATE NOCASE
+  `).all(opp.id) as any[];
+
+  return res.json({
+    postedHours: Number(opp.duration) || 1,
+    hereNow,
+    finished,
+    neverScannedOut,
+    walkedUp,
+    notArrived: noShow.map(r => ({ id: r.id, name: r.name, committed: !!r.committedAt })),
+    totalHours: finished.concat(neverScannedOut).reduce((t, r) => t + (r.hours || 0), 0),
+  });
+});
+
 // ─── tracker sessions: hours without a post on the board ───
 //
 // A session is an opportunity with status 'unlisted'. The board only ever
@@ -3585,6 +3669,61 @@ router.post('/api/admin/tracker-orgs/:id/verify', requireAdmin, (req: AuthReques
       : 'Tracker access has been paused for your organization. Get in touch if that is a mistake.',
     new Date().toISOString());
   return res.json({ success: true, verified: on });
+});
+
+// ─── committing to an event ───
+
+/** Which posts this person has committed to. Its own endpoint because the board
+ *  feed is public, and commitment is not something to publish to everyone
+ *  reading it -- the feed already leaks more user ids than it should. */
+router.get('/api/me/commitments', requireAuth, (req: AuthRequest, res: Response) => {
+  const rows = db.prepare(
+    'SELECT opportunityId FROM signups WHERE userId = ? AND committedAt IS NOT NULL'
+  ).all(req.userId) as any[];
+  return res.json(rows.map(r => r.opportunityId));
+});
+
+/**
+ * Interested is a bookmark. Committed is a promise.
+ *
+ * Deliberately self-declared: there is no way to check somebody filled in an
+ * organization's own form, and calling it "confirmed" would put a word on the
+ * roster that nothing behind it supports. The organization sees who said they
+ * are coming, which is more than they get today, and no more than that.
+ */
+router.post('/api/opportunities/:id/commit', requireAuth, (req: AuthRequest, res: Response) => {
+  const oppId = String(req.params.id);
+  const row = db.prepare('SELECT id, committedAt FROM signups WHERE opportunityId = ? AND userId = ?')
+    .get(oppId, req.userId) as any;
+  if (!row) {
+    return res.status(400).json({ error: 'Say you are interested first.' });
+  }
+  if (row.committedAt) return res.json({ committedAt: row.committedAt });
+
+  const now = new Date().toISOString();
+  db.prepare('UPDATE signups SET committedAt = ? WHERE id = ?').run(now, row.id);
+
+  // The organization hears about a commitment, not about a bookmark. They
+  // already get an email on every Interested tap; another one for the same
+  // person would teach them to ignore both.
+  const opp = db.prepare('SELECT title, hostId FROM opportunities WHERE id = ?').get(oppId) as any;
+  const me = db.prepare('SELECT COALESCE(fullName, username) AS name FROM users WHERE id = ?')
+    .get(req.userId) as any;
+  if (opp?.hostId) {
+    db.prepare(
+      'INSERT INTO notifications (id, userId, type, message, read, createdAt) VALUES (?, ?, ?, ?, 0, ?)'
+    ).run(randomUUID(), opp.hostId, 'volunteer_committed',
+      `${me?.name ?? 'A volunteer'} committed to ${opp.title}. They are on your roster.`, now);
+  }
+  return res.json({ committedAt: now });
+});
+
+/** Changing your mind has to be as easy as committing, or people stop
+ *  committing at all rather than risk being held to it. */
+router.delete('/api/opportunities/:id/commit', requireAuth, (req: AuthRequest, res: Response) => {
+  db.prepare('UPDATE signups SET committedAt = NULL WHERE opportunityId = ? AND userId = ?')
+    .run(String(req.params.id), req.userId);
+  return res.json({ committedAt: null });
 });
 
 export default router;

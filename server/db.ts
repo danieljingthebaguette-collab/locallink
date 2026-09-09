@@ -568,6 +568,17 @@ try {
   console.error('[migration] emailNorm backfill skipped:', (err as Error).message);
 }
 
+// Interested is a bookmark; committed means they have told the organization
+// they are coming and have done whatever that organization asks of people
+// beforehand. Self-declared on purpose -- there is nothing on the other side to
+// check a form was filled in, and pretending otherwise would put a word like
+// "confirmed" on something nobody confirmed.
+try {
+  db.prepare('SELECT committedAt FROM signups LIMIT 1').get();
+} catch {
+  db.exec('ALTER TABLE signups ADD COLUMN committedAt TEXT DEFAULT NULL');
+}
+
 // Whether this organization may run tracker sessions that never appear on the
 // board at all.
 //
