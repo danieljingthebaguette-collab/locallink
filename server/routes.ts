@@ -2843,6 +2843,28 @@ router.post('/api/approve-hours/:token', async (req: Request, res: Response) => 
       if (!Number.isFinite(n) || n < 0 || n > 24) {
         return res.status(400).json({ error: 'Enter a number of hours between 0 and 24' });
       }
+      // The same ceilings the volunteer's own entry had to clear. Without this
+      // the approval step was the loosest door in the building: name any
+      // address that is not a free provider, adjust to twenty-four, and the
+      // result lands in the strong tier having passed no cap at all.
+      const cap = db.prepare(
+        'SELECT duration FROM opportunities WHERE id = ?'
+      ).get(row.opportunityId ?? '') as any;
+      if (cap?.duration && n > Number(cap.duration) + 2) {
+        return res.status(400).json({
+          error: `That event was posted as ${cap.duration} hours. The most that can be recorded is ${Number(cap.duration) + 2}.`,
+        });
+      }
+      const sameDay = db.prepare(`
+        SELECT COALESCE(SUM(CASE WHEN status = 'rejected' THEN 0
+                                 ELSE COALESCE(approvedHours, hours) END), 0) AS total
+        FROM hour_logs WHERE volunteerId = ? AND serviceDate = ? AND id != ?
+      `).get(row.volunteerId, row.serviceDate, row.id) as any;
+      if (Number(sameDay.total) + n > 16) {
+        return res.status(400).json({
+          error: `That would put them over 16 hours on ${row.serviceDate}. They already have ${sameDay.total} recorded that day.`,
+        });
+      }
       finalHours = n;
       if (n === row.hours) status = 'approved'; // same number is an approval, not a change
     }
@@ -3460,6 +3482,23 @@ router.post('/api/scan/:code', requireAuth, (req: AuthRequest, res: Response) =>
 
     // ── opening ──
     //
+    // Refuse if the organization's access has been withdrawn. Pausing them used
+    // to stop only the issuing of NEW codes, so every sheet already taped to a
+    // table went on working indefinitely -- which is not what anyone pressing
+    // "pause their codes" believes they are doing.
+    //
+    // Checked here and not on the closing path above on purpose: somebody
+    // already clocked in gets to finish. Stranding a volunteer who is standing
+    // there, because of a decision made about their organization while they
+    // were holding a litter picker, punishes the wrong person.
+    const host = db.prepare('SELECT trackerVerified FROM users WHERE id = ?')
+      .get(opp.hostId) as any;
+    if (!host?.trackerVerified) {
+      return res.status(403).json({
+        error: `${opp.hostName} cannot record hours through LocalLink at the moment. Ask them to get in touch with us.`,
+      });
+    }
+
     // Only around the time the thing is actually happening. Without this a
     // printed sheet photographed days early opens a clock days early, and since
     // an abandoned clock closes at the posted length, that is free hours for an

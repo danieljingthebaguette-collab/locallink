@@ -21,6 +21,10 @@ interface Loggable { id: string; title: string; date: string; duration: number; 
 
 const hoursOf = (l: HourLog) => l.approvedHours ?? l.hours;
 
+/** Quarter hours add up to things like 3.5999999999999996. Nobody wants that on
+ *  a page about how many hours they worked. */
+const tidy = (n: number) => Math.round(n * 100) / 100;
+
 /** A clock that is still running has no hours yet -- it had been rendering as
  *  "0h", which reads as a bug rather than as a clock. */
 function runningFor(startedAt: string | null | undefined, nowMs: number): string {
@@ -266,10 +270,10 @@ export default function HoursPage() {
       <div className="rounded-2xl bg-card border border-border p-5">
         <div className="flex flex-wrap items-baseline justify-between gap-3">
           <div>
-            <span className="font-heading text-3xl font-bold text-foreground tabular-nums">{totals.confirmed}</span>
+            <span className="font-heading text-3xl font-bold text-foreground tabular-nums">{tidy(totals.confirmed)}</span>
             <span className="ml-2 text-sm text-muted-foreground">hours confirmed</span>
             {totals.waiting > 0 && (
-              <span className="ml-3 text-sm text-amber-700 dark:text-amber-400">{totals.waiting} waiting</span>
+              <span className="ml-3 text-sm text-amber-700 dark:text-amber-400">{tidy(totals.waiting)} waiting</span>
             )}
             {/* A clock still running is in neither total, so without this it
                 disappears from the summary while very much existing. */}
@@ -307,7 +311,7 @@ export default function HoursPage() {
 
         {totals.fromConfirmedOrgs < totals.confirmed && (
           <p className="mt-3 text-xs text-muted-foreground">
-            {totals.fromConfirmedOrgs} of those were confirmed by the organization itself, or from an organization's own email address — which is the kind schools ask for. The rest were confirmed from a personal address, and your certificate says so.
+            {tidy(totals.fromConfirmedOrgs)} of those were confirmed by the organization itself, or from an organization's own email address — which is the kind schools ask for. The rest were confirmed from a personal address, and your certificate says so.
           </p>
         )}
       </div>
@@ -444,6 +448,12 @@ export default function HoursPage() {
                   <button onClick={() => withdraw(l.id)}
                     className="mt-1 text-xs text-muted-foreground underline hover:text-foreground cursor-pointer">
                     Withdraw
+                  </button>
+                )}
+                {l.status === 'rejected' && (
+                  <button onClick={() => withdraw(l.id)}
+                    className="mt-1 text-xs text-muted-foreground underline hover:text-foreground cursor-pointer">
+                    Remove and try again
                   </button>
                 )}
               </div>

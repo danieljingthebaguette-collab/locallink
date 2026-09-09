@@ -32,7 +32,7 @@ async function call<T>(path: string): Promise<T> {
   const res = await fetch(path, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
   const text = await res.text();
   const data = text ? JSON.parse(text) : {};
-  if (!res.ok) throw new Error(data.error || 'Something went wrong');
+  if (!res.ok) throw new Error(data.message || data.error || 'Something went wrong');
   return data as T;
 }
 

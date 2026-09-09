@@ -127,17 +127,17 @@ export default function ApproveHoursPage() {
             <h2 className="font-heading font-semibold text-foreground">Change the hours</h2>
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
               <div>
-                <label className="block text-sm font-semibold text-foreground mb-1.5">Hours they actually did</label>
-                <Input value={hours} onChange={e => setHours(e.target.value)} inputMode="decimal" className="rounded-md" />
+                <label htmlFor="ah-hours" className="block text-sm font-semibold text-foreground mb-1.5">Hours they actually did</label>
+                <Input id="ah-hours" value={hours} onChange={e => setHours(e.target.value)} inputMode="decimal" className="rounded-md" />
               </div>
               <div>
-                <label className="block text-sm font-semibold text-foreground mb-1.5">Your name</label>
-                <Input value={name} onChange={e => setName(e.target.value)} placeholder="Dana Reed" className="rounded-md" />
+                <label htmlFor="ah-name" className="block text-sm font-semibold text-foreground mb-1.5">Your name</label>
+                <Input id="ah-name" value={name} onChange={e => setName(e.target.value)} placeholder="Dana Reed" className="rounded-md" />
                 <p className="mt-1 text-xs text-muted-foreground">Shown on their certificate.</p>
               </div>
               <div className="sm:col-span-2">
-                <label className="block text-sm font-semibold text-foreground mb-1.5">A note, if useful</label>
-                <Input value={note} onChange={e => setNote(e.target.value)} maxLength={300}
+                <label htmlFor="ah-note" className="block text-sm font-semibold text-foreground mb-1.5">A note, if useful</label>
+                <Input id="ah-note" value={note} onChange={e => setNote(e.target.value)} maxLength={300}
                   placeholder="Left half an hour early" className="rounded-md" />
                 <p className="mt-1 text-xs text-muted-foreground">They will see this.</p>
               </div>
@@ -158,8 +158,8 @@ export default function ApproveHoursPage() {
               These hours will not count, and {ask.volunteerName} will be told. We will not ask you again.
             </p>
             <div className="mt-3">
-              <label className="block text-sm font-semibold text-foreground mb-1.5">A reason, if you want to give one</label>
-              <Input value={note} onChange={e => setNote(e.target.value)} maxLength={300}
+              <label htmlFor="ah-reason" className="block text-sm font-semibold text-foreground mb-1.5">A reason, if you want to give one</label>
+              <Input id="ah-reason" value={note} onChange={e => setNote(e.target.value)} maxLength={300}
                 placeholder="We have no record of them" className="rounded-md" />
             </div>
             <div className="mt-4 flex gap-2">

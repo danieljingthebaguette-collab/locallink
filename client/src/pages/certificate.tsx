@@ -143,7 +143,7 @@ export default function CertificatePage() {
 
           {data.confirmedOrgHours < data.totalHours && (
             <p className="mt-5 rounded-md bg-secondary px-4 py-3 text-xs text-muted-foreground">
-              <strong className="text-foreground">{data.confirmedOrgHours} of {data.totalHours} hours</strong> are
+              <strong className="text-foreground">{data.confirmedOrgHours} of {data.totalHours} hours</strong>
               were confirmed by the organization itself, or from an organization's own email address. The remainder were confirmed by the
               named person above, whose organization we have not independently confirmed.
             </p>

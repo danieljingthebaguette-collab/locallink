@@ -38,8 +38,8 @@ export default function CheckCertificatePage() {
       <form onSubmit={e => { e.preventDefault(); check(code); }}
         className="rounded-2xl bg-card border border-border p-5 flex flex-wrap items-end gap-3">
         <div className="flex-1 min-w-56">
-          <label className="block text-sm font-semibold text-foreground mb-1.5">Verification code</label>
-          <Input value={code} onChange={e => setCode(e.target.value.toUpperCase())}
+          <label htmlFor="cc-code" className="block text-sm font-semibold text-foreground mb-1.5">Verification code</label>
+          <Input id="cc-code" value={code} onChange={e => setCode(e.target.value.toUpperCase())}
             placeholder="ABCD-1234" className="rounded-md font-heading tracking-wider" />
         </div>
         <Button type="submit" disabled={busy || !code.trim()} className="rounded-md">
@@ -99,7 +99,7 @@ export default function CheckCertificatePage() {
 
           {result.confirmedOrgHours < result.totalHours && (
             <p className="mt-4 rounded-md bg-secondary px-4 py-3 text-xs text-muted-foreground">
-              <strong className="text-foreground">{result.confirmedOrgHours} of {result.totalHours} hours</strong> are
+              <strong className="text-foreground">{result.confirmedOrgHours} of {result.totalHours} hours</strong>
               were confirmed by the organization itself, or from an organization's own email address. The rest were confirmed by the named
               person, whose organization we have not independently confirmed.
             </p>
