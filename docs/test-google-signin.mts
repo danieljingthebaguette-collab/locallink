@@ -15,6 +15,8 @@ const identities: Record<string, any> = {
   'tok-unverified': { sub: 'g-unver-1', email: 'someone.else@gmail.com',     email_verified: false, name: 'Not Verified' },
   'tok-steal':      { sub: 'g-steal-1', email: 'rosterB@demo.test',          email_verified: false, name: 'Thief' },
   'tok-under13':    { sub: 'g-kid-1',   email: 'young@gmail.com',            email_verified: true,  name: 'Too Young' },
+  // Same inbox as the dotted address a password account was registered with.
+  'tok-dots':       { sub: 'g-dots-1',  email: 'johndoe@gmail.com',          email_verified: true,  name: 'John Doe' },
 };
 
 (OAuth2Client.prototype as any).verifyIdToken = async ({ idToken }: any) => {
@@ -22,6 +24,11 @@ const identities: Record<string, any> = {
   if (!p) throw new Error('bad token');
   return { getPayload: () => ({ iss: 'https://accounts.google.com', aud: process.env.GOOGLE_CLIENT_ID, ...p }) };
 };
+
+// Production has Brevo configured, so a fresh signup is UNVERIFIED. Without
+// this the account below is born verified and the last check silently passes
+// for the wrong reason.
+process.env.BREVO_API_KEY ||= 'unset-on-purpose-so-signups-start-unverified';
 
 const API = `http://localhost:${process.env.PORT}`;
 // Relative, so this tests the server in whichever checkout it is run from.
@@ -83,6 +90,33 @@ check(r.status === 403, 'an UNVERIFIED address cannot claim a stranger\'s existi
 // 8. And an unverified address cannot make a new account either.
 r = await post({ credential: 'tok-unverified', accountType: 'volunteer', birthYear: 2008 });
 check(r.status === 403, 'nor create a fresh one');
+
+// 9. Gmail ignores dots, so john.doe@ and johndoe@ are one inbox. Someone who
+//    registered with dots and then signs in with Google must land on the
+//    account they already have, not a second one with their hours split off.
+const reg = async (email: string, password: string) => (await fetch(`${API}/api/auth/register`, {
+  method: 'POST', headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ username: 'Dotted ' + Math.random().toString(36).slice(2, 7),
+    email, password, accountType: 'volunteer', birthYear: 2008 }),
+})).status;
+
+const ATTACK_PW = 'PreRegistered123!';
+await reg('john.doe@gmail.com', ATTACK_PW);
+r = await post({ credential: 'tok-dots' });
+check(r.status === 200 && !r.body.needsProfile,
+  'a Gmail user who registered with dots lands on the account they already have',
+  `${r.status} ${JSON.stringify(r.body).slice(0, 80)}`);
+
+// 10. Which is exactly why that row's password cannot survive the link. The
+//     dotted address reaches this inbox, but registering it proved nothing --
+//     anybody could have done it and waited for the real owner to sign in.
+const after = await fetch(`${API}/api/auth/login`, {
+  method: 'POST', headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ email: 'john.doe@gmail.com', password: ATTACK_PW }),
+});
+check(after.status !== 200,
+  'and the password that unverified row was registered with no longer works',
+  `login returned ${after.status}`);
 
 console.log(bad ? `\n${bad} FAILED` : '\nall pass');
 process.exit(bad ? 1 : 0);

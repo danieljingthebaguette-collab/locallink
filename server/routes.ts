@@ -366,8 +366,8 @@ router.post('/api/auth/register', async (req: Request, res: Response) => {
     const unsubToken = randomUUID();
 
     db.prepare(
-      'INSERT INTO users (id, username, email, password, isAdmin, emailVerified, accountType, hasSeenWelcome, unsubToken, verified, notifyOnInterest, birthYear, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)'
-    ).run(id, username, email, hashedPassword, isAdmin, emailVerified, resolvedAccountType, 0, unsubToken, verified, resolvedBirthYear, createdAt);
+      'INSERT INTO users (id, username, email, emailNorm, password, isAdmin, emailVerified, accountType, hasSeenWelcome, unsubToken, verified, notifyOnInterest, birthYear, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)'
+    ).run(id, username, email, normaliseEmail(email), hashedPassword, isAdmin, emailVerified, resolvedAccountType, 0, unsubToken, verified, resolvedBirthYear, createdAt);
 
     // If registered via join link, claim it
     if (joinLink) {
@@ -2320,8 +2320,20 @@ router.post('/api/auth/google', async (req: Request, res: Response) => {
         'SELECT * FROM users WHERE emailNorm = ? OR lower(email) = ?'
       ).get(emailNorm, identity.email) as any;
       if (existing) {
-        db.prepare('UPDATE users SET googleSub = ?, emailVerified = 1 WHERE id = ?')
-          .run(identity.sub, existing.id);
+        // A row nobody ever verified is a row nobody has proved they own, and
+        // because we match on the folded address (Gmail dots, a plus-tag) it
+        // need not have been created by this person at all: anyone could have
+        // registered v.i.c.t.i.m@gmail.com and waited. Linking marks it
+        // verified, so the password it carries cannot survive that, or whoever
+        // chose it would hold this account. Google, or a reset, from here.
+        if (existing.emailVerified) {
+          db.prepare('UPDATE users SET googleSub = ?, emailVerified = 1 WHERE id = ?')
+            .run(identity.sub, existing.id);
+        } else {
+          const dead = await bcrypt.hash(randomBytes(32).toString('hex'), SALT_ROUNDS);
+          db.prepare('UPDATE users SET googleSub = ?, emailVerified = 1, password = ? WHERE id = ?')
+            .run(identity.sub, dead, existing.id);
+        }
         user = { ...existing, googleSub: identity.sub, emailVerified: 1 };
       }
     }
