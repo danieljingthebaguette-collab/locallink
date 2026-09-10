@@ -125,7 +125,11 @@ function safeJsonParse<T>(raw: string | null | undefined, fallback: T): T {
  * does.
  */
 function withTags(opp: any, signups: string[] = []) {
-  const { codeSecret: _s, printedCode: _p, ...safe } = opp;
+  // codeSecretRotatedAt rides along with the other two: it is only ever
+  // interesting to us, and publishing when a key changed is a hint about the
+  // key. Note this is a denylist over `SELECT *`, so the next column named
+  // something like these leaks by default -- see the note in the report.
+  const { codeSecret: _s, printedCode: _p, codeSecretRotatedAt: _r, ...safe } = opp;
   return { ...safe, tags: safeJsonParse<string[]>(opp.tags, []), steps: safeJsonParse<string[]>(opp.steps, []), signups, hostVerified: !!opp.hostVerified };
 }
 
@@ -3295,6 +3299,21 @@ export async function sendPendingAttendanceRequests(): Promise<number> {
       AND u.email IS NOT NULL
       AND (u.banned IS NULL OR u.banned = 0)
       AND NOT EXISTS (SELECT 1 FROM attendance_requests a WHERE a.opportunityId = o.id)
+      -- Only events the tracker was actually used at.
+      --
+      -- Without this, the sweep's idea of "who came" is rosterFor(), which reads
+      -- the signups table -- the existing "I'm Interested" clicks. Every event
+      -- ever posted has those, including the years of them from before the
+      -- tracker existed, so merging this switched on would have emailed
+      -- organizations asking them to confirm attendance at events that were
+      -- never tracked, about people who only ever tapped a button. Verified: six
+      -- such emails on a database with real signups and no scans.
+      --
+      -- One scan is the whole test. An event somebody scanned into is an event
+      -- the tracker ran at, and the roster of who-signed-up-but-never-scanned is
+      -- then a real question worth asking the organizer. An event with no scans
+      -- has nothing to reconcile, so there is nothing to ask.
+      AND EXISTS (SELECT 1 FROM hour_logs h WHERE h.opportunityId = o.id)
   `).all(endedBefore, notBefore) as any[];
 
   let sent = 0;

@@ -105,9 +105,25 @@ async function checkAndNotify(): Promise<void> {
 }
 
 /** Call once at server startup to register the hourly interval. */
+/**
+ * Whether the attendance sweep may send anything at all.
+ *
+ * Off unless ATTENDANCE_SWEEP=on is set explicitly. This is a safety net that
+ * sits underneath the data-source fix in sendPendingAttendanceRequests, not
+ * instead of it: the sweep is the one job here that emails people who never
+ * asked us to, and the cost of it being wrong is an organization receiving mail
+ * about an event it does not recognise. A flag that has to be turned on by hand
+ * means a mistake in the query cannot reach anybody's inbox on deploy day.
+ *
+ * Anything other than the exact string 'on' leaves it off, so an empty value, a
+ * typo, or the variable being absent all fail closed.
+ */
+const ATTENDANCE_SWEEP_ENABLED = process.env.ATTENDANCE_SWEEP === 'on';
+
 /** Ask the host of every finished event who turned up. Runs on the same hourly
  *  tick as the reopen check -- one timer, not two. */
 async function askWhoCame(): Promise<void> {
+  if (!ATTENDANCE_SWEEP_ENABLED) return;
   try {
     const sent = await sendPendingAttendanceRequests();
     if (sent > 0) console.log(`[Scheduler] Attendance asked for ${sent} finished event(s).`);
@@ -122,8 +138,13 @@ export function startReopenScheduler(): void {
   // Then run every hour
   setInterval(checkAndNotify, 60 * 60 * 1000);
 
+  // Registered either way so the timer shape does not change with the flag,
+  // but askWhoCame returns immediately while it is off.
   askWhoCame();
   setInterval(askWhoCame, 60 * 60 * 1000);
+  console.log(ATTENDANCE_SWEEP_ENABLED
+    ? '[Scheduler] Attendance sweep is ON (ATTENDANCE_SWEEP=on).'
+    : '[Scheduler] Attendance sweep is OFF. Set ATTENDANCE_SWEEP=on to enable it.');
 
   // Clocks nobody scanned out of. A dead battery and a walk-out look identical
   // from here, so both get the posted length and both are flagged rather than
