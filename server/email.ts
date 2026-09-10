@@ -1,6 +1,9 @@
 const BREVO_API_KEY = process.env.BREVO_API_KEY || '';
 const FROM_EMAIL = process.env.EMAIL_FROM || 'linklocal2@gmail.com';
 const FROM_NAME = 'LocalLink';
+/** Replies to a one-to-one admin message should reach the admin, not a
+ *  no-reply box. Empty when unset, and then Reply-To is simply omitted. */
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || '';
 const APP_URL = process.env.APP_URL || 'http://localhost:5173';
 
 // Escape user-supplied values before interpolating into HTML email bodies —
@@ -95,7 +98,7 @@ function escapeHtml(s: string): string {
  */
 async function sendEmail(
   to: string, subject: string, html: string, text: string,
-  opts: { unsubscribeUrl?: string } = {}
+  opts: { unsubscribeUrl?: string; replyTo?: string } = {}
 ): Promise<void> {
   const headers: Record<string, string> = {};
   if (opts.unsubscribeUrl) {
@@ -121,7 +124,10 @@ async function sendEmail(
       // the whole request. Scoped this way the blast radius is the one email
       // that opted in; account verification and password resets keep the exact
       // payload shape that has been working in production all along.
-      ...(opts.unsubscribeUrl ? { replyTo: { email: FROM_EMAIL, name: FROM_NAME }, headers } : {}),
+      ...(opts.unsubscribeUrl ? { headers } : {}),
+      ...(opts.replyTo || opts.unsubscribeUrl
+        ? { replyTo: { email: opts.replyTo || FROM_EMAIL, name: FROM_NAME } }
+        : {}),
     }),
   });
   if (!res.ok) {
@@ -322,7 +328,7 @@ export async function sendVerifyThenSurveyEmail(
 }
 
 export async function sendOnboardingNudgeEmail(
-  email: string, username: string, unsubToken: string
+  email: string, username: string, unsubToken: string, personal = false
 ): Promise<void> {
   const usernameHtml = escapeHtml(username);
   const unsubUrl = `${APP_URL}/api/unsubscribe?token=${unsubToken}`;
@@ -330,6 +336,35 @@ export async function sendOnboardingNudgeEmail(
   // and hoping the modal fires. Survives a signed-out click: the flag is held
   // until they sign in.
   const surveyUrl = `${APP_URL}/?survey=1`;
+  // An admin pressing the envelope beside one name is writing to one person,
+  // and it should arrive looking like it. The campaign version below is the
+  // only email we send that carries List-Unsubscribe and
+  // List-Unsubscribe-Post: One-Click -- the headers Gmail reads as "this is a
+  // mailing list" -- wrapped in a branded card with a filled call-to-action
+  // button. That is a description of a promotion, so Gmail files it as one.
+  //
+  // This version drops all three: no header bar, no button, no list headers.
+  // Plain paragraphs, a plain link, and Reply-To pointing at the admin who
+  // sent it, so replying reaches a person. The unsubscribe link stays in the
+  // body -- the recipient keeps the same control, it just is not announced in
+  // the headers as bulk.
+  if (personal) {
+    await sendEmail(
+      email,
+      'Quick question about your LocalLink account',
+      `<div style="font-family:${BRAND.bodyFont};font-size:15px;line-height:1.6;color:${BRAND.ink}">
+        <p style="margin:0 0 14px">Hi ${usernameHtml},</p>
+        <p style="margin:0 0 14px">We added a short questionnaire after you joined LocalLink. It asks what kind of volunteering you enjoy, which towns work for you, and when you are usually free, so we can point out the opportunities that actually fit.</p>
+        <p style="margin:0 0 14px">It takes about a minute and every question is optional: <a href="${surveyUrl}">${surveyUrl}</a></p>
+        <p style="margin:0 0 14px">Thanks,<br>LocalLink</p>
+        <p style="margin:18px 0 0;font-size:12px;color:${BRAND.muted}">Do not want these? <a href="${unsubUrl}" style="color:${BRAND.muted}">Unsubscribe</a>.</p>
+      </div>`,
+      `Hi ${username},\n\nWe added a short questionnaire after you joined LocalLink. It asks what kind of volunteering you enjoy, which towns work for you, and when you are usually free, so we can point out the opportunities that actually fit.\n\nIt takes about a minute and every question is optional:\n${surveyUrl}\n\nThanks,\nLocalLink\n\nDo not want these? Unsubscribe: ${unsubUrl}`,
+      { replyTo: ADMIN_EMAIL || undefined },
+    );
+    return;
+  }
+
   await sendEmail(
     email,
     'A quick question about your volunteering',

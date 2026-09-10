@@ -1665,7 +1665,7 @@ router.post('/api/admin/users/:id/nudge', requireAdmin, async (req: Request, res
     }
     try {
       if (u.emailVerified) {
-        await sendOnboardingNudgeEmail(u.email, u.username, u.unsubToken || '');
+        await sendOnboardingNudgeEmail(u.email, u.username, u.unsubToken || '', true);
       } else {
         // Same reasoning as the bulk send: the survey link needs a session
         // they have never been able to get. Ask for the confirmation instead.
