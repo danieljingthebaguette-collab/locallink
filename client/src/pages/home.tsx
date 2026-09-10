@@ -971,7 +971,11 @@ export default function Home() {
                     )}>
                     {hasImage ? (
                       <div className="absolute inset-0">
-                        <img src={opp.image} alt={opp.title} className="w-full h-full transition-transform duration-500 group-hover:scale-105" style={imageTransformStyle(parseImageTransform(opp.cardObjectPosition))} />
+                        {/* The board is mostly below the fold and every tile was
+                            fetching its photo immediately -- the slowest thing on
+                            the page on a phone. The featured banner above stays
+                            eager, because that one IS on screen. */}
+                        <img src={opp.image} alt={opp.title} loading="lazy" decoding="async" className="w-full h-full transition-transform duration-500 group-hover:scale-105" style={imageTransformStyle(parseImageTransform(opp.cardObjectPosition))} />
                         <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent" />
                       </div>
                     ) : (
@@ -1115,10 +1119,14 @@ export default function Home() {
                           )}
                           <button
                             onClick={e => { e.stopPropagation(); navigate(`/org/${opp.hostId}`); }}
-                            className="text-[11px] opacity-70 font-medium hover:opacity-100 hover:underline transition-opacity text-left flex items-center gap-1.5 min-w-0 max-w-full"
+                            // 17px tall as inline text, well under the 44px tap
+                            // minimum -- the same fix the sort/town/field row
+                            // already carries. Negative margin keeps the taller
+                            // target from pushing the card's layout around.
+                            className="min-h-[44px] -my-2 py-2 text-[11px] opacity-70 font-medium hover:opacity-100 hover:underline transition-opacity text-left flex items-center gap-1.5 min-w-0 max-w-full"
                           >
                             {hostAvatars[opp.hostId] ? (
-                              <img src={hostAvatars[opp.hostId]!} alt="" className="w-4 h-4 rounded-full object-cover ring-1 ring-white/40 flex-shrink-0" />
+                              <img src={hostAvatars[opp.hostId]!} alt="" loading="lazy" decoding="async" className="w-4 h-4 rounded-full object-cover ring-1 ring-white/40 flex-shrink-0" />
                             ) : (
                               <span className="w-4 h-4 rounded-full bg-white/25 flex items-center justify-center text-[8px] font-bold flex-shrink-0">{opp.hostName.charAt(0).toUpperCase()}</span>
                             )}
