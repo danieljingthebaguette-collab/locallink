@@ -65,9 +65,33 @@ function safeJsonParse<T>(raw: string | null | undefined, fallback: T): T {
   try { return JSON.parse(raw) as T; } catch { return fallback; }
 }
 
-/** Attach validated tags JSON to an opportunity row */
-function withTags(opp: any, signups: string[] = []) {
-  return { ...opp, tags: safeJsonParse<string[]>(opp.tags, []), steps: safeJsonParse<string[]>(opp.steps, []), signups, hostVerified: !!opp.hostVerified };
+/**
+ * Attach validated tags JSON to an opportunity row, and turn the raw list of
+ * who signed up into the only two things anything actually reads off it: how
+ * many, and whether the person asking is one of them.
+ *
+ * Never the list itself. That list used to go out on every response this
+ * function touched, including the fully public ones -- so anyone, logged in
+ * or not, could read the raw user id of everyone interested in any post
+ * straight off the board. Chained with the (also public) user-profile
+ * lookup, that resolved to a username with zero authentication on either
+ * step. Most of this codebase's users are minors; "a stranger can learn a
+ * named minor's plans from the homepage" is not a theoretical finding.
+ *
+ * viewerId is deliberately optional and best-effort: on the routes that
+ * still require nobody at all (the public board, a single post, an org's
+ * page), it comes from optionalAuth, which only ever fills in the asker's
+ * OWN id from a token they chose to send. It never has anyone else's.
+ */
+function withTags(opp: any, signupIds: string[] = [], viewerId?: string | null) {
+  return {
+    ...opp,
+    tags: safeJsonParse<string[]>(opp.tags, []),
+    steps: safeJsonParse<string[]>(opp.steps, []),
+    signupCount: signupIds.length,
+    signedUpByMe: !!viewerId && signupIds.includes(viewerId),
+    hostVerified: !!opp.hostVerified,
+  };
 }
 
 /** Whether a volunteer is under 18, derived from the stored year every time
@@ -776,19 +800,34 @@ router.post('/api/me/onboarding/remind-later', requireAuth, (req: AuthRequest, r
 });
 
 // Public host profile — returns only username + profileImage, no auth required
+// Used for exactly one thing on the client: an org's avatar next to its
+// posts, for anyone browsing -- signed in or not. Both callers (the board's
+// card grid and the post detail modal) only ever pass a post's hostId, which
+// is always an organization, and an organization's identity is already
+// public everywhere else it appears (hostName on every post, /api/org/:id
+// with their email and phone). Requiring login here would only have cost
+// signed-out visitors their avatars for no privacy actually gained.
+//
+// It used to also answer for a VOLUNTEER's id, with nothing stopping it.
+// Chained with the public signups list this used to sit next to, that let
+// anyone turn a raw user id straight into a username with zero
+// authentication anywhere in the chain. This is the check that actually
+// closes that, and it does not depend on who is asking: a volunteer's id
+// gets the same 404 as one that does not exist at all, whether the request
+// is signed in or not -- so the response never confirms which case it was,
+// and there is no "authenticated but still not entitled" gap to find.
 router.get('/api/users/:id/profile', (req: Request, res: Response) => {
   try {
     const user = db.prepare(
       'SELECT username, profileImage, accountType, orgWebsite FROM users WHERE id = ?'
     ).get(req.params.id) as any;
-    if (!user) return res.status(404).json({ error: 'User not found' });
-    // orgWebsite only for organizations — it is already public on their own
-    // profile page, but this endpoint answers for volunteers too and their
-    // row should not start carrying fields that only mean something for orgs.
+    if (!user || user.accountType !== 'organization') {
+      return res.status(404).json({ error: 'User not found' });
+    }
     return res.json({
       username: user.username,
       profileImage: user.profileImage || null,
-      orgWebsite: user.accountType === 'organization' ? (user.orgWebsite || null) : null,
+      orgWebsite: user.orgWebsite || null,
     });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
@@ -796,7 +835,7 @@ router.get('/api/users/:id/profile', (req: Request, res: Response) => {
 });
 
 // Public org profile page — returns org info + all approved posts
-router.get('/api/org/:id', (req: Request, res: Response) => {
+router.get('/api/org/:id', optionalAuth, (req: AuthRequest, res: Response) => {
   try {
     const user = db.prepare(
       'SELECT id, username, profileImage, accountType, orgDescription, orgWebsite, orgEmail, orgPhone, verified, createdAt FROM users WHERE id = ? AND accountType = ?'
@@ -808,7 +847,7 @@ router.get('/api/org/:id', (req: Request, res: Response) => {
     ).all(req.params.id) as any[];
     const getSignups = db.prepare('SELECT userId FROM signups WHERE opportunityId = ?');
     const postsWithData = posts.map(opp =>
-      withTags(opp, (getSignups.all(opp.id) as any[]).map((s: any) => s.userId))
+      withTags(opp, (getSignups.all(opp.id) as any[]).map((s: any) => s.userId), req.userId)
     );
 
     return res.json({
@@ -824,7 +863,7 @@ router.get('/api/org/:id', (req: Request, res: Response) => {
 
 // ===== OPPORTUNITIES =====
 
-router.get('/api/opportunities', (_req: Request, res: Response) => {
+router.get('/api/opportunities', optionalAuth, (req: AuthRequest, res: Response) => {
   try {
     // Public feed: only show approved posts, join with users to get hostVerified
     const opportunities = db.prepare(
@@ -832,7 +871,7 @@ router.get('/api/opportunities', (_req: Request, res: Response) => {
     ).all() as any[];
     const getSignups = db.prepare('SELECT userId FROM signups WHERE opportunityId = ?');
     const result = opportunities.map(opp =>
-      withTags(opp, (getSignups.all(opp.id) as any[]).map((s: any) => s.userId))
+      withTags(opp, (getSignups.all(opp.id) as any[]).map((s: any) => s.userId), req.userId)
     );
     return res.json(result);
   } catch (err: any) {
@@ -840,7 +879,7 @@ router.get('/api/opportunities', (_req: Request, res: Response) => {
   }
 });
 
-router.get('/api/opportunities/:id', (req: Request, res: Response) => {
+router.get('/api/opportunities/:id', optionalAuth, (req: AuthRequest, res: Response) => {
   try {
     // JOIN on users to get hostVerified — same as the main feed query so the badge is consistent
     const opp = db.prepare(
@@ -848,7 +887,7 @@ router.get('/api/opportunities/:id', (req: Request, res: Response) => {
     ).get(req.params.id) as any;
     if (!opp) return res.status(404).json({ error: 'Opportunity not found' });
     const signups = db.prepare('SELECT userId FROM signups WHERE opportunityId = ?').all(opp.id).map((s: any) => s.userId);
-    return res.json(withTags(opp, signups));
+    return res.json(withTags(opp, signups, req.userId));
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
@@ -862,7 +901,7 @@ router.get('/api/my-posts', requireAuth, (req: AuthRequest, res: Response) => {
     ).all(req.userId!) as any[];
     const getSignups = db.prepare('SELECT userId FROM signups WHERE opportunityId = ?');
     const result = posts.map(opp =>
-      withTags(opp, (getSignups.all(opp.id) as any[]).map((s: any) => s.userId))
+      withTags(opp, (getSignups.all(opp.id) as any[]).map((s: any) => s.userId), req.userId)
     );
     return res.json(result);
   } catch (err: any) {
@@ -948,7 +987,7 @@ router.post('/api/opportunities', requireAuth, (req: AuthRequest, res: Response)
     ).run(id, title, description, category, location, town, date, duration, resolvedSpots, resolvedSpots, resolvedSpotsType, image || null, hostId, hostUser?.username || 'Unknown', tagsJson, stepsJson, createdAt, isRecurring ? 1 : 0, recurringDay ?? null, recurringTime ?? null, status, trimmedSignupUrl || null, req.body.adultsOnly ? 1 : 0);
 
     const opp = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(id) as any;
-    return res.status(201).json(withTags(opp, []));
+    return res.status(201).json(withTags(opp, [], req.userId));
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
@@ -1015,7 +1054,7 @@ router.post('/api/opportunities/:id/signup', requireAuth, async (req: AuthReques
 
     const updated = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(oppId) as any;
     const signups = db.prepare('SELECT userId FROM signups WHERE opportunityId = ?').all(oppId).map((s: any) => s.userId);
-    return res.json(withTags(updated, signups));
+    return res.json(withTags(updated, signups, req.userId));
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
@@ -1048,7 +1087,7 @@ router.delete('/api/opportunities/:id/signup', requireAuth, (req: AuthRequest, r
 
     const updated = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(oppId) as any;
     const signups = db.prepare('SELECT userId FROM signups WHERE opportunityId = ?').all(oppId).map((s: any) => s.userId);
-    return res.json(withTags(updated, signups));
+    return res.json(withTags(updated, signups, req.userId));
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
@@ -1180,7 +1219,7 @@ router.put('/api/opportunities/:id', requireAuth, (req: AuthRequest, res: Respon
 
     const updated = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(oppId) as any;
     const signups = db.prepare('SELECT userId FROM signups WHERE opportunityId = ?').all(oppId).map((s: any) => s.userId);
-    return res.json(withTags(updated, signups));
+    return res.json(withTags(updated, signups, req.userId));
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
@@ -2096,7 +2135,7 @@ router.post('/api/auth/mark-welcome-seen', requireAuth, (req: AuthRequest, res: 
   }
 });
 
-router.get('/api/featured-posts', (_req: Request, res: Response) => {
+router.get('/api/featured-posts', optionalAuth, (req: AuthRequest, res: Response) => {
   try {
     let posts = db.prepare(
       "SELECT * FROM opportunities WHERE status = 'approved' AND isFeatured = 1 ORDER BY createdAt DESC"
@@ -2108,7 +2147,7 @@ router.get('/api/featured-posts', (_req: Request, res: Response) => {
     }
     const getSignups = db.prepare('SELECT userId FROM signups WHERE opportunityId = ?');
     const result = posts.map(opp =>
-      withTags(opp, (getSignups.all(opp.id) as any[]).map((s: any) => s.userId))
+      withTags(opp, (getSignups.all(opp.id) as any[]).map((s: any) => s.userId), req.userId)
     );
     return res.json(result);
   } catch (err: any) {

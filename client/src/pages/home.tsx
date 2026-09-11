@@ -322,7 +322,7 @@ export default function Home() {
   // ── Helpers ────────────────────────────────────────────────────────
   const formatDate = (d: string) => new Date(d).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
   const formatTime = (d: string) => new Date(d).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-  const isInterested = (opp: Opportunity) => currentUser ? opp.signups.includes(currentUser.id) : false;
+  const isInterested = (opp: Opportunity) => currentUser ? opp.signedUpByMe : false;
 
   const DAY_FULL  = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   const DAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -353,7 +353,7 @@ export default function Home() {
 
   // Always shows how many people have expressed interest — independent of spot count.
   const getInterestedDisplay = (opp: Opportunity) =>
-    `${opp.signups.length} interested`;
+    `${opp.signupCount} interested`;
 
   // ── Open create modal with guard ───────────────────────────────────
   const openCreateModal = () => {
@@ -918,7 +918,7 @@ export default function Home() {
                   opp.pinnedSize === 'large'  ? 30 :
                   opp.pinnedSize === 'medium' ? 15 :
                   opp.pinnedSize === 'small'  ?  0 :
-                  Math.max(opp.popularity, opp.signups.length);
+                  Math.max(opp.popularity, opp.signupCount);
                 // Only the full 2x2 tile carries the description and the host /
                 // location / duration footer. The 2x1 and 1x1 stop at category,
                 // title, tags and the recurring slot.
@@ -1141,9 +1141,9 @@ export default function Home() {
                               </div>
                             ) : <span />}
                             {/* Interest heat bar — width grows as more people show interest */}
-                            {opp.signups.length > 0 && (() => {
+                            {opp.signupCount > 0 && (() => {
                               const cap = opp.spots > 0 && opp.spotsType === 'limited' ? opp.spots : 30;
-                              const pct = Math.min((opp.signups.length / cap) * 100, 100);
+                              const pct = Math.min((opp.signupCount / cap) * 100, 100);
                               return (
                                 <div className="w-12 h-1.5 rounded-full bg-white/20 overflow-hidden">
                                   <div className="h-full rounded-full bg-green-400/80 transition-all duration-700" style={{ width: `${pct}%` }} />
@@ -1682,7 +1682,7 @@ export default function Home() {
                         onClick={() => toggleInterestedList(selectedCard.id)}
                         className="w-full rounded-2xl py-3 font-semibold transition-colors border border-white/40 text-white text-lg bg-white/20 hover:bg-white/30 flex items-center justify-center gap-2">
                         <Users className="w-5 h-5" />
-                        {showInterestedList ? 'Hide' : 'View'} Interested ({selectedCard.signups.length})
+                        {showInterestedList ? 'Hide' : 'View'} Interested ({selectedCard.signupCount})
                         <ChevronDown className={cn("w-4 h-4 transition-transform duration-200", showInterestedList && "rotate-180")} />
                       </button>
                       <AnimatePresence>
@@ -1726,8 +1726,7 @@ export default function Home() {
                     <>
                       {/* Interest count — spots are informational only, never block interest */}
                       {(() => {
-                        const { signups: sups } = selectedCard;
-                        const count = sups.length;
+                        const count = selectedCard.signupCount;
                         return (
                           <p className="text-white/60 text-sm text-center mb-4">
                             {count === 0 ? 'Be the first to show interest' : `${count} ${count === 1 ? 'person' : 'people'} interested`}

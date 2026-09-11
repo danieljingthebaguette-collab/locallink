@@ -687,10 +687,10 @@ function OverviewTab({ stats, users, opportunities }: { stats: any; users: AppUs
               </div>
               <div className="text-xs text-muted-foreground">
                 {opp.spotsType === 'unlimited'
-                  ? `${opp.signups.length} interested · Unlimited`
+                  ? `${opp.signupCount} interested · Unlimited`
                   : opp.spotsType === 'none' || opp.spots === 0
-                  ? `${opp.signups.length} interested · No cap`
-                  : `${opp.signups.length}/${opp.spots} interested${opp.signups.length >= opp.spots ? ' · Full' : ''}`}
+                  ? `${opp.signupCount} interested · No cap`
+                  : `${opp.signupCount}/${opp.spots} interested${opp.signupCount >= opp.spots ? ' · Full' : ''}`}
               </div>
             </div>
           ))}
@@ -1214,7 +1214,7 @@ function OpportunitiesTab({
                   <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
                     <span>{opp.location}</span>
                     <span>·</span>
-                    <span>{opp.signups.length} interested</span>
+                    <span>{opp.signupCount} interested</span>
                     <span>·</span>
                     <span>{opp.duration}h</span>
                   </div>

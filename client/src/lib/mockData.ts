@@ -70,7 +70,14 @@ export interface Opportunity {
   image?: string;
   hostId: string;
   hostName: string;
-  signups: string[];
+  // The server used to send the raw list of who signed up on every public
+  // response -- the board, a single post, an org's page -- so anyone reading
+  // it, logged in or not, had everyone's user id. Chained with the also-public
+  // profile lookup, that resolved straight to a username. Replaced with just
+  // what any UI here actually reads off it: how many, and whether the
+  // person asking is one of them.
+  signupCount: number;
+  signedUpByMe: boolean;
   popularity: number;
   tags: string[];
   createdAt: string;

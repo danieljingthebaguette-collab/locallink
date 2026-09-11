@@ -319,8 +319,8 @@ interface OpportunitiesState {
   getFiltered: () => Opportunity[];
   fetchOpportunities: () => Promise<void>;
   fetchMyPosts: () => Promise<void>;
-  addOpportunity: (opp: Omit<Opportunity, 'id' | 'createdAt' | 'signups' | 'popularity'> & { hasSignupPage: boolean }) => Promise<Opportunity | null>;
-  updateOpportunity: (oppId: string, data: Partial<Omit<Opportunity, 'id' | 'createdAt' | 'signups' | 'popularity' | 'hostId' | 'hostName'>>) => Promise<boolean>;
+  addOpportunity: (opp: Omit<Opportunity, 'id' | 'createdAt' | 'signupCount' | 'signedUpByMe' | 'popularity'> & { hasSignupPage: boolean }) => Promise<Opportunity | null>;
+  updateOpportunity: (oppId: string, data: Partial<Omit<Opportunity, 'id' | 'createdAt' | 'signupCount' | 'signedUpByMe' | 'popularity' | 'hostId' | 'hostName'>>) => Promise<boolean>;
   deleteOwnOpportunity: (oppId: string) => Promise<boolean>;
   signup: (oppId: string, userId: string) => Promise<{ success: boolean; error?: string }>;
   cancelSignup: (oppId: string, userId: string) => Promise<boolean>;
@@ -442,7 +442,10 @@ export const useOpportunitiesStore = create<OpportunitiesState>((set, get) => ({
     if (get().loaded) return;
     set({ loading: true });
     try {
-      const res = await fetch(`${API}/opportunities`);
+      // Sent so the server can fill in signedUpByMe for whoever this is --
+      // it never had a reason to before, since that used to come from the
+      // raw list this response carried for everyone.
+      const res = await fetch(`${API}/opportunities`, { headers: getAuthHeaders() });
       if (res.ok) {
         const data = await res.json();
         set({ opportunities: data, loading: false, loaded: true });
@@ -571,8 +574,12 @@ export const useOpportunitiesStore = create<OpportunitiesState>((set, get) => ({
     } catch { return false; }
   },
 
-  getSignedUpEvents: (userId) => {
-    return get().opportunities.filter(o => o.signups.includes(userId));
+  // userId is kept in the signature for callers, but signedUpByMe is already
+  // computed server-side for whichever token was sent -- there is no longer
+  // a raw list here to check an arbitrary id against, and both real callers
+  // only ever pass the current user's own id anyway.
+  getSignedUpEvents: (_userId) => {
+    return get().opportunities.filter(o => o.signedUpByMe);
   },
 
   getHostedEvents: (userId) => {

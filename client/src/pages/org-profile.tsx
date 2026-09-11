@@ -165,7 +165,7 @@ export default function OrgProfilePage() {
                 </div>
                 <div className="text-center">
                   <p className="text-lg font-bold text-foreground">
-                    {org.posts.reduce((sum, p) => sum + (p.signups?.length || 0), 0)}
+                    {org.posts.reduce((sum, p) => sum + (p.signupCount || 0), 0)}
                   </p>
                   <p className="text-[10px] text-muted-foreground font-medium">Interested</p>
                 </div>
@@ -299,7 +299,7 @@ function PostCard({ post, idx, formatDate, past = false }: { post: Opportunity; 
           </span>
           <span className="flex items-center gap-1">
             <Users className="w-3 h-3" />
-            {post.signups?.length || 0} interested
+            {post.signupCount || 0} interested
           </span>
         </div>
       </div>
