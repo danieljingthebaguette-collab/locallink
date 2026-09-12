@@ -1231,13 +1231,26 @@ export default function Home() {
               aria-label={selectedCard.title}
               className={cn("rounded-3xl w-full max-w-3xl overflow-hidden border-2 border-white/20 shadow-md max-h-[90vh] flex flex-col focus:outline-none", getModalGradient(selectedCard.category))}>
 
-              {/* Modal header image area */}
-              <div className="relative h-48 md:h-64 overflow-hidden flex-shrink-0">
+              {/* Modal header image area.
+                  h-48/h-64 used to be a hard cap: the title lived in an
+                  absolutely-positioned overlay (inset-0), which sizes itself
+                  from the box rather than the other way around, so a title
+                  long enough to wrap past that cap had nowhere to go but
+                  up and out through the top -- clipped by this div's own
+                  overflow-hidden, with no scroll that could ever reach it.
+                  min-h is a floor instead of a ceiling: the title is now a
+                  normal-flow child (mt-auto to still sit at the bottom), so
+                  its real height feeds back into the flex column and the
+                  box grows to fit it, at any length, at any width. The
+                  image stays object-fit:cover behind it regardless -- a
+                  taller box just crops a narrower vertical slice of the
+                  same photo, never stretches it. */}
+              <div className="relative min-h-48 md:min-h-64 overflow-hidden flex-shrink-0 flex flex-col">
                 {selectedCard.image ? (
                   <><img src={selectedCard.image} alt={selectedCard.title} className="absolute inset-0 w-full h-full" style={imageTransformStyle(parseImageTransform(selectedCard.modalObjectPosition))} />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" /></>
                 ) : <div className="absolute inset-0 opacity-30" />}
-                <div className="absolute inset-0 flex items-end p-6 md:p-8 justify-between gap-3">
+                <div className="relative mt-auto flex items-end p-6 md:p-8 justify-between gap-3">
                   <motion.h2
                     initial={{ opacity: 0, y: 12 }}
                     animate={{ opacity: 1, y: 0 }}
