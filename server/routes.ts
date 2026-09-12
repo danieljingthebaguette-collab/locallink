@@ -66,11 +66,24 @@ function safeJsonParse<T>(raw: string | null | undefined, fallback: T): T {
 }
 
 /**
- * Attach validated tags JSON to an opportunity row, and turn the raw list of
- * who signed up into the only two things anything actually reads off it: how
+ * Shape an opportunity row for a response, and turn the raw list of who
+ * signed up into the only two things anything actually reads off it: how
  * many, and whether the person asking is one of them.
  *
- * Never the list itself. That list used to go out on every response this
+ * An explicit list of fields, not `...opp`. A spread was a complete
+ * passthrough: every column this table has ever gained, and every one it
+ * ever will, went out in full to whoever asked -- including the fully public
+ * routes, no exceptions, forever. Harmless only because nothing sensitive
+ * happened to live on this row yet. The list below is every field a real
+ * client caller reads off a fetched opportunity, checked against actual
+ * usage across home.tsx, store.ts, admin.tsx, org-profile.tsx and everywhere
+ * else in the client -- not copied from the schema. Two real columns did not
+ * make it: adultsOnly and spotsRemaining are written when a post is created
+ * but never read back from a fetched one anywhere in the client, so they are
+ * not here. Add a column, and it stays invisible until someone deliberately
+ * adds it below -- the opposite of how this worked before.
+ *
+ * Never the raw signup list. That used to go out on every response this
  * function touched, including the fully public ones -- so anyone, logged in
  * or not, could read the raw user id of everyone interested in any post
  * straight off the board. Chained with the (also public) user-profile
@@ -85,7 +98,31 @@ function safeJsonParse<T>(raw: string | null | undefined, fallback: T): T {
  */
 function withTags(opp: any, signupIds: string[] = [], viewerId?: string | null) {
   return {
-    ...opp,
+    id: opp.id,
+    title: opp.title,
+    description: opp.description,
+    category: opp.category,
+    location: opp.location,
+    town: opp.town,
+    date: opp.date,
+    duration: opp.duration,
+    spots: opp.spots,
+    spotsType: opp.spotsType,
+    image: opp.image,
+    hostId: opp.hostId,
+    hostName: opp.hostName,
+    popularity: opp.popularity,
+    createdAt: opp.createdAt,
+    isAvailable: opp.isAvailable,
+    isRecurring: opp.isRecurring,
+    recurringDay: opp.recurringDay,
+    recurringTime: opp.recurringTime,
+    pinnedSize: opp.pinnedSize,
+    cardObjectPosition: opp.cardObjectPosition,
+    modalObjectPosition: opp.modalObjectPosition,
+    status: opp.status,
+    isFeatured: opp.isFeatured,
+    externalSignupUrl: opp.externalSignupUrl,
     tags: safeJsonParse<string[]>(opp.tags, []),
     steps: safeJsonParse<string[]>(opp.steps, []),
     signupCount: signupIds.length,
