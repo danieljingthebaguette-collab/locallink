@@ -394,7 +394,7 @@ export default function Navigation() {
                   </span>
                 )}
               </span>
-              <span className="text-[10px] font-medium">Alerts</span>
+              <span className="text-xs font-medium">Alerts</span>
             </button>
           )}
 
@@ -408,7 +408,7 @@ export default function Navigation() {
               )}
             >
               <Shield className="w-5 h-5" />
-              <span className="text-[10px] font-medium">Admin</span>
+              <span className="text-xs font-medium">Admin</span>
             </button>
           )}
         </div>

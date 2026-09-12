@@ -1263,6 +1263,7 @@ export default function Home() {
                     <button
                       onClick={() => handleShare(selectedCard.id)}
                       className="p-2 rounded-md bg-white/20 hover:bg-white/30 text-white transition-colors"
+                      aria-label="Copy link"
                       title="Copy link">
                       <Share2 className="w-4 h-4" />
                     </button>
@@ -1271,11 +1272,12 @@ export default function Home() {
                       <button
                         onClick={() => showEditForm ? setShowEditForm(false) : openEditForm(selectedCard)}
                         className="p-2 rounded-md bg-white/20 hover:bg-white/30 text-white transition-colors"
+                        aria-label="Edit post"
                         title="Edit post">
                         <Edit3 className="w-4 h-4" />
                       </button>
                     )}
-                    <button onClick={handleCloseModal} className="p-2 rounded-md bg-white/20 hover:bg-white/30 text-white transition-colors text-lg leading-none">
+                    <button onClick={handleCloseModal} aria-label="Close" className="p-2 rounded-md bg-white/20 hover:bg-white/30 text-white transition-colors text-lg leading-none">
                       <X className="w-4 h-4" />
                     </button>
                   </div>
@@ -1537,7 +1539,7 @@ export default function Home() {
                       <div className="flex items-center gap-1.5">
                         <button
                           onClick={() => { setSelectedCard(null); navigate(`/org/${selectedCard.hostId}`); }}
-                          className="text-base font-semibold truncate hover:underline text-left"
+                          className="min-h-[44px] flex items-center text-base font-semibold truncate hover:underline text-left"
                         >
                           {selectedCard.hostName}
                         </button>
