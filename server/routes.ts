@@ -1068,26 +1068,23 @@ router.post('/api/opportunities/:id/signup', requireAuth, async (req: AuthReques
     db.prepare('INSERT INTO signups (opportunityId, userId, createdAt) VALUES (?, ?, ?)').run(oppId, userId, new Date().toISOString());
     // Increment popularity
     db.prepare('UPDATE opportunities SET popularity = popularity + 1 WHERE id = ?').run(oppId);
-    // Notify the host that someone is interested (only if host has opted in; skip own signups)
+    // Notify the host that someone is interested -- in-app and email both,
+    // gated by the same opt-in (skip own signups). These used to be two
+    // separate host lookups with the email one ignoring the setting
+    // entirely, so turning the toggle off silently didn't stop the email.
     if (opp.hostId !== userId) {
-      const host = db.prepare('SELECT id, notifyOnInterest FROM users WHERE id = ?').get(opp.hostId) as any;
+      const host = db.prepare('SELECT id, email, username, notifyOnInterest FROM users WHERE id = ?').get(opp.hostId) as any;
       if (host?.notifyOnInterest) {
         const volunteer = db.prepare('SELECT username FROM users WHERE id = ?').get(userId) as any;
         const volunteerName = volunteer?.username || 'Someone';
         db.prepare('INSERT INTO notifications (id, userId, type, message, postId, read, createdAt) VALUES (?, ?, ?, ?, ?, 0, ?)').run(
           randomUUID(), opp.hostId, 'interest', `${volunteerName} is interested in "${opp.title}"`, oppId, new Date().toISOString()
         );
+        try {
+          await sendSignupNotificationEmail(host.email, host.username, volunteerName, opp.title);
+        } catch { /* email errors are non-fatal */ }
       }
     }
-
-    // Send signup notification email to org host
-    try {
-      const hostForEmail = db.prepare('SELECT email, username FROM users WHERE id = ?').get(opp.hostId) as any;
-      if (hostForEmail && opp.hostId !== userId) {
-        const volUser = db.prepare('SELECT username FROM users WHERE id = ?').get(userId) as any;
-        await sendSignupNotificationEmail(hostForEmail.email, hostForEmail.username, volUser?.username || 'Someone', opp.title);
-      }
-    } catch { /* email errors are non-fatal */ }
 
     const updated = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(oppId) as any;
     const signups = db.prepare('SELECT userId FROM signups WHERE opportunityId = ?').all(oppId).map((s: any) => s.userId);

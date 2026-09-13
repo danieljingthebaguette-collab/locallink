@@ -132,6 +132,16 @@ export default function Profile() {
     }
   };
 
+  const handleToggleNotifyOnInterest = async () => {
+    const newValue = !(currentUser.notifyOnInterest ?? true);
+    const result = await updateProfile({ notifyOnInterest: newValue });
+    if (result.success) {
+      toast({ title: newValue ? 'Interest notifications enabled' : 'Interest notifications disabled' });
+    } else {
+      toast({ title: result.error || 'Failed to update setting', variant: 'destructive' });
+    }
+  };
+
   const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!fileInputRef.current) return;
@@ -579,6 +589,33 @@ export default function Profile() {
               />
             </button>
           </div>
+
+          {/* Interest notifications — organizations only */}
+          {currentUser.accountType === 'organization' && (
+            <div className="flex items-center justify-between py-2 border-t border-border mt-2 pt-4">
+              <div className="flex-1 pr-4">
+                <p className="text-sm font-semibold text-foreground">Notify me when someone expresses interest</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Get a bell notification and an email when a volunteer taps "I'm Interested" on one of your posts
+                </p>
+              </div>
+              <button
+                onClick={handleToggleNotifyOnInterest}
+                title={(currentUser.notifyOnInterest ?? true) ? 'Disable interest notifications' : 'Enable interest notifications'}
+                className={cn(
+                  'relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none',
+                  (currentUser.notifyOnInterest ?? true) ? 'bg-primary' : 'bg-muted-foreground/30'
+                )}
+              >
+                <span
+                  className={cn(
+                    'inline-block h-4 w-4 rounded-full bg-white shadow transition-transform',
+                    (currentUser.notifyOnInterest ?? true) ? 'translate-x-6' : 'translate-x-1'
+                  )}
+                />
+              </button>
+            </div>
+          )}
 
           {/* Email reminder toggle — volunteers only */}
           {currentUser.accountType === 'volunteer' && (

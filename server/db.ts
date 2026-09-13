@@ -262,12 +262,6 @@ try {
   db.exec('ALTER TABLE users ADD COLUMN fullName TEXT DEFAULT NULL');
 }
 
-// One-time backfill: notifyOnInterest shipped defaulting to 0 with no UI
-// toggle, so in-app interest notifications never fired for anyone. New
-// registrations now insert 1 explicitly; flip existing rows too. Idempotent,
-// safe to run every boot. Remove once a user-facing toggle ships.
-db.exec("UPDATE users SET notifyOnInterest = 1 WHERE notifyOnInterest = 0 OR notifyOnInterest IS NULL");
-
 // Migrate: add notifyOnReopen column to users if it doesn't exist yet (default 1 = opted in)
 try {
   db.prepare('SELECT notifyOnReopen FROM users LIMIT 1').get();
