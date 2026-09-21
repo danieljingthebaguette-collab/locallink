@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useLocation, Redirect } from 'wouter';
+import { useState, useEffect } from 'react';
+import { useLocation, useSearch, Redirect } from 'wouter';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -23,8 +23,18 @@ export default function Account() {
   // ?signup=1 opens straight on the register tab -- what the header's Sign Up
   // button links to, so it lands people on the form they asked for rather than
   // on Login with a "Sign Up" link to find underneath it.
-  const wantsSignup = new URLSearchParams(window.location.search).get('signup') === '1';
+  const search = useSearch();
+  const wantsSignup = new URLSearchParams(search).get('signup') === '1';
   const [isLoginMode, setIsLoginMode] = useState(!joinPrefill && !wantsSignup);
+  // The header's Login/Sign Up buttons both navigate to this same /account
+  // path with only the query string differing, so wouter's useLocation()
+  // (path-only) never re-renders this component for them -- isLoginMode was
+  // only ever set from the query once, at mount. useSearch() is reactive;
+  // re-sync whenever the query actually changes so clicking the other header
+  // button while already here works the first time.
+  useEffect(() => {
+    if (!joinPrefill) setIsLoginMode(!wantsSignup);
+  }, [wantsSignup, joinPrefill]);
   // Google verified who they are, but cannot tell us their account type or
   // their age — and we need the year for the 13+ floor.
   const [googleProfile, setGoogleProfile] = useState<{ credential: string; email: string; name: string | null } | null>(null);
