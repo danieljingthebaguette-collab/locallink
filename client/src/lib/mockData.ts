@@ -113,6 +113,10 @@ export interface AppUser {
   orgWebsite?: string | null;
   orgEmail?: string | null;
   orgPhone?: string | null;
+  // Which FIELD_TAGS categories describe this organization's own focus --
+  // same vocabulary as a post's field and a volunteer's onboarding
+  // interests, so all three stay directly comparable.
+  orgFieldTags?: string[] | null;
   emailReminders?: boolean;
   hasSeenWelcome?: boolean;
   unsubToken?: string | null;

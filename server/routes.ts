@@ -503,7 +503,7 @@ router.post('/api/auth/login', async (req: Request, res: Response) => {
     // derive "under 18" for organizations, and this payload gets persisted
     // to localStorage by the client.
     const { password: _pwd, birthYear: _by, ...safeUser } = user;
-    return res.json({ ...safeUser, isAdmin: !!user.isAdmin, emailVerified: true, notifyOnInterest: !!user.notifyOnInterest, notifyOnReopen: user.notifyOnReopen !== 0, profileImage: user.profileImage || null, emailReminders: !!user.emailReminders, hasSeenWelcome: !!user.hasSeenWelcome, verified: !!user.verified, ...onboardingFields(user), token });
+    return res.json({ ...safeUser, isAdmin: !!user.isAdmin, emailVerified: true, notifyOnInterest: !!user.notifyOnInterest, notifyOnReopen: user.notifyOnReopen !== 0, profileImage: user.profileImage || null, emailReminders: !!user.emailReminders, hasSeenWelcome: !!user.hasSeenWelcome, verified: !!user.verified, orgFieldTags: safeJsonParse(user.orgFieldTags, []), ...onboardingFields(user), token });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
@@ -547,6 +547,7 @@ router.get('/api/auth/verify-email', (req: Request, res: Response) => {
       profileImage: user.profileImage || null,
       emailReminders: !!user.emailReminders,
       hasSeenWelcome: !!user.hasSeenWelcome,
+      orgFieldTags: safeJsonParse(user.orgFieldTags, []),
       ...onboardingFields(user),
     });
   } catch (err: any) {
@@ -632,7 +633,7 @@ router.post('/api/auth/reset-password', async (req: Request, res: Response) => {
 // Edit profile (username and/or password and/or notification settings and/or profile image)
 router.put('/api/auth/profile', requireAuth, async (req: AuthRequest, res: Response) => {
   try {
-    const { username, currentPassword, newPassword, notifyOnInterest, notifyOnReopen, profileImage, orgDescription, orgWebsite, orgEmail, orgPhone, emailReminders, accountType } = req.body;
+    const { username, currentPassword, newPassword, notifyOnInterest, notifyOnReopen, profileImage, orgDescription, orgWebsite, orgEmail, orgPhone, orgFieldTags, emailReminders, accountType } = req.body;
     const userId = req.userId!;
 
     const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId) as any;
@@ -701,12 +702,22 @@ router.put('/api/auth/profile', requireAuth, async (req: AuthRequest, res: Respo
       db.prepare('UPDATE users SET orgPhone = ? WHERE id = ?').run(orgPhone || null, userId);
     }
 
+    // Whitelisted against the real tag list rather than trusted as free text --
+    // same reasoning as the onboarding questionnaire's interests: an org's own
+    // category can never be something no post could also be filed under.
+    if (orgFieldTags !== undefined) {
+      const cleanTags = Array.isArray(orgFieldTags)
+        ? [...new Set(orgFieldTags.filter((t: unknown) => typeof t === 'string' && (VALID_FIELD_TAGS as readonly string[]).includes(t)))]
+        : [];
+      db.prepare('UPDATE users SET orgFieldTags = ? WHERE id = ?').run(JSON.stringify(cleanTags), userId);
+    }
+
     if (typeof emailReminders === 'boolean') {
       db.prepare('UPDATE users SET emailReminders = ? WHERE id = ?').run(emailReminders ? 1 : 0, userId);
     }
 
     const updated = db.prepare(
-      'SELECT id, username, email, isAdmin, emailVerified, accountType, notifyOnInterest, notifyOnReopen, profileImage, orgDescription, orgWebsite, orgEmail, orgPhone, emailReminders, hasSeenWelcome, verified, createdAt, onboardingHoursSoFar, onboardingInterests, onboardingMajors, onboardingGoalHours, onboardingGoalEvents, onboardingTowns, onboardingAvailability, onboardingCompletedAt FROM users WHERE id = ?'
+      'SELECT id, username, email, isAdmin, emailVerified, accountType, notifyOnInterest, notifyOnReopen, profileImage, orgDescription, orgWebsite, orgEmail, orgPhone, orgFieldTags, emailReminders, hasSeenWelcome, verified, createdAt, onboardingHoursSoFar, onboardingInterests, onboardingMajors, onboardingGoalHours, onboardingGoalEvents, onboardingTowns, onboardingAvailability, onboardingCompletedAt FROM users WHERE id = ?'
     ).get(userId) as any;
     return res.json({
       ...updated,
@@ -718,6 +729,7 @@ router.put('/api/auth/profile', requireAuth, async (req: AuthRequest, res: Respo
       emailReminders: !!updated.emailReminders,
       hasSeenWelcome: !!updated.hasSeenWelcome,
       verified: !!updated.verified,
+      orgFieldTags: safeJsonParse(updated.orgFieldTags, []),
       ...onboardingFields(updated),
     });
   } catch (err: any) {
@@ -875,7 +887,7 @@ router.get('/api/users/:id/profile', (req: Request, res: Response) => {
 router.get('/api/org/:id', optionalAuth, (req: AuthRequest, res: Response) => {
   try {
     const user = db.prepare(
-      'SELECT id, username, profileImage, accountType, orgDescription, orgWebsite, orgEmail, orgPhone, verified, createdAt FROM users WHERE id = ? AND accountType = ?'
+      'SELECT id, username, profileImage, accountType, orgDescription, orgWebsite, orgEmail, orgPhone, orgFieldTags, verified, createdAt FROM users WHERE id = ? AND accountType = ?'
     ).get(req.params.id, 'organization') as any;
     if (!user) return res.status(404).json({ error: 'Organization not found' });
 
@@ -891,6 +903,7 @@ router.get('/api/org/:id', optionalAuth, (req: AuthRequest, res: Response) => {
       ...user,
       profileImage: user.profileImage || null,
       verified: !!user.verified,
+      orgFieldTags: safeJsonParse(user.orgFieldTags, []),
       posts: postsWithData,
     });
   } catch (err: any) {
@@ -1355,7 +1368,7 @@ router.get('/api/admin/users', requireAdmin, (_req: Request, res: Response) => {
     // want -- onboardingFields() parses them the same way every other
     // user-facing response does, rather than a second ad-hoc shape here.
     const users = db.prepare(
-      `SELECT id, username, email, isAdmin, accountType, banned, verified, createdAt,
+      `SELECT id, username, email, isAdmin, accountType, banned, verified, createdAt, orgFieldTags,
               onboardingHoursSoFar, onboardingInterests, onboardingMajors,
               onboardingGoalHours, onboardingGoalEvents, onboardingTowns,
               onboardingAvailability, onboardingCompletedAt
@@ -1363,6 +1376,7 @@ router.get('/api/admin/users', requireAdmin, (_req: Request, res: Response) => {
     ).all();
     return res.json((users as any[]).map(u => ({
       ...u, isAdmin: !!u.isAdmin, banned: !!u.banned, verified: !!u.verified,
+      orgFieldTags: safeJsonParse(u.orgFieldTags, []),
       ...onboardingFields(u),
     })));
   } catch (err: any) {
@@ -2349,6 +2363,28 @@ router.put('/api/admin/users/:id/verify', requireAdmin, (req: Request, res: Resp
   }
 });
 
+// An admin setting an organization's own category tags directly -- same
+// field, same whitelist, same JSON shape as the organization editing itself
+// via PUT /api/auth/profile. Separate route because an admin isn't editing
+// their own row here.
+router.put('/api/admin/users/:id/field-tags', requireAdmin, (req: Request, res: Response) => {
+  try {
+    const user = db.prepare('SELECT id, accountType FROM users WHERE id = ?').get(req.params.id) as any;
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    if (user.accountType !== 'organization') {
+      return res.status(400).json({ error: 'Only organizations have category tags' });
+    }
+    const { fieldTags } = req.body || {};
+    const cleanTags = Array.isArray(fieldTags)
+      ? [...new Set(fieldTags.filter((t: unknown) => typeof t === 'string' && (VALID_FIELD_TAGS as readonly string[]).includes(t)))]
+      : [];
+    db.prepare('UPDATE users SET orgFieldTags = ? WHERE id = ?').run(JSON.stringify(cleanTags), req.params.id);
+    return res.json({ orgFieldTags: cleanTags });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // ─── signing in with Google ───
 //
 // Worth it here for one reason above convenience: Google tells us the address
@@ -2479,6 +2515,7 @@ router.post('/api/auth/google', async (req: Request, res: Response) => {
       emailReminders: !!user.emailReminders,
       hasSeenWelcome: !!user.hasSeenWelcome,
       verified: !!user.verified,
+      orgFieldTags: safeJsonParse(user.orgFieldTags, []),
       ...onboardingFields(user),
       token,
     });

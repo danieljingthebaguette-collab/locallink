@@ -362,6 +362,16 @@ try {
   db.exec("ALTER TABLE users ADD COLUMN orgPhone TEXT DEFAULT NULL");
 }
 
+// Migrate: add orgFieldTags to users -- an organization's own category tags,
+// same vocabulary as a post's field and a volunteer's onboarding interests
+// (FIELD_TAGS in mockData.ts), so all three stay directly comparable. JSON
+// array of strings; null/missing reads as "none set yet".
+try {
+  db.prepare('SELECT orgFieldTags FROM users LIMIT 1').get();
+} catch {
+  db.exec("ALTER TABLE users ADD COLUMN orgFieldTags TEXT DEFAULT NULL");
+}
+
 // Migrate: add steps column to opportunities (JSON array of volunteer step strings)
 try {
   db.prepare('SELECT steps FROM opportunities LIMIT 1').get();

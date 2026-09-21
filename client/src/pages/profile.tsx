@@ -8,6 +8,7 @@ import { useAuthStore, useOpportunitiesStore, useFavoritesStore } from '@/lib/st
 import { User, Mail, Award, Calendar, LogOut, Loader2, Edit3, Lock, Save, X, Heart, Building2, Handshake, Bell, Camera, Sparkles, AlertTriangle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import ConfirmBubble from '@/components/ConfirmBubble';
+import FieldTagPicker from '@/components/FieldTagPicker';
 
 export default function Profile() {
   const [, navigate] = useLocation();
@@ -28,6 +29,7 @@ export default function Profile() {
     orgWebsite: currentUser?.orgWebsite || '',
     orgEmail: currentUser?.orgEmail || '',
     orgPhone: currentUser?.orgPhone || '',
+    orgFieldTags: currentUser?.orgFieldTags || [] as string[],
   });
   const [orgSaving, setOrgSaving] = useState(false);
   const [showUpgradeConfirm, setShowUpgradeConfirm] = useState(false);
@@ -359,6 +361,7 @@ export default function Profile() {
                     orgWebsite: currentUser.orgWebsite || '',
                     orgEmail: currentUser.orgEmail || '',
                     orgPhone: currentUser.orgPhone || '',
+                    orgFieldTags: currentUser.orgFieldTags || [],
                   });
                   setOrgEditOpen(o => !o);
                 }}
@@ -404,6 +407,20 @@ export default function Profile() {
                     {currentUser.orgPhone && <p className="text-sm text-foreground">{currentUser.orgPhone}</p>}
                   </div>
                 )}
+                <div>
+                  <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide mb-1">Categories</p>
+                  {currentUser.orgFieldTags && currentUser.orgFieldTags.length > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                      {currentUser.orgFieldTags.map(tag => (
+                        <span key={tag} className="px-2.5 py-1 bg-primary/10 border border-primary/20 rounded-md text-xs font-semibold text-primary">
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground italic">None set yet. Click edit to pick what your organization focuses on.</p>
+                  )}
+                </div>
               </div>
             )}
 
@@ -449,6 +466,16 @@ export default function Profile() {
                     />
                   </div>
                 </div>
+                <div className="space-y-1">
+                  <label className="text-sm font-semibold text-foreground">Categories</label>
+                  <p className="text-xs text-muted-foreground -mt-0.5 mb-1">
+                    What does your organization focus on? Same list a post picks its field from.
+                  </p>
+                  <FieldTagPicker
+                    selected={orgForm.orgFieldTags}
+                    onChange={tags => setOrgForm(f => ({ ...f, orgFieldTags: tags }))}
+                  />
+                </div>
                 <div className="flex gap-3 pt-1">
                   <Button variant="outline" onClick={() => setOrgEditOpen(false)} className="flex-1 h-11 rounded-md font-semibold">
                     Cancel
@@ -469,6 +496,7 @@ export default function Profile() {
                         orgWebsite: orgForm.orgWebsite.trim() || null,
                         orgEmail: orgForm.orgEmail.trim(),
                         orgPhone: orgForm.orgPhone.trim() || null,
+                        orgFieldTags: orgForm.orgFieldTags,
                       });
                       setOrgSaving(false);
                       if (result.success) {

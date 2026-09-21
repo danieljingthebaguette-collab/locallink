@@ -66,7 +66,7 @@ interface AuthState {
   resendVerification: (email: string) => Promise<{ success: boolean; error?: string }>;
   forgotPassword: (email: string) => Promise<{ success: boolean; error?: string }>;
   resetPassword: (token: string, password: string) => Promise<{ success: boolean; error?: string }>;
-  updateProfile: (data: { username?: string; currentPassword?: string; newPassword?: string; notifyOnInterest?: boolean; notifyOnReopen?: boolean; profileImage?: string | null; orgDescription?: string | null; orgWebsite?: string | null; orgEmail?: string | null; orgPhone?: string | null; emailReminders?: boolean; accountType?: 'organization' }) => Promise<{ success: boolean; error?: string }>;
+  updateProfile: (data: { username?: string; currentPassword?: string; newPassword?: string; notifyOnInterest?: boolean; notifyOnReopen?: boolean; profileImage?: string | null; orgDescription?: string | null; orgWebsite?: string | null; orgEmail?: string | null; orgPhone?: string | null; orgFieldTags?: string[]; emailReminders?: boolean; accountType?: 'organization' }) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   loadUser: () => void;
   markWelcomeSeen: () => Promise<void>;
@@ -613,6 +613,7 @@ interface AdminState {
   unbanUser: (userId: string) => Promise<boolean>;
   toggleFeatured: (oppId: string) => Promise<boolean>;
   verifyUser: (userId: string) => Promise<boolean>;
+  setOrgFieldTags: (userId: string, fieldTags: string[]) => Promise<boolean>;
   joinLinks: JoinLink[];
   fetchJoinLinks: () => Promise<void>;
   createJoinLink: (orgName: string, category?: string) => Promise<{ link: JoinLink | null; error?: string }>;
@@ -756,6 +757,21 @@ export const useAdminStore = create<AdminState>((set) => ({
       if (res.ok) {
         const data = await res.json();
         set(s => ({ users: s.users.map(u => u.id === userId ? { ...u, verified: data.verified } : u) }));
+        return true;
+      }
+      if (res.status === 401) useAuthStore.getState().logout();
+      return false;
+    } catch { return false; }
+  },
+
+  setOrgFieldTags: async (userId, fieldTags) => {
+    try {
+      const res = await fetch(`${API}/admin/users/${userId}/field-tags`, {
+        method: 'PUT', headers: getAuthHeaders(), body: JSON.stringify({ fieldTags }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        set(s => ({ users: s.users.map(u => u.id === userId ? { ...u, orgFieldTags: data.orgFieldTags } : u) }));
         return true;
       }
       if (res.status === 401) useAuthStore.getState().logout();

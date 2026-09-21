@@ -11,6 +11,7 @@ import { Ban, CheckCircle2, TrendingUp, Scale, ClipboardCheck, XCircle, Mail, Be
 import type { AppUser, Opportunity } from '@/lib/mockData';
 import { AVAILABILITY_OPTIONS, CATEGORIES, TOWNS, type Category } from '@/lib/mockData';
 import { getEditCategoryOptions, getCategoryTint, getCategoryLabel } from '@/lib/categoryUtils';
+import FieldTagPicker from '@/components/FieldTagPicker';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -36,6 +37,7 @@ import {
   BadgeCheck,
   Calendar,
   Sparkles,
+  Tags,
 } from 'lucide-react';
 
 type Tab = 'overview' | 'users' | 'opportunities' | 'verify' | 'reports' | 'feedback' | 'appeals' | 'join-links';
@@ -44,7 +46,7 @@ export default function Admin() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const { isLoggedIn, currentUser } = useAuthStore();
-  const { users, stats, loading, fetchUsers, fetchStats, deleteUser, deleteOpportunity, updateOpportunity, banUser, unbanUser, pendingOpportunities, fetchPendingOpportunities, approveOpportunity, denyOpportunity, toggleFeatured, verifyUser, joinLinks, fetchJoinLinks, createJoinLink, deleteJoinLink } = useAdminStore();
+  const { users, stats, loading, fetchUsers, fetchStats, deleteUser, deleteOpportunity, updateOpportunity, banUser, unbanUser, pendingOpportunities, fetchPendingOpportunities, approveOpportunity, denyOpportunity, toggleFeatured, verifyUser, setOrgFieldTags, joinLinks, fetchJoinLinks, createJoinLink, deleteJoinLink } = useAdminStore();
   const { opportunities, fetchOpportunities } = useOpportunitiesStore();
   const [activeTab, setActiveTab] = useState<Tab>('overview');
   // Badge count lives here so the tab shows a pending total without the tab
@@ -155,6 +157,12 @@ export default function Admin() {
               const ok = await verifyUser(userId);
               if (ok) toast({ title: 'Verification badge updated' });
               else toast({ title: 'Failed to update badge', variant: 'destructive' });
+            }}
+            onSetOrgFieldTags={async (userId, fieldTags) => {
+              const ok = await setOrgFieldTags(userId, fieldTags);
+              if (ok) toast({ title: 'Categories updated' });
+              else toast({ title: 'Failed to update categories', variant: 'destructive' });
+              return ok;
             }}
           />
         )}
@@ -709,6 +717,7 @@ function UsersTab({
   onBanUser,
   onUnbanUser,
   onVerifyUser,
+  onSetOrgFieldTags,
 }: {
   users: AppUser[];
   adminUserId: string;
@@ -717,11 +726,16 @@ function UsersTab({
   onBanUser: (userId: string) => Promise<void>;
   onUnbanUser: (userId: string) => Promise<void>;
   onVerifyUser: (userId: string) => Promise<void>;
+  onSetOrgFieldTags: (userId: string, fieldTags: string[]) => Promise<boolean>;
 }) {
   const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
   const [confirmDeleteUser, setConfirmDeleteUser] = useState<AppUser | null>(null);
   const [confirmSuspendUser, setConfirmSuspendUser] = useState<AppUser | null>(null);
+  const [editTagsFor, setEditTagsFor] = useState<AppUser | null>(null);
+  const [editTagsDraft, setEditTagsDraft] = useState<string[]>([]);
+  const [savingTags, setSavingTags] = useState(false);
   const { toast } = useToast();
   const [nudging, setNudging] = useState<string | null>(null);
 
@@ -770,25 +784,49 @@ function UsersTab({
     return () => clearTimeout(t);
   }, [searchInput]);
 
+  // Every category any organization actually has, so the filter only ever
+  // offers choices that would narrow the list to something -- not the full
+  // 49-tag list most of which nobody on the site has picked yet.
+  const usedCategories = Array.from(new Set(
+    users.flatMap(u => u.accountType === 'organization' ? (u.orgFieldTags || []) : [])
+  )).sort();
+
   const filteredUsers = users.filter(u =>
-    u.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    u.email.toLowerCase().includes(searchQuery.toLowerCase())
+    (u.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      u.email.toLowerCase().includes(searchQuery.toLowerCase())) &&
+    (!categoryFilter || (u.orgFieldTags || []).includes(categoryFilter))
   );
 
   return (
     <div className="space-y-4">
-      {/* Search */}
-      <div className="relative">
-        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <Input
-          placeholder="Search users..."
-          value={searchInput}
-          onChange={(e) => setSearchInput(e.target.value)}
-          className="pl-11 h-11 rounded-xl border border-border"
-        />
+      {/* Search + category filter */}
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="relative flex-1">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input
+            placeholder="Search users..."
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            className="pl-11 h-11 rounded-xl border border-border"
+          />
+        </div>
+        {usedCategories.length > 0 && (
+          <select
+            value={categoryFilter}
+            onChange={e => setCategoryFilter(e.target.value)}
+            className="h-11 rounded-xl border border-input bg-background px-3 text-sm sm:w-56"
+            aria-label="Filter organizations by category"
+          >
+            <option value="">All categories</option>
+            {usedCategories.map(tag => <option key={tag} value={tag}>{tag}</option>)}
+          </select>
+        )}
       </div>
 
-      <p className="text-sm text-muted-foreground">{filteredUsers.length} users found</p>
+      <p className="text-sm text-muted-foreground">
+        {filteredUsers.length} users found
+        {categoryFilter && <> in <span className="font-semibold text-foreground">{categoryFilter}</span></>}
+      </p>
 
       <AlertDialog open={!!confirmDeleteUser} onOpenChange={(open) => !open && setConfirmDeleteUser(null)}>
         <AlertDialogContent>
@@ -864,6 +902,33 @@ function UsersTab({
         </AlertDialogContent>
       </AlertDialog>
 
+      {/* Set an organization's own category tags directly */}
+      <AlertDialog open={!!editTagsFor} onOpenChange={(open) => { if (!open) { setEditTagsFor(null); setEditTagsDraft([]); } }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{editTagsFor?.username}'s categories</AlertDialogTitle>
+            <AlertDialogDescription>
+              What this organization focuses on — the same list a post picks its field from.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <FieldTagPicker selected={editTagsDraft} onChange={setEditTagsDraft} />
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={savingTags}
+              onClick={async () => {
+                if (!editTagsFor) return;
+                setSavingTags(true);
+                await onSetOrgFieldTags(editTagsFor.id, editTagsDraft);
+                setSavingTags(false);
+              }}
+            >
+              {savingTags ? 'Saving…' : 'Save categories'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {loading ? (
         <div className="text-center py-12 text-muted-foreground">Loading users...</div>
       ) : filteredUsers.length === 0 ? (
@@ -897,6 +962,13 @@ function UsersTab({
                       )}
                     </div>
                     <p className="text-xs text-muted-foreground truncate">{user.email}</p>
+                    {user.accountType === 'organization' && !!user.orgFieldTags?.length && (
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {user.orgFieldTags.map(tag => (
+                          <span key={tag} className="px-1.5 py-0.5 rounded-md bg-secondary text-[10px] text-muted-foreground">{tag}</span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
                 {user.id !== adminUserId && (
@@ -913,6 +985,18 @@ function UsersTab({
                       >
                         <BadgeCheck className="w-3 h-3 mr-1" />
                         {user.verified ? 'Unverify' : 'Verify'}
+                      </Button>
+                    )}
+                    {user.accountType === 'organization' && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="rounded-md text-xs text-muted-foreground border-border hover:bg-accent"
+                        onClick={() => { setEditTagsDraft(user.orgFieldTags || []); setEditTagsFor(user); }}
+                        title="Edit this organization's category tags"
+                      >
+                        <Tags className="w-3 h-3 mr-1" />
+                        Categories{user.orgFieldTags?.length ? ` (${user.orgFieldTags.length})` : ''}
                       </Button>
                     )}
                     {/* Nudge one person: the questionnaire by email, or a
