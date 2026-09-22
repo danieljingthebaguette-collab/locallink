@@ -57,6 +57,14 @@ interface PostDraft {
   recurringTime: string;
   steps: string[];
   hasSignupPage: boolean | null;
+  commitmentType?: 'event' | 'role';
+  commitment?: string;
+  term?: string;
+  minAge?: string;
+  trainingRequired?: boolean;
+  trainingDescription?: string;
+  requirements?: string[];
+  positions?: string;
 }
 
 function readDraft(): PostDraft | null {
@@ -141,6 +149,21 @@ export default function CreatePostModal({ open, onClose }: Props) {
   const [spotsType, setSpotsType] = useState<SpotsType>('limited');
   const [adultsOnly, setAdultsOnly] = useState(false);
   const [isRecurring, setIsRecurring] = useState(false);
+  // Ongoing roles. 'event' unless the org picks otherwise, so the form opens
+  // exactly as it did before this existed.
+  const [commitmentType, setCommitmentType] = useState<'event' | 'role'>('event');
+  const [commitment, setCommitment] = useState('');
+  const [term, setTerm] = useState('');
+  const [minAge, setMinAge] = useState('');
+  const [trainingRequired, setTrainingRequired] = useState(false);
+  const [trainingDescription, setTrainingDescription] = useState('');
+  const [requirements, setRequirements] = useState<string[]>(['']);
+  const [positions, setPositions] = useState('');
+  const isRole = commitmentType === 'role';
+  // Mirrors the server's own gate (canPostRoles): verified organizations, or
+  // an admin. The server is what enforces it -- this only decides whether the
+  // choice is offered.
+  const canPostRole = !!currentUser?.verified || !!currentUser?.isAdmin;
   const [recurringDay, setRecurringDay] = useState(1);   // default: Monday
   const [recurringTime, setRecurringTime] = useState('12:00');
   const [steps, setSteps] = useState<string[]>(['']);
@@ -176,6 +199,10 @@ export default function CreatePostModal({ open, onClose }: Props) {
   const handleClose = () => {
     // Reset state on close
     setCreateStep('type');
+    setCommitmentType('event');
+    setCommitment(''); setTerm(''); setMinAge('');
+    setTrainingRequired(false); setTrainingDescription('');
+    setRequirements(['']); setPositions('');
     setSelectedType(null);
     setSelectedTags([]);
     setTagSearch('');
@@ -217,6 +244,7 @@ export default function CreatePostModal({ open, onClose }: Props) {
       savedAt: Date.now(),
       createStep, selectedType, selectedTags, formData,
       spotsType, isRecurring, recurringDay, recurringTime, steps, hasSignupPage,
+      commitmentType, commitment, term, minAge, trainingRequired, trainingDescription, requirements, positions,
     };
     try {
       localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
@@ -245,6 +273,14 @@ export default function CreatePostModal({ open, onClose }: Props) {
     setFormData(d.formData);
     setSpotsType(d.spotsType);
     setIsRecurring(d.isRecurring);
+    setCommitmentType(d.commitmentType ?? 'event');
+    setCommitment(d.commitment ?? '');
+    setTerm(d.term ?? '');
+    setMinAge(d.minAge ?? '');
+    setTrainingRequired(d.trainingRequired ?? false);
+    setTrainingDescription(d.trainingDescription ?? '');
+    setRequirements(d.requirements ?? ['']);
+    setPositions(d.positions ?? '');
     setRecurringDay(d.recurringDay);
     setRecurringTime(d.recurringTime);
     setSteps(d.steps);
@@ -300,15 +336,29 @@ export default function CreatePostModal({ open, onClose }: Props) {
     for (const k of Object.keys(errors)) if (!errors[k]) delete errors[k];
     if (!formData.town) errors.town = 'Please select a town';
     if (!imageFile && !imagePreview) errors.image = 'A photo is required';
-    if (hasSignupPage === null) errors.hasSignupPage = 'Please answer yes or no';
-    if (hasSignupPage === true && !formData.externalSignupUrl.trim()) {
+    // A role always has an application link -- the org's own form is where any
+    // agreement or signature happens -- so the yes/no question doesn't apply.
+    if (!isRole && hasSignupPage === null) errors.hasSignupPage = 'Please answer yes or no';
+    if (!isRole && hasSignupPage === true && !formData.externalSignupUrl.trim()) {
       errors.externalSignupUrl = 'Add the link volunteers should register on';
+    }
+    if (isRole && !formData.externalSignupUrl.trim()) {
+      errors.externalSignupUrl = 'An ongoing role needs an application link';
+    }
+    if (isRole) {
+      if (!commitment.trim()) errors.commitment = 'Say what the commitment is';
+      if (minAge.trim() && !(Number(minAge) >= 13 && Number(minAge) <= 120)) {
+        errors.minAge = 'Enter an age between 13 and 120';
+      }
+      if (positions.trim() && !(Number(positions) >= 1)) {
+        errors.positions = 'Enter 1 or more, or leave blank for unlimited';
+      }
     }
     if (formData.externalSignupUrl.trim()) {
       const signupUrlError = getExternalSignupUrlError(formData.externalSignupUrl);
       if (signupUrlError) errors.externalSignupUrl = signupUrlError;
     }
-    if (!isRecurring) {
+    if (!isRole && !isRecurring) {
       if (!formData.date) errors.date = 'Date is required';
       else if (new Date(formData.date) <= new Date()) errors.date = 'Date must be in the future';
     }
@@ -317,7 +367,7 @@ export default function CreatePostModal({ open, onClose }: Props) {
     // too: parseFloat('') is NaN, and NaN < 0.5 is false, so the old form let
     // an empty duration through to the server and came back "Missing required
     // fields" with nothing pointing at the box that caused it.
-    if (!(formData.duration >= 0.5)) errors.duration = 'Enter at least 0.5 hours';
+    if (!isRole && !(formData.duration >= 0.5)) errors.duration = 'Enter at least 0.5 hours';
     const nonEmptySteps = steps.filter(s => s.trim());
     if (nonEmptySteps.length === 0) errors.steps = 'At least one step is required';
     if (steps.some(s => s.trim() === '')) errors.steps = 'All steps must be filled in';
@@ -370,7 +420,17 @@ export default function CreatePostModal({ open, onClose }: Props) {
       tags: selectedTags,
       steps: steps.filter(s => s.trim()),
       externalSignupUrl: formData.externalSignupUrl.trim() || null,
-      hasSignupPage: hasSignupPage ?? false,
+      hasSignupPage: isRole ? true : (hasSignupPage ?? false),
+      ...(isRole && {
+        commitmentType: 'role' as const,
+        commitment: commitment.trim(),
+        term: term.trim() || null,
+        minAge: minAge.trim() ? Number(minAge) : null,
+        trainingRequired,
+        trainingDescription: trainingDescription.trim() || null,
+        requirements: requirements.filter(r => r.trim()).map(r => r.trim()),
+        positions: positions.trim() ? Number(positions) : null,
+      }),
       hostId: currentUser?.id || '',
       hostName: currentUser?.username || '',
       ...(isRecurring && { isRecurring: true, recurringDay, recurringTime }),
@@ -497,6 +557,46 @@ export default function CreatePostModal({ open, onClose }: Props) {
                       </div>
                     </motion.div>
                   )}
+                  {/* Which kind of post this is -- asked before anything else,
+                      because it decides which half of the form gets filled in.
+                      Hidden for organizations an admin hasn't verified: a
+                      standing commitment carries their name, and often a
+                      minor's time. */}
+                  <div>
+                    <span id="post-kind-label" className="text-xs font-bold tracking-widest uppercase text-muted-foreground block mb-2">
+                      One-time event or ongoing role?
+                    </span>
+                    {canPostRole ? (
+                      <div role="group" aria-labelledby="post-kind-label" className="grid grid-cols-2 gap-3">
+                        <button type="button" onClick={() => setCommitmentType('event')}
+                          className={cn(
+                            "rounded-xl border-2 p-3 text-left transition-all cursor-pointer min-h-[44px]",
+                            !isRole ? "border-primary bg-primary/5" : "border-border hover:border-primary/40"
+                          )}>
+                          <span className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
+                            <Calendar className="w-4 h-4" /> One-time event
+                          </span>
+                          <span className="text-xs text-muted-foreground mt-0.5 block">Happens on a date</span>
+                        </button>
+                        <button type="button" onClick={() => setCommitmentType('role')}
+                          className={cn(
+                            "rounded-xl border-2 p-3 text-left transition-all cursor-pointer min-h-[44px]",
+                            isRole ? "border-primary bg-primary/5" : "border-border hover:border-primary/40"
+                          )}>
+                          <span className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
+                            <Repeat className="w-4 h-4" /> Ongoing role
+                          </span>
+                          <span className="text-xs text-muted-foreground mt-0.5 block">A standing commitment</span>
+                        </button>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground rounded-xl border border-border bg-secondary/40 p-3">
+                        This will be a <span className="font-semibold text-foreground">one-time event</span>.
+                        Ongoing roles are open to verified organizations — ask an admin to verify yours.
+                      </p>
+                    )}
+                  </div>
+
                   <div className="space-y-3">
                     {POST_TYPES.map((type, idx) => (
                       <motion.button key={type.id}
@@ -705,8 +805,10 @@ export default function CreatePostModal({ open, onClose }: Props) {
                           {formErrors.town && <p data-post-error className="text-red-200 text-xs">{formErrors.town}</p>}
                         </div>
 
-                        {/* ── Schedule type toggle ── */}
-                        <div>
+                        {/* ── Schedule type toggle — events only. A role has no
+                            date, no weekly slot and no duration; its commitment
+                            line is what says when. ── */}
+                        {!isRole && <div>
                           <span id="post-schedule-label" className="text-xs font-bold tracking-widest uppercase opacity-75 block mb-1.5">Schedule</span>
                           <div role="group" aria-labelledby="post-schedule-label" className="flex gap-2 mb-2">
                             <button type="button"
@@ -767,20 +869,99 @@ export default function CreatePostModal({ open, onClose }: Props) {
                               </p>
                             </div>
                           )}
-                        </div>
+                        </div>}
+
+                        {/* ── Ongoing role: what the commitment actually is ── */}
+                        {isRole && (
+                          <div className="space-y-3">
+                            <div>
+                              <label htmlFor="role-commitment" className="text-xs font-bold tracking-widest uppercase opacity-75 block mb-1.5">Commitment *</label>
+                              <Input id="role-commitment" placeholder="8 hrs/month · Every Wednesday · 60 hrs/year"
+                                value={commitment}
+                                onChange={e => { setCommitment(e.target.value); setFormErrors({ ...formErrors, commitment: '' }); }}
+                                className={cn("rounded-xl bg-white/80 text-slate-900 border-0 text-sm h-9", formErrors.commitment && "ring-2 ring-red-400")} />
+                              {formErrors.commitment && <p data-post-error className="text-red-200 text-xs mt-1">{formErrors.commitment}</p>}
+                              <p className="text-white/60 text-xs mt-1">However you'd describe it to a volunteer.</p>
+                            </div>
+                            <div>
+                              <label htmlFor="role-term" className="text-xs font-bold tracking-widest uppercase opacity-75 block mb-1.5">Term (optional)</label>
+                              <Input id="role-term" placeholder="Fall 2026 · 2026–27 school year"
+                                value={term} onChange={e => setTerm(e.target.value)}
+                                className="rounded-xl bg-white/80 text-slate-900 border-0 text-sm h-9" />
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                              <div>
+                                <label htmlFor="role-minage" className="text-xs font-bold tracking-widest uppercase opacity-75 block mb-1.5">Minimum age</label>
+                                <Input id="role-minage" type="number" min={13} max={120} placeholder="Any"
+                                  value={minAge}
+                                  onChange={e => { setMinAge(e.target.value); setFormErrors({ ...formErrors, minAge: '' }); }}
+                                  className={cn("rounded-xl bg-white/80 text-slate-900 border-0 text-sm h-9", formErrors.minAge && "ring-2 ring-red-400")} />
+                                {formErrors.minAge && <p data-post-error className="text-red-200 text-xs mt-1">{formErrors.minAge}</p>}
+                              </div>
+                              <div>
+                                <label htmlFor="role-positions" className="text-xs font-bold tracking-widest uppercase opacity-75 block mb-1.5">Positions</label>
+                                <Input id="role-positions" type="number" min={1} placeholder="Unlimited"
+                                  value={positions}
+                                  onChange={e => { setPositions(e.target.value); setFormErrors({ ...formErrors, positions: '' }); }}
+                                  className={cn("rounded-xl bg-white/80 text-slate-900 border-0 text-sm h-9", formErrors.positions && "ring-2 ring-red-400")} />
+                                {formErrors.positions && <p data-post-error className="text-red-200 text-xs mt-1">{formErrors.positions}</p>}
+                              </div>
+                            </div>
+                            <div>
+                              <label className="flex items-start gap-2.5 cursor-pointer">
+                                <input type="checkbox" checked={trainingRequired}
+                                  onChange={e => setTrainingRequired(e.target.checked)} className="mt-0.5" />
+                                <span className="text-xs opacity-90"><span className="font-bold">Training required</span> — volunteers complete it before starting.</span>
+                              </label>
+                              {trainingRequired && (
+                                <Textarea placeholder="What the training involves, and how long it takes"
+                                  value={trainingDescription} onChange={e => setTrainingDescription(e.target.value)}
+                                  className="mt-2 rounded-xl bg-white/80 text-slate-900 border-0 text-sm resize-none min-h-[60px]" />
+                              )}
+                            </div>
+                            <div>
+                              <span className="text-xs font-bold tracking-widest uppercase opacity-75 block mb-1.5">Requirements</span>
+                              <div className="space-y-2">
+                                {requirements.map((r, i) => (
+                                  <div key={i} className="flex gap-2">
+                                    <Input placeholder={i === 0 ? 'Background check' : 'Another requirement'}
+                                      value={r}
+                                      onChange={e => setRequirements(requirements.map((v, vi) => vi === i ? e.target.value : v))}
+                                      className="rounded-xl bg-white/80 text-slate-900 border-0 text-sm h-9 flex-1" />
+                                    {requirements.length > 1 && (
+                                      <button type="button" aria-label={`Remove requirement ${i + 1}`}
+                                        onClick={() => setRequirements(requirements.filter((_, vi) => vi !== i))}
+                                        className="w-9 h-9 rounded-xl bg-white/20 hover:bg-white/30 flex items-center justify-center flex-shrink-0 cursor-pointer">
+                                        <X className="w-3.5 h-3.5" />
+                                      </button>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                              {requirements.length < 12 && (
+                                <button type="button" onClick={() => setRequirements([...requirements, ''])}
+                                  className="mt-2 text-xs font-semibold opacity-80 hover:opacity-100 cursor-pointer">+ Add requirement</button>
+                              )}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div className="bg-white/15 rounded-2xl p-4 border border-white/20 space-y-2">
+                      {!isRole && <div className="bg-white/15 rounded-2xl p-4 border border-white/20 space-y-2">
                         <label htmlFor="createpostmodal-duration-hours" className="text-xs font-bold tracking-widest uppercase opacity-75 block">Duration (hours)</label>
                         <Input id="createpostmodal-duration-hours" type="number" min={0.5} max={24} step={0.5}
                           value={Number.isNaN(formData.duration) ? '' : formData.duration}
                           onChange={e => { const v = parseFloat(e.target.value); setFormData({ ...formData, duration: v }); setFormErrors({ ...formErrors, duration: '' }); }}
                           className={cn("rounded-xl bg-white/80 text-slate-900 border-0 text-sm h-9", formErrors.duration && "ring-2 ring-red-400")} />
                         {formErrors.duration && <p data-post-error className="text-red-200 text-xs">{formErrors.duration}</p>}
-                      </div>
-                      <div className="bg-white/15 rounded-2xl p-4 border border-white/20 space-y-2">
+                      </div>}
+                      {/* A role already answers both of these above, with Minimum
+                          age and Positions. Showing them again would be two age
+                          gates that can disagree, and two capacity fields where
+                          only one is written to the post. */}
+                      {!isRole && <div className="bg-white/15 rounded-2xl p-4 border border-white/20 space-y-2">
                         <label className="flex items-start gap-2.5 mb-3 cursor-pointer">
                           <input type="checkbox" checked={adultsOnly} onChange={e => setAdultsOnly(e.target.checked)} className="mt-0.5" />
                           <span className="text-xs opacity-90">
@@ -809,7 +990,7 @@ export default function CreatePostModal({ open, onClose }: Props) {
                         {formErrors.spots && <p data-post-error className="text-red-200 text-xs">{formErrors.spots}</p>}
                         {spotsType === 'unlimited' && <p className="text-white/70 text-xs">Open to all</p>}
                         {spotsType === 'none' && <p className="text-white/70 text-xs">Not specified</p>}
-                      </div>
+                      </div>}
                     </div>
 
                     {selectedTags.length > 0 && (
@@ -879,8 +1060,24 @@ export default function CreatePostModal({ open, onClose }: Props) {
                         URL is required only if the answer is yes. */}
                     <div className="bg-white/15 rounded-2xl p-4 border border-white/20 space-y-3">
                       <p className="text-xs font-bold tracking-widest uppercase opacity-75">
-                        Do volunteers register on your own site? *
+                        {isRole ? 'Application link *' : 'Do volunteers register on your own site? *'}
                       </p>
+                      {/* A role is always "yes": the application is completed on
+                          the organization's own form, which is where any
+                          agreement or signature happens. LocalLink never
+                          collects one, so the question doesn't apply. */}
+                      {isRole ? (
+                        <div className="space-y-2">
+                          <Input id="role-signup-url" placeholder="https://your-site.org/apply"
+                            value={formData.externalSignupUrl}
+                            onChange={e => { setFormData({ ...formData, externalSignupUrl: e.target.value }); setFormErrors({ ...formErrors, externalSignupUrl: '' }); }}
+                            className={cn("rounded-xl bg-white/80 text-slate-900 border-0 text-sm h-9", formErrors.externalSignupUrl && "ring-2 ring-red-400")} />
+                          {formErrors.externalSignupUrl && <p data-post-error className="text-red-200 text-xs">{formErrors.externalSignupUrl}</p>}
+                          <p className="text-white/60 text-xs">
+                            Volunteers finish applying on your form — that's where any agreement or signature belongs.
+                          </p>
+                        </div>
+                      ) : (<>
                       <div className="flex gap-2">
                         <button type="button"
                           onClick={() => { setHasSignupPage(true); setFormErrors({ ...formErrors, hasSignupPage: '' }); }}
@@ -918,6 +1115,7 @@ export default function CreatePostModal({ open, onClose }: Props) {
                           Volunteers just sign up here — nothing else to do before the event.
                         </p>
                       )}
+                      </>)}
                     </div>
 
                     <div className="bg-white/15 rounded-2xl p-4 border border-white/20 text-center">

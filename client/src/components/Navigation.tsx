@@ -3,7 +3,7 @@ import { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { useAuthStore, useNotificationStore } from '@/lib/store';
-import { Home, Calendar, Info, User, LogOut, Shield, Bell, Users, X, Trash2, Edit3, UserMinus, RefreshCw, CheckCircle2, XCircle, Sun, Moon, Sparkles, MessageSquare } from 'lucide-react';
+import { Home, Calendar, Info, User, LogOut, Shield, Bell, Users, X, Trash2, Edit3, UserMinus, RefreshCw, CheckCircle2, XCircle, Sun, Moon, Sparkles, MessageSquare, ClipboardList, ClipboardCheck } from 'lucide-react';
 import Logo from './Logo';
 import { useScrolled } from '@/hooks/use-scrolled';
 
@@ -263,6 +263,14 @@ export default function Navigation() {
                                   <div className={cn(
                                     'w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5',
                                     n.type === 'interest' ? 'bg-green-500/15 text-green-600' :
+                                    // A role application, and the host's decision on
+                                    // one. Deliberately not green like plain interest:
+                                    // an application is something waiting on the host.
+                                    // sky-600 is the darkest of the status hues used
+                                    // here, so unlike its neighbours it gets the dark
+                                    // counterpart index.css asks for on a tint.
+                                    n.type === 'application' ? 'bg-sky-500/15 text-sky-600 dark:text-sky-400' :
+                                    n.type === 'application_decision' ? 'bg-sky-500/15 text-sky-600 dark:text-sky-400' :
                                     n.type === 'cancel' ? 'bg-orange-500/15 text-orange-500' :
                                     n.type === 'admin_delete' ? 'bg-red-500/15 text-red-500' :
                                     n.type === 'admin_edit' ? 'bg-amber-500/15 text-amber-600' :
@@ -273,6 +281,8 @@ export default function Navigation() {
                                     'bg-primary/10 text-primary'
                                   )}>
                                     {n.type === 'interest' && <Users className="w-4 h-4" />}
+                                    {n.type === 'application' && <ClipboardList className="w-4 h-4" />}
+                                    {n.type === 'application_decision' && <ClipboardCheck className="w-4 h-4" />}
                                     {n.type === 'cancel' && <UserMinus className="w-4 h-4" />}
                                     {n.type === 'admin_delete' && <Trash2 className="w-4 h-4" />}
                                     {n.type === 'admin_edit' && <Edit3 className="w-4 h-4" />}
@@ -281,7 +291,7 @@ export default function Navigation() {
                                     {n.type === 'post_denied' && <XCircle className="w-4 h-4" />}
                                     {n.type === 'onboarding_reminder' && <Sparkles className="w-4 h-4" />}
                                     {n.type === 'admin_message' && <MessageSquare className="w-4 h-4" />}
-                                    {!['interest','cancel','admin_delete','admin_edit','reopen','post_approved','post_denied','onboarding_reminder','admin_message'].includes(n.type) && <Bell className="w-4 h-4" />}
+                                    {!['interest','application','application_decision','cancel','admin_delete','admin_edit','reopen','post_approved','post_denied','onboarding_reminder','admin_message'].includes(n.type) && <Bell className="w-4 h-4" />}
                                   </div>
                                   <div className="flex-1 min-w-0">
                                     <p className="text-sm text-foreground leading-snug">{n.message}</p>

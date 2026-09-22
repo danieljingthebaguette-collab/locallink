@@ -96,7 +96,28 @@ function safeJsonParse<T>(raw: string | null | undefined, fallback: T): T {
  * page), it comes from optionalAuth, which only ever fills in the asker's
  * OWN id from a token they chose to send. It never has anyone else's.
  */
-function withTags(opp: any, signupIds: string[] = [], viewerId?: string | null) {
+type SignupRow = { userId: string; status?: string | null };
+
+/** The requester's own birth year, read once per request so withTags can
+ *  answer "do you clear this role's minimum age" without the year itself ever
+ *  reaching the client. Null when signed out or never asked. */
+function viewerBirthYearOf(userId?: string | null): number | null {
+  if (!userId) return null;
+  const row = db.prepare('SELECT birthYear FROM users WHERE id = ?').get(userId) as any;
+  return row?.birthYear ?? null;
+}
+
+function withTags(opp: any, signups: SignupRow[] = [], viewerId?: string | null, viewerBirthYear?: number | null) {
+  const mine = viewerId ? signups.find(s => s.userId === viewerId) : undefined;
+  // Whether the requester clears this role's minimum age, derived here and
+  // sent as a plain boolean. The birth year itself is internal and never
+  // leaves the server -- the client gets the answer, not the data behind it,
+  // which is the same rule the 18+ gate follows. null = not known (signed
+  // out, or an account predating the birth-year field), which the UI treats
+  // as "don't block" and the server re-checks on the way in anyway.
+  const meetsMinAge = !opp.minAge
+    ? true
+    : (viewerBirthYear ? (new Date().getFullYear() - Number(viewerBirthYear)) >= Number(opp.minAge) : null);
   return {
     id: opp.id,
     title: opp.title,
@@ -125,8 +146,25 @@ function withTags(opp: any, signupIds: string[] = [], viewerId?: string | null) 
     externalSignupUrl: opp.externalSignupUrl,
     tags: safeJsonParse<string[]>(opp.tags, []),
     steps: safeJsonParse<string[]>(opp.steps, []),
-    signupCount: signupIds.length,
-    signedUpByMe: !!viewerId && signupIds.includes(viewerId),
+    // Ongoing-role fields. Public on every post; null/0 on events, which is
+    // what the client branches on.
+    commitmentType: opp.commitmentType ?? 'event',
+    commitment: opp.commitment ?? null,
+    term: opp.term ?? null,
+    minAge: opp.minAge ?? null,
+    trainingRequired: !!opp.trainingRequired,
+    trainingDescription: opp.trainingDescription ?? null,
+    requirements: safeJsonParse<string[]>(opp.requirements, []),
+    positions: opp.positions ?? null,
+    signupCount: signups.length,
+    signedUpByMe: !!mine,
+    // Same rule as signedUpByMe: computed from the requester's own row and
+    // nobody else's, so a response can say what *you* did without ever
+    // carrying who else applied. acceptedCount is a bare number for the
+    // "positions filled" state -- it names nobody.
+    myApplicationStatus: mine?.status ?? null,
+    acceptedCount: signups.filter(s => s.status === 'accepted').length,
+    meetsMinAge,
     hostVerified: !!opp.hostVerified,
   };
 }
@@ -192,7 +230,90 @@ const LIMITS = {
   steps: 12,
   orgDescription: 1500,
   externalSignupUrl: 500,
+  commitment: 120,
+  term: 120,
+  trainingDescription: 600,
+  requirement: 200,
+  requirements: 12,
 } as const;
+
+/**
+ * Validates the role-only fields and returns them ready to write, or an error
+ * string. Shared by create and edit so the two cannot drift -- this codebase
+ * has shipped fields that existed on create and silently did nothing on edit.
+ *
+ * `partial` is true on edit, where an absent field means "leave it alone"
+ * rather than "it wasn't filled in".
+ */
+function parseRoleFields(body: any, partial: boolean): { error: string } | {
+  commitment: string | null; term: string | null; minAge: number | null;
+  trainingRequired: number; trainingDescription: string | null;
+  requirements: string | null; positions: number | null;
+} {
+  const has = (k: string) => body[k] !== undefined;
+  const commitment = typeof body.commitment === 'string' ? body.commitment.trim() : '';
+  if ((!partial || has('commitment')) && !commitment) {
+    return { error: 'Say what the commitment is — for example "8 hrs/month" or "Every Wednesday"' };
+  }
+  for (const [field, value] of [
+    ['commitment', commitment], ['term', body.term], ['trainingDescription', body.trainingDescription],
+  ] as const) {
+    const lengthError = getLengthError(field as keyof typeof LIMITS, value);
+    if (lengthError) return { error: lengthError };
+  }
+
+  let minAge: number | null = null;
+  if (body.minAge !== undefined && body.minAge !== null && body.minAge !== '') {
+    const n = Number(body.minAge);
+    if (!Number.isInteger(n) || n < 13 || n > 120) {
+      return { error: 'Minimum age must be a whole number between 13 and 120' };
+    }
+    minAge = n;
+  }
+
+  let positions: number | null = null;
+  if (body.positions !== undefined && body.positions !== null && body.positions !== '') {
+    const n = Number(body.positions);
+    if (!Number.isInteger(n) || n < 1 || n > 10000) {
+      return { error: 'Positions must be a whole number of 1 or more, or left blank for unlimited' };
+    }
+    positions = n;
+  }
+
+  let requirements: string | null = null;
+  if (body.requirements !== undefined) {
+    if (!Array.isArray(body.requirements)) return { error: 'Requirements must be a list' };
+    const clean = body.requirements
+      .filter((r: unknown) => typeof r === 'string' && r.trim())
+      .map((r: string) => r.trim());
+    if (clean.length > LIMITS.requirements) {
+      return { error: `Keep this to ${LIMITS.requirements} requirements or fewer` };
+    }
+    for (const r of clean) {
+      const lengthError = getLengthError('requirement', r);
+      if (lengthError) return { error: lengthError };
+    }
+    requirements = JSON.stringify(clean);
+  }
+
+  return {
+    commitment: commitment || null,
+    term: typeof body.term === 'string' && body.term.trim() ? body.term.trim() : null,
+    minAge,
+    trainingRequired: body.trainingRequired ? 1 : 0,
+    trainingDescription: typeof body.trainingDescription === 'string' && body.trainingDescription.trim()
+      ? body.trainingDescription.trim() : null,
+    requirements,
+    positions,
+  };
+}
+
+/** Roles are a standing commitment carrying an organization's name and, often,
+ *  a minor's time -- so only an organization an admin has actually confirmed
+ *  is real may post one. Admins are exempt, as everywhere else. */
+function canPostRoles(user: any, isAdmin: boolean): boolean {
+  return isAdmin || !!user?.verified;
+}
 
 /** Returns an error string when a field is over its cap, else null. */
 function getLengthError(field: keyof typeof LIMITS, value: unknown): string | null {
@@ -894,9 +1015,10 @@ router.get('/api/org/:id', optionalAuth, (req: AuthRequest, res: Response) => {
     const posts = db.prepare(
       "SELECT * FROM opportunities WHERE hostId = ? AND status = 'approved' ORDER BY createdAt DESC"
     ).all(req.params.id) as any[];
-    const getSignups = db.prepare('SELECT userId FROM signups WHERE opportunityId = ?');
+    const getSignups = db.prepare('SELECT userId, status FROM signups WHERE opportunityId = ?');
+    const viewerYear = viewerBirthYearOf(req.userId);
     const postsWithData = posts.map(opp =>
-      withTags(opp, (getSignups.all(opp.id) as any[]).map((s: any) => s.userId), req.userId)
+      withTags(opp, (getSignups.all(opp.id) as any[]), req.userId, viewerYear)
     );
 
     return res.json({
@@ -919,9 +1041,10 @@ router.get('/api/opportunities', optionalAuth, (req: AuthRequest, res: Response)
     const opportunities = db.prepare(
       "SELECT o.*, u.verified as hostVerified FROM opportunities o LEFT JOIN users u ON o.hostId = u.id WHERE o.status = 'approved' ORDER BY o.createdAt DESC"
     ).all() as any[];
-    const getSignups = db.prepare('SELECT userId FROM signups WHERE opportunityId = ?');
+    const getSignups = db.prepare('SELECT userId, status FROM signups WHERE opportunityId = ?');
+    const viewerYear = viewerBirthYearOf(req.userId);
     const result = opportunities.map(opp =>
-      withTags(opp, (getSignups.all(opp.id) as any[]).map((s: any) => s.userId), req.userId)
+      withTags(opp, (getSignups.all(opp.id) as any[]), req.userId, viewerYear)
     );
     return res.json(result);
   } catch (err: any) {
@@ -936,8 +1059,8 @@ router.get('/api/opportunities/:id', optionalAuth, (req: AuthRequest, res: Respo
       'SELECT o.*, u.verified as hostVerified FROM opportunities o LEFT JOIN users u ON o.hostId = u.id WHERE o.id = ?'
     ).get(req.params.id) as any;
     if (!opp) return res.status(404).json({ error: 'Opportunity not found' });
-    const signups = db.prepare('SELECT userId FROM signups WHERE opportunityId = ?').all(opp.id).map((s: any) => s.userId);
-    return res.json(withTags(opp, signups, req.userId));
+    const signups = db.prepare('SELECT userId, status FROM signups WHERE opportunityId = ?').all(opp.id) as any[];
+    return res.json(withTags(opp, signups, req.userId, viewerBirthYearOf(req.userId)));
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
@@ -949,9 +1072,10 @@ router.get('/api/my-posts', requireAuth, (req: AuthRequest, res: Response) => {
     const posts = db.prepare(
       'SELECT * FROM opportunities WHERE hostId = ? ORDER BY createdAt DESC'
     ).all(req.userId!) as any[];
-    const getSignups = db.prepare('SELECT userId FROM signups WHERE opportunityId = ?');
+    const getSignups = db.prepare('SELECT userId, status FROM signups WHERE opportunityId = ?');
+    const viewerYear = viewerBirthYearOf(req.userId);
     const result = posts.map(opp =>
-      withTags(opp, (getSignups.all(opp.id) as any[]).map((s: any) => s.userId), req.userId)
+      withTags(opp, (getSignups.all(opp.id) as any[]), req.userId, viewerYear)
     );
     return res.json(result);
   } catch (err: any) {
@@ -963,7 +1087,11 @@ router.get('/api/my-posts', requireAuth, (req: AuthRequest, res: Response) => {
 router.post('/api/opportunities', requireAuth, (req: AuthRequest, res: Response) => {
   try {
     const { title, description, category, location, town, date, duration, spots, spotsType, image, tags, isRecurring, recurringDay, recurringTime, steps, externalSignupUrl, hasSignupPage } = req.body;
-    if (!title || !description || !category || !location || !date || !duration || !image) {
+    const commitmentType = req.body.commitmentType === 'role' ? 'role' : 'event';
+    const isRole = commitmentType === 'role';
+    // A role has no date or duration -- the form hides both -- so they are not
+    // required here either. Everything else a post needs still is.
+    if (!title || !description || !category || !location || !image || (!isRole && (!date || !duration))) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
     const locationError = getLocationError(location);
@@ -974,7 +1102,8 @@ router.post('/api/opportunities', requireAuth, (req: AuthRequest, res: Response)
     }
     // Mirrors the create form's own check. Recurring posts skip this — their
     // date is server-computed as the next occurrence, always in the future.
-    if (!isRecurring && new Date(date) <= new Date()) {
+    // Roles skip it because they have no date at all.
+    if (!isRole && !isRecurring && new Date(date) <= new Date()) {
       return res.status(400).json({ error: 'Date must be in the future' });
     }
     // Length caps, enforced here because the form can be bypassed entirely
@@ -1000,12 +1129,17 @@ router.post('/api/opportunities', requireAuth, (req: AuthRequest, res: Response)
     }
     // Mirrors the create form's own gate: answering is required, a URL is
     // required only when the answer is yes. Enforced here too so the check
-    // can't be skipped by calling the API directly.
-    if (typeof hasSignupPage !== 'boolean') {
+    // can't be skipped by calling the API directly. A role is always yes:
+    // the application is completed on the organization's own form, which is
+    // where any agreement or signature happens -- LocalLink never collects one.
+    if (!isRole && typeof hasSignupPage !== 'boolean') {
       return res.status(400).json({ error: 'Please answer yes or no' });
     }
-    const trimmedSignupUrl = hasSignupPage && typeof externalSignupUrl === 'string' ? externalSignupUrl.trim() : '';
-    if (hasSignupPage && !trimmedSignupUrl) {
+    const trimmedSignupUrl = (isRole || hasSignupPage) && typeof externalSignupUrl === 'string' ? externalSignupUrl.trim() : '';
+    if (isRole && !trimmedSignupUrl) {
+      return res.status(400).json({ error: 'An ongoing role needs an application link — volunteers finish applying on your own form' });
+    }
+    if (!isRole && hasSignupPage && !trimmedSignupUrl) {
       return res.status(400).json({ error: 'Add the link volunteers should register on' });
     }
     if (trimmedSignupUrl) {
@@ -1014,11 +1148,25 @@ router.post('/api/opportunities', requireAuth, (req: AuthRequest, res: Response)
     }
 
     const hostId = req.userId!;
-    const hostUser = db.prepare('SELECT username, accountType FROM users WHERE id = ?').get(hostId) as any;
+    const hostUser = db.prepare('SELECT username, accountType, verified FROM users WHERE id = ?').get(hostId) as any;
 
     // Only organization accounts (or admins) can post opportunities
     if (!req.isAdmin && hostUser?.accountType !== 'organization') {
       return res.status(403).json({ error: 'Only organization accounts can create opportunities' });
+    }
+
+    // Role-only fields, validated before anything is written. The UI hides the
+    // role option for unverified organizations; this is what actually enforces
+    // it, since the form can be bypassed entirely.
+    let role: ReturnType<typeof parseRoleFields> | null = null;
+    if (isRole) {
+      if (!canPostRoles(hostUser, !!req.isAdmin)) {
+        return res.status(403).json({
+          error: 'Only verified organizations can post ongoing roles. Ask an admin to verify your organization first.',
+        });
+      }
+      role = parseRoleFields(req.body, false);
+      if ('error' in role) return res.status(400).json({ error: role.error });
     }
 
     const id = randomUUID();
@@ -1031,10 +1179,22 @@ router.post('/api/opportunities', requireAuth, (req: AuthRequest, res: Response)
     // Admins bypass the approval queue; org posts start as 'pending'
     const status = req.isAdmin ? 'approved' : 'pending';
 
+    const r = role && !('error' in role) ? role : null;
     db.prepare(
-      `INSERT INTO opportunities (id, title, description, category, location, town, date, duration, spots, spotsRemaining, spotsType, image, hostId, hostName, popularity, tags, steps, createdAt, isRecurring, recurringDay, recurringTime, status, externalSignupUrl, adultsOnly)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(id, title, description, category, location, town, date, duration, resolvedSpots, resolvedSpots, resolvedSpotsType, image || null, hostId, hostUser?.username || 'Unknown', tagsJson, stepsJson, createdAt, isRecurring ? 1 : 0, recurringDay ?? null, recurringTime ?? null, status, trimmedSignupUrl || null, req.body.adultsOnly ? 1 : 0);
+      `INSERT INTO opportunities (id, title, description, category, location, town, date, duration, spots, spotsRemaining, spotsType, image, hostId, hostName, popularity, tags, steps, createdAt, isRecurring, recurringDay, recurringTime, status, externalSignupUrl, adultsOnly,
+                                  commitmentType, commitment, term, minAge, trainingRequired, trainingDescription, requirements, positions)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+               ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(id, title, description, category, location, town,
+      // A role has no date; it writes its creation time so the NOT NULL column
+      // is satisfied, and nothing ever reads it back.
+      isRole ? createdAt : date,
+      isRole ? 0 : duration,
+      resolvedSpots, resolvedSpots, resolvedSpotsType, image || null, hostId, hostUser?.username || 'Unknown', tagsJson, stepsJson, createdAt,
+      isRole ? 0 : (isRecurring ? 1 : 0), isRole ? null : (recurringDay ?? null), isRole ? null : (recurringTime ?? null),
+      status, trimmedSignupUrl || null, req.body.adultsOnly ? 1 : 0,
+      commitmentType, r?.commitment ?? null, r?.term ?? null, r?.minAge ?? null,
+      r?.trainingRequired ?? 0, r?.trainingDescription ?? null, r?.requirements ?? null, r?.positions ?? null);
 
     const opp = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(id) as any;
     return res.status(201).json(withTags(opp, [], req.userId));
@@ -1054,16 +1214,49 @@ router.post('/api/opportunities/:id/signup', requireAuth, async (req: AuthReques
     const opp = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(oppId) as any;
     if (!opp) return res.status(404).json({ error: 'Opportunity not found' });
 
+    const isRole = opp.commitmentType === 'role';
+
     // The modal swaps the interest button for "This event has ended", but that
     // was the only thing stopping this — a direct call still registered
     // interest, and the org got a notification and an email about someone
-    // joining an event that already happened. Recurring posts never end.
-    if (!opp.isRecurring && new Date(opp.date) < new Date()) {
+    // joining an event that already happened. Recurring posts never end, and
+    // neither do roles -- a standing commitment has no date to be past.
+    if (!isRole && !opp.isRecurring && new Date(opp.date) < new Date()) {
       return res.status(400).json({ error: 'This event has already ended' });
     }
 
     const existing = db.prepare('SELECT id FROM signups WHERE opportunityId = ? AND userId = ?').get(oppId, userId);
-    if (existing) return res.status(409).json({ error: 'Already interested' });
+    if (existing) return res.status(409).json({ error: isRole ? 'You have already applied for this role' : 'Already interested' });
+
+    if (isRole) {
+      // Only a live role on a still-verified organization accepts applications.
+      if (opp.status !== 'approved') {
+        return res.status(400).json({ error: 'This role is not open for applications' });
+      }
+      const host = db.prepare('SELECT verified FROM users WHERE id = ?').get(opp.hostId) as any;
+      if (!host?.verified) {
+        return res.status(400).json({ error: 'This role is not open for applications' });
+      }
+      // Minimum age. Same stance as the 18+ gate: an unknown birth year is not
+      // read as old enough, but it is not read as too young either -- accounts
+      // predating the field are let through rather than blocked on a guess.
+      if (opp.minAge) {
+        const me = db.prepare('SELECT birthYear FROM users WHERE id = ?').get(userId) as any;
+        if (me?.birthYear && (new Date().getFullYear() - Number(me.birthYear)) < Number(opp.minAge)) {
+          return res.status(403).json({ error: `This role is for volunteers aged ${opp.minAge} and over.` });
+        }
+      }
+      // Positions filled. Counted from accepted applications only -- applying
+      // is not what consumes a seat, being accepted is.
+      if (opp.positions) {
+        const accepted = (db.prepare(
+          "SELECT COUNT(*) AS n FROM signups WHERE opportunityId = ? AND status = 'accepted'"
+        ).get(oppId) as any).n;
+        if (accepted >= Number(opp.positions)) {
+          return res.status(409).json({ error: 'All positions for this role have been filled.' });
+        }
+      }
+    }
 
     // 18+ events. There is only one sign-up step in this build (no separate
     // Commit), so this is the one place to check it — the moment someone is
@@ -1078,7 +1271,10 @@ router.post('/api/opportunities/:id/signup', requireAuth, async (req: AuthReques
     }
 
     // Spots are informational (capacity hint) — interest never blocks or consumes a spot.
-    db.prepare('INSERT INTO signups (opportunityId, userId, createdAt) VALUES (?, ?, ?)').run(oppId, userId, new Date().toISOString());
+    // status is null for an event and 'applied' for a role, which is the only
+    // difference between the two paths from here down.
+    db.prepare('INSERT INTO signups (opportunityId, userId, createdAt, status) VALUES (?, ?, ?, ?)')
+      .run(oppId, userId, new Date().toISOString(), isRole ? 'applied' : null);
     // Increment popularity
     db.prepare('UPDATE opportunities SET popularity = popularity + 1 WHERE id = ?').run(oppId);
     // Notify the host that someone is interested -- in-app and email both,
@@ -1091,7 +1287,12 @@ router.post('/api/opportunities/:id/signup', requireAuth, async (req: AuthReques
         const volunteer = db.prepare('SELECT username FROM users WHERE id = ?').get(userId) as any;
         const volunteerName = volunteer?.username || 'Someone';
         db.prepare('INSERT INTO notifications (id, userId, type, message, postId, read, createdAt) VALUES (?, ?, ?, ?, ?, 0, ?)').run(
-          randomUUID(), opp.hostId, 'interest', `${volunteerName} is interested in "${opp.title}"`, oppId, new Date().toISOString()
+          randomUUID(), opp.hostId,
+          isRole ? 'application' : 'interest',
+          isRole
+            ? `${volunteerName} applied for "${opp.title}"`
+            : `${volunteerName} is interested in "${opp.title}"`,
+          oppId, new Date().toISOString()
         );
         try {
           await sendSignupNotificationEmail(host.email, host.username, volunteerName, opp.title);
@@ -1100,8 +1301,8 @@ router.post('/api/opportunities/:id/signup', requireAuth, async (req: AuthReques
     }
 
     const updated = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(oppId) as any;
-    const signups = db.prepare('SELECT userId FROM signups WHERE opportunityId = ?').all(oppId).map((s: any) => s.userId);
-    return res.json(withTags(updated, signups, req.userId));
+    const signups = db.prepare('SELECT userId, status FROM signups WHERE opportunityId = ?').all(oppId) as any[];
+    return res.json(withTags(updated, signups, req.userId, viewerBirthYearOf(req.userId)));
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
@@ -1133,8 +1334,8 @@ router.delete('/api/opportunities/:id/signup', requireAuth, (req: AuthRequest, r
     // Do NOT restore spotsRemaining — spots are informational only
 
     const updated = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(oppId) as any;
-    const signups = db.prepare('SELECT userId FROM signups WHERE opportunityId = ?').all(oppId).map((s: any) => s.userId);
-    return res.json(withTags(updated, signups, req.userId));
+    const signups = db.prepare('SELECT userId, status FROM signups WHERE opportunityId = ?').all(oppId) as any[];
+    return res.json(withTags(updated, signups, req.userId, viewerBirthYearOf(req.userId)));
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
@@ -1152,14 +1353,81 @@ router.get('/api/opportunities/:id/interested', requireAuth, (req: AuthRequest, 
       return res.status(403).json({ error: 'Only the host can view interested volunteers' });
     }
 
+    // The same list serves both post types: for an event these are interested
+    // volunteers, for a role they are applicants and status is what the host
+    // acts on. userId is included because the host needs something to address
+    // an accept/decline to -- this response is already host-only.
     const volunteers = db.prepare(
-      `SELECT u.username, u.email, s.createdAt AS signedUpAt
+      `SELECT s.userId, u.username, u.email, s.createdAt AS signedUpAt, s.status
        FROM signups s JOIN users u ON u.id = s.userId
        WHERE s.opportunityId = ?
        ORDER BY s.createdAt ASC`
-    ).all(oppId) as { username: string; email: string; signedUpAt: string }[];
+    ).all(oppId) as { userId: string; username: string; email: string; signedUpAt: string; status: string | null }[];
 
     return res.json(volunteers);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * Accept or decline one application. Host-only, roles only.
+ *
+ * Ownership is checked against hostId on the post itself, exactly as
+ * /interested does -- a different organization holding a valid token is still
+ * a 403 here, and so is a volunteer.
+ */
+router.put('/api/opportunities/:id/applications/:userId', requireAuth, (req: AuthRequest, res: Response) => {
+  try {
+    const { id: oppId, userId: applicantId } = req.params;
+    const { status } = req.body || {};
+
+    if (status !== 'accepted' && status !== 'declined') {
+      return res.status(400).json({ error: "status must be 'accepted' or 'declined'" });
+    }
+
+    const opp = db.prepare('SELECT id, hostId, title, commitmentType, positions FROM opportunities WHERE id = ?').get(oppId) as any;
+    if (!opp) return res.status(404).json({ error: 'Opportunity not found' });
+    if (opp.hostId !== req.userId && !req.isAdmin) {
+      return res.status(403).json({ error: 'Only the host can decide applications' });
+    }
+    if (opp.commitmentType !== 'role') {
+      return res.status(400).json({ error: 'Only ongoing roles have applications' });
+    }
+
+    const application = db.prepare('SELECT id, status FROM signups WHERE opportunityId = ? AND userId = ?')
+      .get(oppId, applicantId) as any;
+    if (!application) return res.status(404).json({ error: 'No application from that volunteer' });
+
+    // Accepting past the advertised number of positions is refused here, not
+    // just hidden in the UI. An application already accepted is not counted
+    // twice when it is re-accepted.
+    if (status === 'accepted' && opp.positions && application.status !== 'accepted') {
+      const accepted = (db.prepare(
+        "SELECT COUNT(*) AS n FROM signups WHERE opportunityId = ? AND status = 'accepted'"
+      ).get(oppId) as any).n;
+      if (accepted >= Number(opp.positions)) {
+        return res.status(409).json({ error: `All ${opp.positions} position${Number(opp.positions) === 1 ? '' : 's'} are already filled.` });
+      }
+    }
+
+    db.prepare('UPDATE signups SET status = ? WHERE opportunityId = ? AND userId = ?')
+      .run(status, oppId, applicantId);
+
+    // Tell the volunteer. In-app only: a decision is worth knowing, not worth
+    // an email nobody opted into.
+    const hostName = (db.prepare('SELECT username FROM users WHERE id = ?').get(opp.hostId) as any)?.username || 'The organization';
+    db.prepare('INSERT INTO notifications (id, userId, type, message, postId, read, createdAt) VALUES (?, ?, ?, ?, ?, 0, ?)').run(
+      randomUUID(), applicantId, 'application_decision',
+      `${hostName} ${status} your application for "${opp.title}"`,
+      oppId, new Date().toISOString()
+    );
+
+    // The updated post, same shape the signup routes return -- acceptedCount
+    // has just changed, and that is what decides "positions filled".
+    const updated = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(oppId) as any;
+    const signups = db.prepare('SELECT userId, status FROM signups WHERE opportunityId = ?').all(oppId) as any[];
+    return res.json(withTags(updated, signups, req.userId, viewerBirthYearOf(req.userId)));
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
@@ -1177,6 +1445,42 @@ router.put('/api/opportunities/:id', requireAuth, (req: AuthRequest, res: Respon
 
     const { title, description, category, location, town, date, duration, spots, spotsType, image, tags, steps, isAvailable, isRecurring, recurringDay, recurringTime, cardObjectPosition, modalObjectPosition, externalSignupUrl } = req.body;
 
+    // Is this post a role after this edit? Either it already was one, or this
+    // request is converting it. Converting needs the same verified-org check
+    // creating one does, or the gate would be one PUT away from meaningless.
+    const willBeRole = req.body.commitmentType !== undefined
+      ? req.body.commitmentType === 'role'
+      : opp.commitmentType === 'role';
+    let roleUpdate: Exclude<ReturnType<typeof parseRoleFields>, { error: string }> | null = null;
+    if (willBeRole) {
+      const editor = db.prepare('SELECT verified FROM users WHERE id = ?').get(opp.hostId) as any;
+      if (!canPostRoles(editor, !!req.isAdmin)) {
+        return res.status(403).json({
+          error: 'Only verified organizations can post ongoing roles. Ask an admin to verify your organization first.',
+        });
+      }
+      // Existing values stand in for anything this request left out, so a
+      // partial edit never blanks a field the form didn't send.
+      const merged = {
+        commitment: req.body.commitment ?? opp.commitment,
+        term: req.body.term ?? opp.term,
+        minAge: req.body.minAge ?? opp.minAge,
+        trainingRequired: req.body.trainingRequired ?? opp.trainingRequired,
+        trainingDescription: req.body.trainingDescription ?? opp.trainingDescription,
+        requirements: req.body.requirements,
+        positions: req.body.positions ?? opp.positions,
+      };
+      const parsed = parseRoleFields(merged, false);
+      if ('error' in parsed) return res.status(400).json({ error: parsed.error });
+      roleUpdate = parsed;
+      // An application link is what makes a role actionable, so it stays
+      // required through edits too.
+      const urlNow = req.body.externalSignupUrl !== undefined ? String(req.body.externalSignupUrl).trim() : opp.externalSignupUrl;
+      if (!urlNow) {
+        return res.status(400).json({ error: 'An ongoing role needs an application link — volunteers finish applying on your own form' });
+      }
+    }
+
     // --- Input validation ---
     if (spotsType !== undefined && !VALID_SPOTS_TYPES.includes(spotsType)) {
       return res.status(400).json({ error: `Invalid spotsType. Must be one of: ${VALID_SPOTS_TYPES.join(', ')}` });
@@ -1187,7 +1491,9 @@ router.put('/api/opportunities/:id', requireAuth, (req: AuthRequest, res: Respon
     if (spots !== undefined && (typeof spots !== 'number' || spots < 0)) {
       return res.status(400).json({ error: 'spots must be a non-negative number' });
     }
-    if (duration !== undefined && (typeof duration !== 'number' || duration <= 0)) {
+    // Same reason as the admin route: a role's duration column is 0 by design,
+    // so a role edit that echoes it back must not be rejected for it.
+    if (!willBeRole && duration !== undefined && (typeof duration !== 'number' || duration <= 0)) {
       return res.status(400).json({ error: 'duration must be a positive number' });
     }
     if (recurringDay !== undefined) {
@@ -1262,11 +1568,21 @@ router.put('/api/opportunities/:id', requireAuth, (req: AuthRequest, res: Respon
       if (modalObjectPosition !== undefined) db.prepare('UPDATE opportunities SET modalObjectPosition = ? WHERE id = ?').run(modalObjectPosition || null, oppId);
       if (trimmedSignupUrl    !== undefined) db.prepare('UPDATE opportunities SET externalSignupUrl = ? WHERE id = ?').run(trimmedSignupUrl || null, oppId);
       if (steps                !== undefined) db.prepare('UPDATE opportunities SET steps = ? WHERE id = ?').run(JSON.stringify(steps), oppId);
+      // Role fields. Written whenever the post is (or is becoming) a role, so
+      // every field on the create form is editable afterwards.
+      if (roleUpdate) {
+        db.prepare(
+          `UPDATE opportunities SET commitmentType = ?, commitment = ?, term = ?, minAge = ?,
+             trainingRequired = ?, trainingDescription = ?, requirements = COALESCE(?, requirements), positions = ?
+           WHERE id = ?`
+        ).run('role', roleUpdate.commitment, roleUpdate.term, roleUpdate.minAge,
+          roleUpdate.trainingRequired, roleUpdate.trainingDescription, roleUpdate.requirements, roleUpdate.positions, oppId);
+      }
     })();
 
     const updated = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(oppId) as any;
-    const signups = db.prepare('SELECT userId FROM signups WHERE opportunityId = ?').all(oppId).map((s: any) => s.userId);
-    return res.json(withTags(updated, signups, req.userId));
+    const signups = db.prepare('SELECT userId, status FROM signups WHERE opportunityId = ?').all(oppId) as any[];
+    return res.json(withTags(updated, signups, req.userId, viewerBirthYearOf(req.userId)));
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
@@ -1447,7 +1763,12 @@ router.put('/api/admin/opportunities/:id', requireAdmin, (req: Request, res: Res
     if (spotsRemaining !== undefined && (typeof spotsRemaining !== 'number' || spotsRemaining < 0)) {
       return res.status(400).json({ error: 'spotsRemaining must be a non-negative number' });
     }
-    if (duration !== undefined && (typeof duration !== 'number' || duration <= 0)) {
+    // A role has no duration: the column is NOT NULL and holds 0. Demanding a
+    // positive one here would make every role post uneditable from this form.
+    const adminWillBeRole = req.body.commitmentType !== undefined
+      ? req.body.commitmentType === 'role'
+      : opp.commitmentType === 'role';
+    if (!adminWillBeRole && duration !== undefined && (typeof duration !== 'number' || duration <= 0)) {
       return res.status(400).json({ error: 'duration must be a positive number' });
     }
     if (pinnedSize !== undefined && pinnedSize !== null && !VALID_PINNED_SIZES.includes(pinnedSize)) {
@@ -1476,6 +1797,27 @@ router.put('/api/admin/opportunities/:id', requireAdmin, (req: Request, res: Res
     if (duration !== undefined) db.prepare('UPDATE opportunities SET duration = ? WHERE id = ?').run(duration, oppId);
     if (spots !== undefined) db.prepare('UPDATE opportunities SET spots = ? WHERE id = ?').run(spots, oppId);
     if (spotsRemaining !== undefined) db.prepare('UPDATE opportunities SET spotsRemaining = ? WHERE id = ?').run(spotsRemaining, oppId);
+    // Role fields, same set the org's own edit form writes. An admin editing a
+    // role post must be able to reach every field on it, or the admin form
+    // becomes the one place a role can't be fixed.
+    if (opp.commitmentType === 'role' || req.body.commitmentType === 'role') {
+      const parsed = parseRoleFields({
+        commitment: req.body.commitment ?? opp.commitment,
+        term: req.body.term ?? opp.term,
+        minAge: req.body.minAge ?? opp.minAge,
+        trainingRequired: req.body.trainingRequired ?? opp.trainingRequired,
+        trainingDescription: req.body.trainingDescription ?? opp.trainingDescription,
+        requirements: req.body.requirements,
+        positions: req.body.positions ?? opp.positions,
+      }, false);
+      if ('error' in parsed) return res.status(400).json({ error: parsed.error });
+      db.prepare(
+        `UPDATE opportunities SET commitmentType = 'role', commitment = ?, term = ?, minAge = ?,
+           trainingRequired = ?, trainingDescription = ?, requirements = COALESCE(?, requirements), positions = ?
+         WHERE id = ?`
+      ).run(parsed.commitment, parsed.term, parsed.minAge, parsed.trainingRequired,
+        parsed.trainingDescription, parsed.requirements, parsed.positions, oppId);
+    }
     // pinnedSize: admin-only card size override ('small' | 'medium' | 'large' | null = auto)
     if (pinnedSize !== undefined) {
       db.prepare('UPDATE opportunities SET pinnedSize = ? WHERE id = ?').run(pinnedSize, oppId);
@@ -1496,7 +1838,7 @@ router.put('/api/admin/opportunities/:id', requireAdmin, (req: Request, res: Res
     }
 
     const updated = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(oppId) as any;
-    const signups = db.prepare('SELECT userId FROM signups WHERE opportunityId = ?').all(oppId).map((s: any) => s.userId);
+    const signups = db.prepare('SELECT userId, status FROM signups WHERE opportunityId = ?').all(oppId) as any[];
     return res.json(withTags(updated, signups));
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
@@ -1568,9 +1910,9 @@ router.get('/api/admin/pending-opportunities', requireAdmin, (_req: Request, res
     const pending = db.prepare(
       "SELECT * FROM opportunities WHERE status = 'pending' ORDER BY createdAt ASC"
     ).all();
-    const getSignups = db.prepare('SELECT userId FROM signups WHERE opportunityId = ?');
+    const getSignups = db.prepare('SELECT userId, status FROM signups WHERE opportunityId = ?');
     const result = (pending as any[]).map(opp =>
-      withTags(opp, (getSignups.all(opp.id) as any[]).map((s: any) => s.userId))
+      withTags(opp, (getSignups.all(opp.id) as any[]))
     );
     return res.json(result);
   } catch (err: any) {
@@ -1606,7 +1948,7 @@ router.post('/api/admin/opportunities/:id/approve', requireAdmin, async (req: Re
     }
 
     const updated = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(oppId) as any;
-    const signups = db.prepare('SELECT userId FROM signups WHERE opportunityId = ?').all(oppId).map((s: any) => s.userId);
+    const signups = db.prepare('SELECT userId, status FROM signups WHERE opportunityId = ?').all(oppId) as any[];
     return res.json(withTags(updated, signups));
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
@@ -2193,9 +2535,10 @@ router.get('/api/featured-posts', optionalAuth, (req: AuthRequest, res: Response
         "SELECT * FROM opportunities WHERE status = 'approved' ORDER BY popularity DESC LIMIT 6"
       ).all() as any[];
     }
-    const getSignups = db.prepare('SELECT userId FROM signups WHERE opportunityId = ?');
+    const getSignups = db.prepare('SELECT userId, status FROM signups WHERE opportunityId = ?');
+    const viewerYear = viewerBirthYearOf(req.userId);
     const result = posts.map(opp =>
-      withTags(opp, (getSignups.all(opp.id) as any[]).map((s: any) => s.userId), req.userId)
+      withTags(opp, (getSignups.all(opp.id) as any[]), req.userId, viewerYear)
     );
     return res.json(result);
   } catch (err: any) {

@@ -94,6 +94,27 @@ export interface Opportunity {
   isFeatured?: boolean;
   hostVerified?: boolean;
   externalSignupUrl?: string | null;  // org's own registration page, if volunteers must sign up there instead
+
+  // ── Ongoing roles ────────────────────────────────────────────────────
+  // A second post type alongside one-time events: a standing commitment
+  // (a weekly shift, a monthly minimum, a council seat) rather than
+  // something that happens on a date. 'event' on every existing post, so
+  // every date-based branch keeps running on them untouched.
+  commitmentType?: 'event' | 'role';
+  commitment?: string | null;        // "8 hrs/month", "Every Wednesday"
+  term?: string | null;              // "Fall 2026" (optional)
+  minAge?: number | null;
+  trainingRequired?: boolean;
+  trainingDescription?: string | null;
+  requirements?: string[];
+  positions?: number | null;         // null = unlimited
+  // Computed per-requester, like signedUpByMe: never says who else applied.
+  myApplicationStatus?: 'applied' | 'accepted' | 'declined' | null;
+  acceptedCount?: number;
+  // Whether the person asking clears minAge. The birth year itself is never
+  // sent -- the server answers the question instead of handing over the data
+  // to answer it with. null = no birth year on the account, so unknown.
+  meetsMinAge?: boolean | null;
 }
 
 export interface AppUser {

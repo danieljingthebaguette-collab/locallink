@@ -36,6 +36,7 @@ import {
   Copy,
   BadgeCheck,
   Calendar,
+  Repeat,
   Sparkles,
   Tags,
 } from 'lucide-react';
@@ -1174,7 +1175,15 @@ function OpportunitiesTab({
     location: string; town: string; date: string; duration: number; spots: number;
     pinnedSize: 'small' | 'medium' | 'large' | null;
     externalSignupUrl: string;
-  }>({ title: '', description: '', category: 'volunteer', location: '', town: '', date: '', duration: 2, spots: 10, pinnedSize: null, externalSignupUrl: '' });
+    // Role fields. Every one of them is on the create form too -- an admin
+    // must be able to reach the same fields the org filled in, or this
+    // becomes the one screen a role can't be fixed on.
+    commitmentType: 'event' | 'role';
+    commitment: string; term: string; minAge: string;
+    trainingRequired: boolean; trainingDescription: string;
+    requirements: string[]; positions: string;
+  }>({ title: '', description: '', category: 'volunteer', location: '', town: '', date: '', duration: 2, spots: 10, pinnedSize: null, externalSignupUrl: '',
+       commitmentType: 'event', commitment: '', term: '', minAge: '', trainingRequired: false, trainingDescription: '', requirements: [], positions: '' });
   const [editReason, setEditReason] = useState('');
   const [savingEdit, setSavingEdit] = useState(false);
   const [signupUrlError, setSignupUrlError] = useState('');
@@ -1205,15 +1214,40 @@ function OpportunitiesTab({
       spots: opp.spots,
       pinnedSize: (opp.pinnedSize as 'small' | 'medium' | 'large' | null) ?? null,
       externalSignupUrl: opp.externalSignupUrl ?? '',
+      commitmentType: (opp.commitmentType ?? 'event') as 'event' | 'role',
+      commitment: opp.commitment ?? '',
+      term: opp.term ?? '',
+      minAge: opp.minAge != null ? String(opp.minAge) : '',
+      trainingRequired: !!opp.trainingRequired,
+      trainingDescription: opp.trainingDescription ?? '',
+      requirements: opp.requirements ?? [],
+      positions: opp.positions != null ? String(opp.positions) : '',
     });
   };
 
   const handleSaveEdit = async (oppId: string) => {
-    if (!editForm.title || !editForm.description || !editForm.location || !editForm.date) return;
+    const isRoleEdit = editForm.commitmentType === 'role';
+    if (!editForm.title || !editForm.description || !editForm.location || (!isRoleEdit && !editForm.date)) return;
     const urlError = getExternalSignupUrlError(editForm.externalSignupUrl);
     if (urlError) { setSignupUrlError(urlError); return; }
+    if (isRoleEdit && !editForm.externalSignupUrl.trim()) {
+      setSignupUrlError('An ongoing role needs an application link');
+      return;
+    }
     setSavingEdit(true);
-    const ok = await onUpdateOpportunity(oppId, editForm, editReason);
+    // A role has no date, duration or spots -- the form doesn't show them, so
+    // the payload doesn't carry them either. Sending the columns' placeholder
+    // values back would write event shape onto a post that has none.
+    const { date: _d, duration: _du, spots: _s, ...roleFields } = editForm;
+    const payload = isRoleEdit
+      ? {
+          ...roleFields,
+          minAge: editForm.minAge.trim() ? Number(editForm.minAge) : null,
+          positions: editForm.positions.trim() ? Number(editForm.positions) : null,
+          requirements: editForm.requirements.filter(r => r.trim()),
+        }
+      : editForm;
+    const ok = await onUpdateOpportunity(oppId, payload, editReason);
     setSavingEdit(false);
     if (ok) { setEditingId(null); setEditReason(''); }
   };
@@ -1298,9 +1332,11 @@ function OpportunitiesTab({
                   <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
                     <span>{opp.location}</span>
                     <span>·</span>
-                    <span>{opp.signupCount} interested</span>
+                    <span>{opp.signupCount} {opp.commitmentType === 'role' ? 'applied' : 'interested'}</span>
                     <span>·</span>
-                    <span>{opp.duration}h</span>
+                    {/* A role has no duration -- the column holds 0. Its "how much"
+                        is the commitment, which is the thing worth seeing here. */}
+                    <span>{opp.commitmentType === 'role' ? opp.commitment : `${opp.duration}h`}</span>
                   </div>
                 </div>
                 {opp.image && (
@@ -1369,6 +1405,55 @@ function OpportunitiesTab({
                       {TOWNS.map(t => <option key={t} value={t}>{t}</option>)}
                     </select>
                   </div>
+                  {/* A role has no date or duration; its commitment line is what
+                      says when. Same split the create form makes. */}
+                  {editForm.commitmentType === 'role' ? (
+                    <div className="space-y-2 rounded-xl border border-border bg-secondary/40 p-3">
+                      <p className="text-xs font-bold tracking-wide uppercase text-muted-foreground">Ongoing role</p>
+                      <Input placeholder="Commitment * — e.g. 8 hrs/month" value={editForm.commitment}
+                        onChange={e => setEditForm({ ...editForm, commitment: e.target.value })}
+                        className="h-9 rounded-xl text-sm" />
+                      <div className="grid grid-cols-3 gap-2">
+                        <Input placeholder="Term" value={editForm.term}
+                          onChange={e => setEditForm({ ...editForm, term: e.target.value })}
+                          className="h-9 rounded-xl text-sm" />
+                        <Input type="number" placeholder="Min age" min={13} max={120} value={editForm.minAge}
+                          onChange={e => setEditForm({ ...editForm, minAge: e.target.value })}
+                          className="h-9 rounded-xl text-sm" />
+                        <Input type="number" placeholder="Positions" min={1} value={editForm.positions}
+                          onChange={e => setEditForm({ ...editForm, positions: e.target.value })}
+                          className="h-9 rounded-xl text-sm" />
+                      </div>
+                      <label className="flex items-center gap-2 text-xs text-foreground cursor-pointer min-h-[44px]">
+                        <input type="checkbox" checked={editForm.trainingRequired}
+                          onChange={e => setEditForm({ ...editForm, trainingRequired: e.target.checked })} />
+                        Training required
+                      </label>
+                      {editForm.trainingRequired && (
+                        <Textarea placeholder="What the training involves" value={editForm.trainingDescription}
+                          onChange={e => setEditForm({ ...editForm, trainingDescription: e.target.value })}
+                          className="rounded-xl text-sm resize-none min-h-[56px]" />
+                      )}
+                      <div className="space-y-1.5">
+                        <span className="text-xs font-medium text-muted-foreground">Requirements</span>
+                        {editForm.requirements.map((r, i) => (
+                          <div key={i} className="flex gap-2">
+                            <Input value={r} placeholder="Requirement"
+                              onChange={e => setEditForm({ ...editForm, requirements: editForm.requirements.map((v, vi) => vi === i ? e.target.value : v) })}
+                              className="h-9 rounded-xl text-sm flex-1" />
+                            <button type="button" aria-label={`Remove requirement ${i + 1}`}
+                              onClick={() => setEditForm({ ...editForm, requirements: editForm.requirements.filter((_, vi) => vi !== i) })}
+                              className="w-9 h-9 rounded-xl border border-border hover:bg-accent flex items-center justify-center flex-shrink-0 cursor-pointer">
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                        <button type="button"
+                          onClick={() => setEditForm({ ...editForm, requirements: [...editForm.requirements, ''] })}
+                          className="text-xs font-semibold text-primary hover:underline cursor-pointer">+ Add requirement</button>
+                      </div>
+                    </div>
+                  ) : (
                   <div className="grid grid-cols-3 gap-2">
                     <Input type="datetime-local" value={editForm.date}
                       min={new Date().toISOString().slice(0, 16)}
@@ -1383,6 +1468,7 @@ function OpportunitiesTab({
                       onChange={e => setEditForm({ ...editForm, spots: parseInt(e.target.value) })}
                       className="h-9 rounded-xl text-sm" />
                   </div>
+                  )}
                   {/* Admin-only: card size override */}
                   <div className="flex items-center gap-3">
                     <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">Card Size:</span>
@@ -1399,7 +1485,9 @@ function OpportunitiesTab({
                   </div>
                   <div>
                     <label htmlFor="admin-field" className="text-xs font-medium text-muted-foreground block mb-1">
-                      Signup page (optional) — if volunteers need to register on your own site
+                      {editForm.commitmentType === 'role'
+                        ? 'Application link * — a role is applied for on the organization’s own form'
+                        : 'Signup page (optional) — if volunteers need to register on your own site'}
                     </label>
                     <Input id="admin-field" placeholder="https://your-site.org/signup" value={editForm.externalSignupUrl}
                       onChange={e => { setEditForm({ ...editForm, externalSignupUrl: e.target.value }); setSignupUrlError(''); }}
@@ -1512,10 +1600,22 @@ function VerifyTab({
           <p className="text-sm text-muted-foreground line-clamp-3">{opp.description}</p>
 
           {/* Meta */}
+          {/* What an admin needs to judge the post. A role has no date or
+              duration to show, so it shows what it actually asks for instead. */}
           <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
-            <span className="inline-flex items-center gap-1"><Calendar className="w-3 h-3" />{new Date(opp.date).toLocaleDateString(undefined, { dateStyle: 'medium' })}</span>
-            <span>⏱ {opp.duration}h</span>
-            {opp.spotsType === 'limited' && <span>👥 {opp.spots} spots</span>}
+            {opp.commitmentType === 'role' ? (
+              <>
+                <span className="inline-flex items-center gap-1"><Repeat className="w-3 h-3" />{opp.commitment}</span>
+                {!!opp.minAge && <span>{opp.minAge}+ years old</span>}
+                <span>{opp.positions ? `${opp.positions} position${opp.positions === 1 ? '' : 's'}` : 'Unlimited positions'}</span>
+              </>
+            ) : (
+              <>
+                <span className="inline-flex items-center gap-1"><Calendar className="w-3 h-3" />{new Date(opp.date).toLocaleDateString(undefined, { dateStyle: 'medium' })}</span>
+                <span>⏱ {opp.duration}h</span>
+                {opp.spotsType === 'limited' && <span>👥 {opp.spots} spots</span>}
+              </>
+            )}
           </div>
 
           {/* Deny reason input */}

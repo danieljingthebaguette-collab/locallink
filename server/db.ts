@@ -435,6 +435,53 @@ try {
   db.exec('ALTER TABLE opportunities ADD COLUMN externalSignupUrl TEXT DEFAULT NULL');
 }
 
+// Migrate: ongoing roles -- a second post type alongside one-time events, for
+// commitments that repeat indefinitely rather than happening on a date
+// (a weekly shift, a monthly hours minimum, a council seat, a training
+// programme).
+//
+// commitmentType is the discriminator and defaults to 'event', so every row
+// that already exists stays exactly what it was and every date-based code
+// path keeps running on it untouched. Roles opt out of that logic instead of
+// events opting in.
+//
+// The `date` column stays NOT NULL because it is, and rewriting a NOT NULL
+// constraint in SQLite means rebuilding the table. A role writes its creation
+// time there and nothing ever reads it -- every date-dependent branch checks
+// commitmentType first.
+//
+// requirements is a JSON array of strings, handled exactly like tags/steps.
+// The application link reuses externalSignupUrl rather than adding a second
+// column that would mean the same thing.
+for (const [col, ddl] of [
+  ['commitmentType',      "ALTER TABLE opportunities ADD COLUMN commitmentType TEXT DEFAULT 'event'"],
+  ['commitment',          'ALTER TABLE opportunities ADD COLUMN commitment TEXT DEFAULT NULL'],
+  ['term',                'ALTER TABLE opportunities ADD COLUMN term TEXT DEFAULT NULL'],
+  ['minAge',              'ALTER TABLE opportunities ADD COLUMN minAge INTEGER DEFAULT NULL'],
+  ['trainingRequired',    'ALTER TABLE opportunities ADD COLUMN trainingRequired INTEGER DEFAULT 0'],
+  ['trainingDescription', 'ALTER TABLE opportunities ADD COLUMN trainingDescription TEXT DEFAULT NULL'],
+  ['requirements',        'ALTER TABLE opportunities ADD COLUMN requirements TEXT DEFAULT NULL'],
+  ['positions',           'ALTER TABLE opportunities ADD COLUMN positions INTEGER DEFAULT NULL'],
+] as const) {
+  try {
+    db.prepare(`SELECT ${col} FROM opportunities LIMIT 1`).get();
+  } catch {
+    db.exec(ddl);
+  }
+}
+
+// Migrate: application status on signups.
+//
+// NULL for events -- an event signup is interest, which has no states. For a
+// role it is the application's state, so one table covers both and every
+// existing "am I signed up / how many signed up" query keeps working on roles
+// without knowing roles exist.
+try {
+  db.prepare('SELECT status FROM signups LIMIT 1').get();
+} catch {
+  db.exec('ALTER TABLE signups ADD COLUMN status TEXT DEFAULT NULL');
+}
+
 // Migrate: add the volunteer onboarding questionnaire fields to users.
 // Six flat nullable columns, matching the org-profile precedent (orgDescription/
 // orgWebsite/orgEmail/orgPhone) rather than a separate table -- same 1:1

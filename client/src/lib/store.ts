@@ -308,6 +308,7 @@ interface OpportunitiesState {
   currentCategory: Category | 'all';
   currentTown: string; // one of TOWNS or 'all'
   currentField: string; // one of FIELD_TAGS or 'all'
+  currentPostType: 'all' | 'event' | 'role'; // one-time events vs ongoing roles
   sortBy: 'newest' | 'oldest' | 'soonest' | 'popular' | 'match';
   loading: boolean;
   loaded: boolean;
@@ -315,6 +316,7 @@ interface OpportunitiesState {
   setCategory: (cat: Category | 'all') => void;
   setTown: (town: string) => void;
   setField: (field: string) => void;
+  setPostType: (t: 'all' | 'event' | 'role') => void;
   setSortBy: (sort: 'newest' | 'oldest' | 'soonest' | 'popular' | 'match') => void;
   getFiltered: () => Opportunity[];
   fetchOpportunities: () => Promise<void>;
@@ -324,6 +326,7 @@ interface OpportunitiesState {
   deleteOwnOpportunity: (oppId: string) => Promise<boolean>;
   signup: (oppId: string, userId: string) => Promise<{ success: boolean; error?: string }>;
   cancelSignup: (oppId: string, userId: string) => Promise<boolean>;
+  setApplicationStatus: (oppId: string, userId: string, status: 'accepted' | 'declined') => Promise<{ success: boolean; error?: string }>;
   getSignedUpEvents: (userId: string) => Opportunity[];
   getHostedEvents: (userId: string) => Opportunity[];
 }
@@ -335,6 +338,7 @@ export const useOpportunitiesStore = create<OpportunitiesState>((set, get) => ({
   currentCategory: 'all',
   currentTown: 'all',
   currentField: 'all',
+  currentPostType: 'all',
   sortBy: 'newest',
   loading: false,
   loaded: false,
@@ -343,10 +347,11 @@ export const useOpportunitiesStore = create<OpportunitiesState>((set, get) => ({
   setCategory: (cat) => set({ currentCategory: cat }),
   setTown: (town) => set({ currentTown: town }),
   setField: (field) => set({ currentField: field }),
+  setPostType: (t) => set({ currentPostType: t }),
   setSortBy: (sort) => set({ sortBy: sort }),
 
   getFiltered: () => {
-    const { opportunities, currentCategory, currentTown, currentField, searchQuery, sortBy } = get();
+    const { opportunities, currentCategory, currentTown, currentField, currentPostType, searchQuery, sortBy } = get();
     let filtered = [...opportunities];
 
     if (currentCategory !== 'all') {
@@ -354,6 +359,13 @@ export const useOpportunitiesStore = create<OpportunitiesState>((set, get) => ({
       // post published under the old category set still answers to a chip.
       // Nothing is rewritten -- the card keeps showing its original label.
       filtered = filtered.filter(opp => getFilterCategory(opp.category) === currentCategory);
+    }
+
+    // Events vs ongoing roles. Posts from before the field have no
+    // commitmentType at all, so the absent value reads as 'event' -- the same
+    // way the server defaults it.
+    if (currentPostType !== 'all') {
+      filtered = filtered.filter(opp => (opp.commitmentType ?? 'event') === currentPostType);
     }
 
     // 'all' includes townless posts (created before the town field existed)
@@ -388,6 +400,10 @@ export const useOpportunitiesStore = create<OpportunitiesState>((set, get) => ({
     } else if (sortBy === 'soonest') {
       // For recurring events use nextOccurrence instead of the stored (first) date
       const effectiveDate = (o: Opportunity): number => {
+        // A role has no date to be soonest by. Infinity parks every role
+        // after every dated event rather than at the top, which is where a
+        // meaningless 0 or the stored creation date would have put them.
+        if ((o.commitmentType ?? 'event') === 'role') return Infinity;
         if (o.isRecurring) {
           const status = getRecurringStatus(o);
           return status ? status.nextOccurrence.getTime() : new Date(o.date).getTime();
@@ -411,7 +427,10 @@ export const useOpportunitiesStore = create<OpportunitiesState>((set, get) => ({
       } else {
         filtered.sort((a, b) => {
           const diff = getMatchScore(b, prefs) - getMatchScore(a, prefs);
-          return diff !== 0 ? diff : new Date(a.date).getTime() - new Date(b.date).getTime();
+          if (diff !== 0) return diff;
+          const dateOf = (o: Opportunity) =>
+            (o.commitmentType ?? 'event') === 'role' ? Infinity : new Date(o.date).getTime();
+          return dateOf(a) - dateOf(b);
         });
       }
     }
@@ -421,9 +440,15 @@ export const useOpportunitiesStore = create<OpportunitiesState>((set, get) => ({
     // is computed dynamically from the current time vs. their weekly schedule.
     const now = new Date();
 
+    const isRole = (o: Opportunity) => (o.commitmentType ?? 'event') === 'role';
+
     const effectiveIsOpen = (o: Opportunity): boolean => {
       // Manual host-close (isAvailable=0/false) always overrides the schedule
       if (o.isAvailable === false || (o.isAvailable as any) === 0) return false;
+      // A role has no schedule to be closed by -- only the host's own toggle
+      // above, and "positions filled", which the card states without
+      // reordering the board.
+      if (isRole(o)) return true;
       if (o.isRecurring) {
         const status = getRecurringStatus(o);
         return status ? status.isOpen : true;
@@ -431,8 +456,10 @@ export const useOpportunitiesStore = create<OpportunitiesState>((set, get) => ({
       return true;
     };
 
-    const future = filtered.filter(o => o.isRecurring || new Date(o.date) >= now);
-    const past   = filtered.filter(o => !o.isRecurring && new Date(o.date) < now);
+    // Roles join recurring posts in never entering the "past" bucket: there is
+    // no date on them that could have gone by.
+    const future = filtered.filter(o => isRole(o) || o.isRecurring || new Date(o.date) >= now);
+    const past   = filtered.filter(o => !isRole(o) && !o.isRecurring && new Date(o.date) < now);
     const futureOpen   = future.filter(o =>  effectiveIsOpen(o));
     const futureClosed = future.filter(o => !effectiveIsOpen(o));
     return [...futureOpen, ...futureClosed, ...past];
@@ -578,6 +605,25 @@ export const useOpportunitiesStore = create<OpportunitiesState>((set, get) => ({
   // computed server-side for whichever token was sent -- there is no longer
   // a raw list here to check an arbitrary id against, and both real callers
   // only ever pass the current user's own id anyway.
+  /** Host decides one application. The server re-checks ownership and the
+   *  positions cap; this just reflects the result. */
+  setApplicationStatus: async (oppId, userId, status) => {
+    try {
+      const res = await fetch(`${API}/opportunities/${oppId}/applications/${userId}`, {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ status }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        set((s) => ({ opportunities: s.opportunities.map(o => o.id === oppId ? data : o) }));
+        return { success: true };
+      }
+      if (res.status === 401) useAuthStore.getState().logout();
+      return { success: false, error: data.error };
+    } catch { return { success: false, error: 'Network error' }; }
+  },
+
   getSignedUpEvents: (_userId) => {
     return get().opportunities.filter(o => o.signedUpByMe);
   },
@@ -895,7 +941,7 @@ export interface AppNotification {
   // client compares against with === need to be here; everything else
   // already falls through to Navigation.tsx's default icon/style via
   // .includes(), which doesn't need the literal type.
-  type: 'interest' | 'cancel' | 'admin_delete' | 'admin_edit' | 'reopen' | 'post_approved' | 'post_denied' | 'onboarding_reminder' | 'admin_message';
+  type: 'interest' | 'application' | 'application_decision' | 'cancel' | 'admin_delete' | 'admin_edit' | 'reopen' | 'post_approved' | 'post_denied' | 'onboarding_reminder' | 'admin_message';
   message: string;
   postId: string | null;
   read: boolean;

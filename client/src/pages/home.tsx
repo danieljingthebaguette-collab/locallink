@@ -3,7 +3,7 @@ import { useLocation } from 'wouter';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { cn, getLocationError, getExternalSignupUrlError, getRelativeDay } from '@/lib/utils';
 import { Linkified, hasLink } from '@/components/Linkified';
-import { Plus, MapPin, Users, Clock, Search, Loader2, Heart, Flag, X, Share2, Edit3, Save, ChevronDown, Star, Trash2, Repeat, Globe, ExternalLink, Sparkles, ClipboardList, Calendar, User, Info } from 'lucide-react';
+import { Plus, MapPin, Users, Clock, Search, Loader2, Heart, Flag, X, Share2, Edit3, Save, ChevronDown, Star, Trash2, Repeat, Globe, ExternalLink, Sparkles, ClipboardList, Calendar, CalendarClock, User, Info, CheckCircle2, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -41,6 +41,16 @@ const SORT_OPTIONS: { value: 'newest' | 'oldest' | 'soonest' | 'popular' | 'matc
 
 // Easing curve used throughout — smooth deceleration
 const EASE_OUT = [0.25, 0.1, 0.25, 1] as const;
+
+/** A post is an ongoing role rather than a one-time event. Posts from before
+ *  the field exists have no commitmentType, which reads as 'event' -- the same
+ *  default the server writes. */
+const isRolePost = (o: { commitmentType?: string | null }) => (o.commitmentType ?? 'event') === 'role';
+
+/** Every advertised position on a role is taken. Counted from accepted
+ *  applications, never from how many applied. Unlimited (null) never fills. */
+const isPositionsFilled = (o: { positions?: number | null; acceptedCount?: number }) =>
+  !!o.positions && (o.acceptedCount ?? 0) >= o.positions;
 
 // Shown twice: to signed-out visitors under the hero, and once more as a welcome
 // to anyone who has just registered. Previously only signed-out visitors ever saw
@@ -109,9 +119,9 @@ export default function Home() {
   const myMajors = currentUser?.onboardingMajors ?? null;
   const hasAnyPrefs = !!((myInterests && myInterests.length) || (myTowns && myTowns.length) || (myAvailability && myAvailability.length) || (myMajors && myMajors.trim()));
   const {
-    setSearchQuery, setCategory, setSortBy, setTown, setField, getFiltered,
-    currentCategory, searchQuery, sortBy, currentTown, currentField,
-    signup, cancelSignup, fetchOpportunities, updateOpportunity,
+    setSearchQuery, setCategory, setSortBy, setTown, setField, setPostType, getFiltered,
+    currentCategory, searchQuery, sortBy, currentTown, currentField, currentPostType,
+    signup, cancelSignup, fetchOpportunities, updateOpportunity, setApplicationStatus,
     loading, loaded, opportunities,
   } = useOpportunitiesStore();
   // Destructure `favorites` array directly so React re-renders when it changes
@@ -127,10 +137,16 @@ export default function Home() {
   const prefersReducedMotion = useReducedMotion();
   // Host "view interested" list — fetched on demand, not preloaded with the board
   const [showInterestedList, setShowInterestedList] = useState(false);
+  // userId and status are only meaningful on a role -- on an event every
+  // status is null and the host has nothing to decide.
   const [interestedVolunteers, setInterestedVolunteers] = useState<
-    { username: string; email: string; signedUpAt: string }[] | null
+    { userId: string; username: string; email: string; signedUpAt: string; status: string | null }[] | null
   >(null);
   const [interestedLoading, setInterestedLoading] = useState(false);
+  /** userId of the applicant whose accept/decline is in flight. */
+  const [decidingFor, setDecidingFor] = useState<string | null>(null);
+  // The apply confirm step: holds the id of the role awaiting confirmation.
+  const [applyConfirmFor, setApplyConfirmFor] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [togglingFav, setTogglingFav] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
@@ -377,30 +393,55 @@ export default function Home() {
   };
 
   // ── Sign up / cancel ──────────────────────────────────────────────
-  const handleSignup = async (oppId: string) => {
+  /** Clearly under a role's minimum age. The birth year itself never leaves the
+   *  server, so this reads the boolean the server computed for whoever asked:
+   *  false = too young, true = old enough, null = no birth year on the account,
+   *  which is not read as too young here and is checked server-side anyway --
+   *  the same stance the 18+ gate takes. */
+  const tooYoungFor = (o: Opportunity): boolean => o.meetsMinAge === false;
+
+  /** Record the application first, then open the organization's form. In that
+   *  order on purpose: a popup blocker costs the volunteer a tab, not the
+   *  application they just made. */
+  const handleApply = async (oppId: string) => {
+    const opp = opportunities.find(o => o.id === oppId) ?? selectedCard;
+    setApplyConfirmFor(null);
+    const ok = await handleSignup(oppId);
+    if (ok && opp?.externalSignupUrl) {
+      window.open(opp.externalSignupUrl, '_blank', 'noopener,noreferrer');
+    }
+  };
+
+  /** Returns whether the sign-up was actually recorded -- handleApply only
+   *  opens the organization's form once it was. */
+  const handleSignup = async (oppId: string): Promise<boolean> => {
     if (!isLoggedIn || !currentUser) {
       toast({ title: 'Please login first', description: 'You need to be logged in to express interest.' });
       navigate('/account');
-      return;
+      return false;
     }
     setSigningUp(true);
     try {
       const result = await signup(oppId, currentUser.id);
       if (result.success) {
-        toast({ title: "You're interested! ✓", description: 'You can view this in My Events.' });
+        const asRole = isRolePost(opportunities.find(o => o.id === oppId) ?? selectedCard ?? {});
+        toast(asRole
+          ? { title: 'Application sent ✓', description: 'The organization will review it. You can see it in My Events.' }
+          : { title: "You're interested! ✓", description: 'You can view this in My Events.' });
         if (!prefersReducedMotion) {
           setShowInterestBurst(true);
           window.setTimeout(() => setShowInterestBurst(false), 600);
         }
         const fresh = useOpportunitiesStore.getState().opportunities.find(o => o.id === oppId);
         if (fresh) setSelectedCard(fresh); else setSelectedCard(null);
-      } else {
-        // The server's actual reason, when it gave one -- a 409 really does
-        // mean "already interested", but that's not the only way this can
-        // fail, and claiming it was regardless of the real cause is worse
-        // than saying nothing.
-        toast({ title: 'Could not register interest', description: result.error || 'Please try again.' });
+        return true;
       }
+      // The server's actual reason, when it gave one -- a 409 really does
+      // mean "already interested", but that's not the only way this can
+      // fail, and claiming it was regardless of the real cause is worse
+      // than saying nothing.
+      toast({ title: 'Could not register interest', description: result.error || 'Please try again.' });
+      return false;
     } finally { setSigningUp(false); }
   };
 
@@ -450,6 +491,23 @@ export default function Home() {
     }
   };
 
+  /** Host accepts or declines one applicant. The server re-checks ownership
+   *  and the positions cap, so a refusal here is shown, not worked around. */
+  const decideApplication = async (oppId: string, userId: string, status: 'accepted' | 'declined') => {
+    setDecidingFor(userId);
+    try {
+      const result = await setApplicationStatus(oppId, userId, status);
+      if (!result.success) {
+        toast({ title: 'Could not save that', description: result.error || 'Please try again.' });
+        return;
+      }
+      setInterestedVolunteers(list => list?.map(v => v.userId === userId ? { ...v, status } : v) ?? list);
+      const fresh = useOpportunitiesStore.getState().opportunities.find(o => o.id === oppId);
+      if (fresh) setSelectedCard(fresh);
+      toast({ title: status === 'accepted' ? 'Applicant accepted' : 'Applicant declined', description: 'They have been notified.' });
+    } finally { setDecidingFor(null); }
+  };
+
   // ── Share post ────────────────────────────────────────────────────
   const handleShare = (oppId: string) => {
     const url = `${window.location.origin}/?post=${oppId}`;
@@ -495,6 +553,12 @@ export default function Home() {
       setSignupUrlEditError(signupUrlError);
       return;
     }
+    // The server refuses this too; saying it here means the host sees which
+    // field is wrong instead of a generic failure.
+    if (isRolePost(selectedCard) && !editForm.externalSignupUrl.trim()) {
+      setSignupUrlEditError('An ongoing role needs an application link');
+      return;
+    }
     setSavingEdit(true);
     // Build update payload — recurring events update day/time schedule; one-time events update date
     const payload: Record<string, any> = {
@@ -502,16 +566,21 @@ export default function Home() {
       description: editForm.description,
       location: editForm.location,
       town: editForm.town || null,
-      duration: editForm.duration,
-      spots: editForm.spots,
       category: editForm.category,
-      spotsType: editForm.spotsType,
     };
-    if (selectedCard.isRecurring) {
-      if (editForm.recurringDay !== undefined) payload.recurringDay = editForm.recurringDay;
-      if (editForm.recurringTime) payload.recurringTime = editForm.recurringTime;
-    } else {
-      payload.date = editForm.date;
+    // A role has no date, duration or capacity. This quick-edit form doesn't
+    // show them for one, and must not write the columns' placeholder values
+    // back over a post that never had them.
+    if (!isRolePost(selectedCard)) {
+      payload.duration = editForm.duration;
+      payload.spots = editForm.spots;
+      payload.spotsType = editForm.spotsType;
+      if (selectedCard.isRecurring) {
+        if (editForm.recurringDay !== undefined) payload.recurringDay = editForm.recurringDay;
+        if (editForm.recurringTime) payload.recurringTime = editForm.recurringTime;
+      } else {
+        payload.date = editForm.date;
+      }
     }
     payload.cardObjectPosition = serializeImageTransform(editForm.cardTransform);
     payload.modalObjectPosition = serializeImageTransform(editForm.modalTransform);
@@ -643,6 +712,21 @@ export default function Home() {
                   <span>Sort: {SORT_OPTIONS.find(o => o.value === sortBy)?.label}</span>
                   <ChevronDown className={cn("w-3.5 h-3.5 transition-transform duration-200", showSort && "rotate-180")} />
                 </button>
+                {/* Events vs ongoing roles. Beside Town and Field because it
+                    narrows the same list the same way -- it runs through
+                    getFiltered with them, not alongside it. */}
+                <label htmlFor="home-posttype" className="min-h-[44px] flex items-center gap-1 text-xs font-semibold text-muted-foreground uppercase tracking-wide cursor-pointer hover:text-foreground transition-colors">
+                  <span>Type:</span>
+                  <select id="home-posttype"
+                    value={currentPostType}
+                    onChange={e => setPostType(e.target.value as 'all' | 'event' | 'role')}
+                    aria-label="Filter by post type"
+                    className="min-h-[44px] bg-transparent text-xs font-semibold uppercase tracking-wide cursor-pointer focus:outline-none">
+                    <option value="all">All</option>
+                    <option value="event">Events</option>
+                    <option value="role">Ongoing Roles</option>
+                  </select>
+                </label>
                 <label htmlFor="home-field" className="min-h-[44px] flex items-center gap-1 text-xs font-semibold text-muted-foreground uppercase tracking-wide cursor-pointer hover:text-foreground transition-colors">
                   <span>Town:</span>
                   <select id="home-field"
@@ -1012,7 +1096,18 @@ export default function Home() {
                               <Sparkles className="w-2.5 h-2.5" />FOR YOU
                             </span>
                           )}
-                          {isPast && !opp.isRecurring && <span className="text-[10px] font-bold bg-white/20 text-white px-2 py-0.5 rounded-md">ENDED</span>}
+                          {/* Stated in words, not by colour alone -- this is the
+                              only thing on a card that says which of the two
+                              kinds of post it is. */}
+                          {isRolePost(opp) && (
+                            <span className="text-[10px] font-bold bg-white/25 text-white px-2 py-0.5 rounded-md inline-flex items-center gap-1">
+                              <Repeat className="w-2.5 h-2.5" />ONGOING ROLE
+                            </span>
+                          )}
+                          {isRolePost(opp) && isPositionsFilled(opp) && (
+                            <span className="text-[10px] font-bold bg-orange-500/80 text-white px-2 py-0.5 rounded-md">POSITIONS FILLED</span>
+                          )}
+                          {isPast && !opp.isRecurring && !isRolePost(opp) && <span className="text-[10px] font-bold bg-white/20 text-white px-2 py-0.5 rounded-md">ENDED</span>}
                           {isClosed && !!opp.isRecurring && <span className="text-[10px] font-bold bg-orange-500/80 text-white px-2 py-0.5 rounded-md">CLOSED</span>}
                           {alreadyInterested && (
                             <motion.span
@@ -1071,7 +1166,16 @@ export default function Home() {
                             <span className="truncate">{opp.location.split(',')[0]}</span>
                           </span>
                           <span className="inline-flex items-center gap-1.5 flex-shrink-0 whitespace-nowrap">
-                            {opp.isRecurring ? (
+                            {isRolePost(opp) ? (
+                              // A role has no date and no duration. The
+                              // commitment is the answer to "when", and the
+                              // term, when there is one, to "for how long".
+                              <>
+                                <Repeat className="w-3 h-3 flex-shrink-0" />
+                                {opp.commitment}
+                                {opp.term && (<><span className="opacity-60">&bull;</span>{opp.term}</>)}
+                              </>
+                            ) : opp.isRecurring ? (
                               <>
                                 <Repeat className="w-3 h-3 flex-shrink-0" />
                                 {formatRecurringShort(opp)}
@@ -1081,11 +1185,11 @@ export default function Home() {
                                 <Calendar className="w-3 h-3 flex-shrink-0" />
                                 {getRelativeDay(opp.date)
                                   ?? new Date(opp.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                <span className="opacity-60">&bull;</span>
+                                <Clock className="w-3 h-3 flex-shrink-0" />
+                                {opp.duration}h
                               </>
                             )}
-                            <span className="opacity-60">&bull;</span>
-                            <Clock className="w-3 h-3 flex-shrink-0" />
-                            {opp.duration}h
                           </span>
                         </div>
                       </div>
@@ -1167,6 +1271,7 @@ export default function Home() {
                 currentCategory !== 'all' && getCategoryLabel(currentCategory as Category),
                 currentTown !== 'all' && currentTown,
                 currentField !== 'all' && currentField,
+                currentPostType === 'role' ? 'Ongoing Roles' : currentPostType === 'event' ? 'Events' : '',
               ].filter(Boolean) as string[];
               return (
                 <motion.div
@@ -1191,7 +1296,7 @@ export default function Home() {
                     // Must clear town too — it used to be left set, so clearing
                     // filters on an empty town left the board just as empty.
                     <Button
-                      onClick={() => { setSearchQuery(''); setCategory('all'); setTown('all'); setField('all'); }}
+                      onClick={() => { setSearchQuery(''); setCategory('all'); setTown('all'); setField('all'); setPostType('all'); }}
                       className="rounded-md">
                       Clear all filters
                     </Button>
@@ -1339,7 +1444,11 @@ export default function Home() {
                           <option value="">No town set</option>
                           {TOWNS.map(t => <option key={t} value={t}>{t}</option>)}
                         </select>
-                        {selectedCard?.isRecurring ? (
+                        {/* Schedule, length and capacity are event ideas. A role
+                            is edited for its commitment instead, and this quick
+                            form deliberately doesn't carry those fields -- the
+                            full role form lives in the admin panel. */}
+                        {isRolePost(selectedCard) ? null : selectedCard?.isRecurring ? (
                           /* Recurring events: day-of-week dropdown + time picker */
                           <div className="flex gap-1">
                             <select
@@ -1367,16 +1476,16 @@ export default function Home() {
                             className="rounded-xl bg-white/80 text-slate-900 border-0 text-sm h-9 px-3"
                           />
                         )}
-                        <input
+                        {!isRolePost(selectedCard) && <input
                           type="number" min={0.5} step={0.5}
                           value={editForm.duration}
                           onChange={e => setEditForm(f => ({ ...f, duration: parseFloat(e.target.value) || 0.5 }))}
                           placeholder="Duration (hrs)"
                           className="rounded-xl bg-white/80 text-slate-900 border-0 text-sm h-9 px-3"
-                        />
+                        />}
                       </div>
                       {/* Optional approximate capacity */}
-                      <div className="flex items-center gap-3">
+                      {!isRolePost(selectedCard) && <div className="flex items-center gap-3">
                         <span className="text-xs text-white/75 font-medium whitespace-nowrap">Approx. capacity (optional):</span>
                         <input
                           type="number" min={1}
@@ -1392,11 +1501,13 @@ export default function Home() {
                           placeholder="e.g. 20"
                           className="rounded-xl bg-white/80 text-slate-900 border-0 text-sm h-9 px-3 w-28"
                         />
-                      </div>
+                      </div>}
                       {/* External signup — org's own registration page, if they use one */}
                       <div>
                         <label htmlFor="home-field-2" className="text-xs text-white/75 font-medium block mb-1">
-                          Signup page (optional) — if volunteers need to register on your own site
+                          {isRolePost(selectedCard)
+                            ? 'Application link — volunteers finish applying on your own form'
+                            : 'Signup page (optional) — if volunteers need to register on your own site'}
                         </label>
                         <input id="home-field-2"
                           type="text"
@@ -1468,7 +1579,11 @@ export default function Home() {
                       <p className="text-sm md:text-base font-semibold">{selectedCard.location}</p>
                     )}
                   </div>
-                  {/* Date & Time / Schedule — full width on mobile, 1 col on desktop */}
+                  {/* Date & Time / Schedule — full width on mobile, 1 col on desktop.
+                      A role has no date: the column is NOT NULL, so it holds the
+                      post's own creation time, which means nothing to a reader and
+                      would be read as the day the role happens. */}
+                  {!isRolePost(selectedCard) && (
                   <div className="col-span-2 md:col-span-1 bg-white/15 rounded-2xl p-3 md:p-4 border border-white/20">
                     {!!selectedCard.isRecurring ? (
                       <>
@@ -1493,23 +1608,61 @@ export default function Home() {
                       </>
                     )}
                   </div>
-                  {/* Duration */}
-                  <div className="bg-white/15 rounded-2xl p-3 md:p-4 border border-white/20">
-                    <p className="text-xs font-bold tracking-widest uppercase opacity-75 mb-1.5 inline-flex items-center gap-1.5"><Clock className="w-3 h-3" /> Duration</p>
-                    <p className="text-sm md:text-base font-semibold">{selectedCard.duration} hours</p>
-                  </div>
-                  {/* Expected Spots — planned capacity, not a live countdown */}
-                  <div className="bg-white/15 rounded-2xl p-3 md:p-4 border border-white/20">
-                    <p className="text-xs font-bold tracking-widest uppercase opacity-75 mb-1.5 inline-flex items-center gap-1.5"><Users className="w-3 h-3" /> Expected Spots</p>
-                    <p className="text-sm md:text-base font-semibold">
-                      {selectedCard.spotsType === 'limited' && (selectedCard.spots ?? 0) > 0
-                        ? `~${selectedCard.spots}`
-                        : selectedCard.spotsType === 'unlimited'
-                        ? 'Unlimited'
-                        : '—'}
-                    </p>
-                    <p className="text-xs opacity-50 mt-0.5">planned capacity</p>
-                  </div>
+                  )}
+                  {/* Duration — events only. A role's "how much" is its commitment. */}
+                  {!isRolePost(selectedCard) && (
+                    <div className="bg-white/15 rounded-2xl p-3 md:p-4 border border-white/20">
+                      <p className="text-xs font-bold tracking-widest uppercase opacity-75 mb-1.5 inline-flex items-center gap-1.5"><Clock className="w-3 h-3" /> Duration</p>
+                      <p className="text-sm md:text-base font-semibold">{selectedCard.duration} hours</p>
+                    </div>
+                  )}
+                  {/* ── Ongoing role: what is actually being asked of someone ── */}
+                  {isRolePost(selectedCard) && (
+                    <div className="bg-white/15 rounded-2xl p-3 md:p-4 border border-white/20">
+                      <p className="text-xs font-bold tracking-widest uppercase opacity-75 mb-1.5 inline-flex items-center gap-1.5"><Repeat className="w-3 h-3" /> Commitment</p>
+                      <p className="text-sm md:text-base font-semibold">{selectedCard.commitment}</p>
+                      {selectedCard.term && <p className="text-xs opacity-75 mt-0.5">{selectedCard.term}</p>}
+                    </div>
+                  )}
+                  {isRolePost(selectedCard) && (selectedCard.minAge || selectedCard.trainingRequired) && (
+                    <div className="bg-white/15 rounded-2xl p-3 md:p-4 border border-white/20">
+                      <p className="text-xs font-bold tracking-widest uppercase opacity-75 mb-1.5 inline-flex items-center gap-1.5"><Info className="w-3 h-3" /> Requirements</p>
+                      {!!selectedCard.minAge && <p className="text-sm md:text-base font-semibold">{selectedCard.minAge}+ years old</p>}
+                      {selectedCard.trainingRequired && (
+                        <p className="text-xs opacity-80 mt-0.5">
+                          Training required{selectedCard.trainingDescription ? ` — ${selectedCard.trainingDescription}` : ''}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                  {/* How many people are wanted. An event plans for a crowd on a
+                      day; a role is a seat that is either open or taken, so it
+                      counts positions and says how many are still free. */}
+                  {isRolePost(selectedCard) ? (
+                    <div className="bg-white/15 rounded-2xl p-3 md:p-4 border border-white/20">
+                      <p className="text-xs font-bold tracking-widest uppercase opacity-75 mb-1.5 inline-flex items-center gap-1.5"><Users className="w-3 h-3" /> Positions</p>
+                      <p className="text-sm md:text-base font-semibold">
+                        {selectedCard.positions ? selectedCard.positions : 'Open'}
+                      </p>
+                      <p className="text-xs opacity-50 mt-0.5">
+                        {selectedCard.positions
+                          ? `${Math.max(0, selectedCard.positions - (selectedCard.acceptedCount ?? 0))} still open`
+                          : 'no set limit'}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="bg-white/15 rounded-2xl p-3 md:p-4 border border-white/20">
+                      <p className="text-xs font-bold tracking-widest uppercase opacity-75 mb-1.5 inline-flex items-center gap-1.5"><Users className="w-3 h-3" /> Expected Spots</p>
+                      <p className="text-sm md:text-base font-semibold">
+                        {selectedCard.spotsType === 'limited' && (selectedCard.spots ?? 0) > 0
+                          ? `~${selectedCard.spots}`
+                          : selectedCard.spotsType === 'unlimited'
+                          ? 'Unlimited'
+                          : '—'}
+                      </p>
+                      <p className="text-xs opacity-50 mt-0.5">planned capacity</p>
+                    </div>
+                  )}
                 </motion.div>
 
                 {/* Host */}
@@ -1686,6 +1839,27 @@ export default function Home() {
                   </motion.div>
                 )}
 
+                {/* A role's requirements, as a checklist -- these are things a
+                    volunteer has to be able to say yes to before applying. */}
+                {isRolePost(selectedCard) && (selectedCard.requirements?.length ?? 0) > 0 && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.2, duration: 0.32, ease: EASE_OUT }}
+                    className="bg-white/15 rounded-2xl p-4 md:p-5 border border-white/20">
+                    <p className="text-xs font-bold tracking-widest uppercase opacity-75 mb-2 inline-flex items-center gap-1.5">
+                      <ClipboardList className="w-3 h-3" /> What this role asks of you
+                    </p>
+                    <ul className="space-y-1.5">
+                      {selectedCard.requirements!.map((r, i) => (
+                        <li key={i} className="flex items-start gap-2 text-sm">
+                          <CheckCircle2 className="w-4 h-4 flex-shrink-0 mt-0.5 opacity-80" />
+                          <span>{r}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </motion.div>
+                )}
+
                 {/* Interest count + CTA — host sees the interested list, everyone else signs up */}
                 <motion.div
                   initial={{ opacity: 0, y: 10 }}
@@ -1697,7 +1871,7 @@ export default function Home() {
                         onClick={() => toggleInterestedList(selectedCard.id)}
                         className="w-full rounded-2xl py-3 font-semibold transition-colors border border-white/40 text-white text-lg bg-white/20 hover:bg-white/30 flex items-center justify-center gap-2">
                         <Users className="w-5 h-5" />
-                        {showInterestedList ? 'Hide' : 'View'} Interested ({selectedCard.signupCount})
+                        {showInterestedList ? 'Hide' : 'View'} {isRolePost(selectedCard) ? 'Applicants' : 'Interested'} ({selectedCard.signupCount})
                         <ChevronDown className={cn("w-4 h-4 transition-transform duration-200", showInterestedList && "rotate-180")} />
                       </button>
                       <AnimatePresence>
@@ -1714,23 +1888,83 @@ export default function Home() {
                               </div>
                             ) : interestedVolunteers && interestedVolunteers.length > 0 ? (
                               <div className="space-y-2 mt-3">
+                                {isRolePost(selectedCard) && isPositionsFilled(selectedCard) && (
+                                  <p className="text-xs text-white/60 px-1">
+                                    All {selectedCard.positions} position{selectedCard.positions === 1 ? '' : 's'} are filled. Decline or withdraw someone to free one up.
+                                  </p>
+                                )}
                                 {interestedVolunteers.map(v => (
                                   <div key={v.email} className="bg-white/10 rounded-xl px-4 py-2.5 flex items-center justify-between gap-3">
                                     <div className="min-w-0">
                                       <p className="text-sm font-semibold truncate">{v.username}</p>
                                       <p className="text-xs text-white/60 truncate">{v.email}</p>
                                     </div>
-                                    <p className="text-xs text-white/50 flex-shrink-0">
-                                      {new Date(v.signedUpAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                                    </p>
+                                    {isRolePost(selectedCard) ? (
+                                      // Accept/decline is the whole point of the list on a role.
+                                      // Already-decided applicants show the decision and a way to
+                                      // change it, rather than vanishing.
+                                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                                        {v.status === 'accepted' && (
+                                          <span className="text-xs font-semibold text-green-200 flex items-center gap-1">
+                                            <CheckCircle2 className="w-3.5 h-3.5" /> Accepted
+                                          </span>
+                                        )}
+                                        {v.status === 'declined' && (
+                                          <span className="text-xs font-semibold text-white/50 flex items-center gap-1">
+                                            <XCircle className="w-3.5 h-3.5" /> Declined
+                                          </span>
+                                        )}
+                                        {decidingFor === v.userId ? (
+                                          <Loader2 className="w-4 h-4 animate-spin text-white/60" />
+                                        ) : (
+                                          <>
+                                            {v.status !== 'accepted' && (
+                                              <button
+                                                onClick={() => decideApplication(selectedCard.id, v.userId, 'accepted')}
+                                                disabled={isPositionsFilled(selectedCard)}
+                                                aria-label={`Accept ${v.username}`}
+                                                className={cn(
+                                                  "min-h-[44px] px-3 rounded-xl text-xs font-semibold transition-colors cursor-pointer",
+                                                  isPositionsFilled(selectedCard)
+                                                    ? "bg-white/5 text-white/30 cursor-not-allowed"
+                                                    : "bg-white/25 hover:bg-white/35 text-white"
+                                                )}>
+                                                Accept
+                                              </button>
+                                            )}
+                                            {v.status !== 'declined' && (
+                                              <button
+                                                onClick={() => decideApplication(selectedCard.id, v.userId, 'declined')}
+                                                aria-label={`Decline ${v.username}`}
+                                                className="min-h-[44px] px-3 rounded-xl text-xs font-semibold bg-white/10 hover:bg-white/20 text-white/70 transition-colors cursor-pointer">
+                                                Decline
+                                              </button>
+                                            )}
+                                          </>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <p className="text-xs text-white/50 flex-shrink-0">
+                                        {new Date(v.signedUpAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                      </p>
+                                    )}
                                   </div>
                                 ))}
                               </div>
                             ) : (
                               <div className="text-center py-6 mt-3 rounded-2xl border border-dashed border-white/25 bg-white/5">
                                 <Users className="w-6 h-6 mx-auto mb-2 text-white/30" />
-                                <p className="text-sm text-white/70 font-medium">No one's expressed interest yet</p>
-                                <p className="text-xs text-white/40 mt-1">Volunteers who tap "I'm Interested" will show up here.</p>
+                                {isRolePost(selectedCard) ? (
+                                  <>
+                                    <p className="text-sm text-white/70 font-medium">No applications yet</p>
+                                    <p className="text-xs text-white/40 mt-1">Volunteers who apply for this role show up here for you to accept or decline.</p>
+                                  </>
+                                ) : (
+                                  <>
+                                    <p className="text-sm text-white/70 font-medium">No one's expressed interest yet</p>
+                                    <p className="text-xs text-white/40 mt-1">Volunteers who tap "I'm Interested" will show up here.</p>
+                                  </>
+                                )}
                               </div>
                             )}
                           </motion.div>
@@ -1742,13 +1976,76 @@ export default function Home() {
                       {/* Interest count — spots are informational only, never block interest */}
                       {(() => {
                         const count = selectedCard.signupCount;
+                        if (isRolePost(selectedCard)) {
+                          return (
+                            <p className="text-white/60 text-sm text-center mb-4">
+                              {count === 0 ? 'Be the first to apply' : `${count} ${count === 1 ? 'person has' : 'people have'} applied`}
+                            </p>
+                          );
+                        }
                         return (
                           <p className="text-white/60 text-sm text-center mb-4">
                             {count === 0 ? 'Be the first to show interest' : `${count} ${count === 1 ? 'person' : 'people'} interested`}
                           </p>
                         );
                       })()}
-                      {!selectedCard.isRecurring && new Date(selectedCard.date) < new Date() ? (
+                      {isRolePost(selectedCard) ? (
+                        // ── Ongoing role: apply, or the state of an application
+                        // already made. Withdrawing reuses the same
+                        // remove-interest path an event uses. ──
+                        selectedCard.myApplicationStatus ? (
+                          <div className="space-y-2">
+                            <div className={cn(
+                              "rounded-2xl py-3 font-semibold text-center border text-white text-lg",
+                              selectedCard.myApplicationStatus === 'accepted' ? "bg-green-500/30 border-green-300/40"
+                                : selectedCard.myApplicationStatus === 'declined' ? "bg-white/10 border-white/25 text-white/70"
+                                : "bg-white/25 border-white/40"
+                            )}>
+                              {selectedCard.myApplicationStatus === 'accepted' ? 'Accepted ✓'
+                                : selectedCard.myApplicationStatus === 'declined' ? 'Not accepted'
+                                : 'Applied ✓'}
+                            </div>
+                            {selectedCard.myApplicationStatus === 'applied' && selectedCard.externalSignupUrl && (
+                              <a href={selectedCard.externalSignupUrl} target="_blank" rel="noopener noreferrer"
+                                className="w-full rounded-2xl py-2.5 font-semibold bg-white/15 hover:bg-white/25 border border-white/30 text-white text-sm transition-colors flex items-center justify-center gap-2">
+                                Finish your application with {selectedCard.hostName} →
+                              </a>
+                            )}
+                            <button onClick={() => handleCancelSignup(selectedCard.id)} disabled={signingUp}
+                              className="w-full min-h-[44px] rounded-2xl py-2 font-medium text-white/60 hover:text-white/80 text-sm transition-colors">
+                              {signingUp ? 'Withdrawing...' : 'Withdraw application'}
+                            </button>
+                          </div>
+                        ) : isPositionsFilled(selectedCard) ? (
+                          <div className="rounded-2xl py-3 font-semibold text-center bg-white/10 border border-white/20 text-white/60 text-lg">
+                            Positions filled
+                          </div>
+                        ) : tooYoungFor(selectedCard) ? (
+                          // Said before the tap, not after it -- the server
+                          // refuses this too, but being told why up front is
+                          // the difference between a rule and a dead button.
+                          <div className="rounded-2xl py-3 px-4 text-center bg-white/10 border border-white/20 text-white/70 text-sm">
+                            This role is for volunteers aged {selectedCard.minAge} and over.
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            <p className="text-white/50 text-xs text-center">
+                              You'll finish your application on {selectedCard.hostName}'s own site.
+                            </p>
+                            <motion.button
+                              whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
+                              onClick={() => setApplyConfirmFor(selectedCard.id)}
+                              disabled={signingUp}
+                              className={cn(
+                                "w-full min-h-[44px] rounded-2xl py-3 font-semibold transition-colors border border-white/40 text-white text-lg flex items-center justify-center gap-2",
+                                signingUp ? "bg-white/20 cursor-not-allowed opacity-70" : "bg-white/30 hover:bg-white/40"
+                              )}>
+                              {signingUp && <Loader2 className="w-5 h-5 animate-spin" />}
+                              {signingUp ? 'Applying...' : 'Apply'}
+                            </motion.button>
+                          </div>
+                        )
+                      ) : !selectedCard.isRecurring && new Date(selectedCard.date) < new Date() ? (
                         // Ended one-time event — no interest CTA. Recurring posts never end.
                         <div className="rounded-2xl py-3 font-semibold text-center bg-white/10 border border-white/20 text-white/60 text-lg">
                           This event has ended
@@ -1881,6 +2178,25 @@ export default function Home() {
         onDestructive={closeModalNow}
         cancelLabel="Keep editing"
         onCancel={() => setShowDiscardEdits(false)}
+      />
+
+      {/* Applying to a role is an ongoing commitment and hands the org the
+          volunteer's contact details, so it gets said plainly before the tap,
+          not in a toast afterwards. Most of these volunteers are minors, hence
+          the guardian line. */}
+      <ConfirmBubble
+        open={!!applyConfirmFor}
+        icon={<CalendarClock className="w-4 h-4 text-primary" />}
+        title="Apply for this role?"
+        message={(() => {
+          const o = opportunities.find(x => x.id === applyConfirmFor) ?? selectedCard;
+          const what = o?.commitment ? `You're committing to ${o.commitment}. ` : '';
+          return `${what}Your name and email will be shared with ${o?.hostName ?? 'the organization'}. You'll finish your application on their site — a parent or guardian may need to sign.`;
+        })()}
+        confirmLabel="Apply"
+        onConfirm={() => applyConfirmFor && handleApply(applyConfirmFor)}
+        cancelLabel="Not now"
+        onCancel={() => setApplyConfirmFor(null)}
       />
 
     </div>
