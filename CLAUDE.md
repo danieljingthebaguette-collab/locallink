@@ -1,4 +1,26 @@
-# LocalLink — design rules
+# LocalLink
+
+## How to work on this project
+
+- Never claim something is fixed or done without real proof: command
+  output, git diff, curl response, query result. A description is not
+  proof. This project has been burned by claimed fixes that weren't there.
+- Read the current file before editing. Check git log before building —
+  this project has rebuilt the same feature multiple times by not checking.
+- Stay in scope. Report other problems you notice; don't fix them unasked.
+- No schema changes without explicit approval.
+- Never push to main without being told to. Commit locally, show the diff.
+- Never test against the production database. Leave DB_PATH unset locally.
+- Before saying "cleaned up" or "stopped," verify it — past sessions left
+  servers running and files behind after claiming otherwise.
+- Users are mostly minors. Any new field in an API response goes through
+  the withTags allowlist explicitly. Nothing public by default.
+- Deferred on purpose, don't propose unasked: routes.ts as one file,
+  sync SQLite, no pagination, no indexes, no test suite.
+
+---
+
+# Design rules
 
 Rules for any visual or page-level change. Written from what the codebase
 already does (counts below are real usage across `client/src`, excluding the
