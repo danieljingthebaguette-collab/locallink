@@ -137,6 +137,31 @@ export const getCategoryLabel = (category: Category): string => {
 };
 
 /**
+ * Is this an ongoing role rather than a one-time event?
+ *
+ * Worth one shared helper because of what's underneath it: `date` is NOT NULL
+ * on the opportunities table, so a role -- which has no date -- stores its own
+ * creation time there to satisfy the column. That value is always in the past,
+ * which means every `new Date(o.date) < new Date()` in the codebase silently
+ * answers "yes, ended" for every role ever posted. Anything reading `date`
+ * has to ask this first.
+ */
+export const isRolePost = (o: { commitmentType?: string | null }): boolean =>
+  (o.commitmentType ?? 'event') === 'role';
+
+/**
+ * Has this post's date gone by? The single answer to "is it over", so the
+ * three things that are never past -- roles, recurring posts, and anything
+ * whose date won't parse -- are excluded in one place instead of in each
+ * caller's own condition.
+ */
+export const hasEnded = (o: { date: string; commitmentType?: string | null; isRecurring?: boolean }): boolean => {
+  if (isRolePost(o) || o.isRecurring) return false;
+  const t = new Date(o.date).getTime();
+  return !Number.isNaN(t) && t < Date.now();
+};
+
+/**
  * Which of the questionnaire's three coarse time buckets a post falls into --
  * weekday daytime, weekday evening, or weekend. Not a real calendar: just
  * enough to answer "would this actually fit someone's schedule" without
@@ -144,13 +169,17 @@ export const getCategoryLabel = (category: Category): string => {
  *
  * A recurring post's own weekly slot is what's checked, not "today" -- it
  * happens every week, so there's no single date to derive a bucket from. A
- * one-time post uses its actual date and hour. Mirrors the exact three ids
- * in VALID_AVAILABILITY on the server and AVAILABILITY_OPTIONS in
+ * one-time post uses its actual date and hour. A role gets no bucket at all:
+ * its stored date is the moment it was published, so deriving one would
+ * score an ongoing commitment as a "weekend" match purely because the
+ * organization happened to hit Publish on a Saturday. Mirrors the exact
+ * three ids in VALID_AVAILABILITY on the server and AVAILABILITY_OPTIONS in
  * mockData.ts; all three must stay in sync.
  */
 export function getPostTimeBucket(
-  opp: { date: string; isRecurring?: boolean; recurringDay?: number; recurringTime?: string },
+  opp: { date: string; commitmentType?: string | null; isRecurring?: boolean; recurringDay?: number; recurringTime?: string },
 ): 'weekday-day' | 'weekday-evening' | 'weekend' | null {
+  if (isRolePost(opp)) return null;
   let dayOfWeek: number;
   let hour: number;
   if (opp.isRecurring && opp.recurringDay !== undefined && opp.recurringTime) {
@@ -224,7 +253,7 @@ function normaliseTag(t: string): string {
  * signals is treated as more decisive than the others.
  */
 export function getMatchScore(
-  opp: { title: string; description: string; tags?: string[] | null; category: Category; town?: string | null; date: string; isRecurring?: boolean; recurringDay?: number; recurringTime?: string },
+  opp: { title: string; description: string; tags?: string[] | null; category: Category; town?: string | null; date: string; commitmentType?: string | null; isRecurring?: boolean; recurringDay?: number; recurringTime?: string },
   prefs: VolunteerPrefs,
 ): number {
   let n = 0;

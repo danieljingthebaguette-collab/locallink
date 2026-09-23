@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { useAuthStore, useOpportunitiesStore } from '@/lib/store';
-import { getCategoryLabel, getEditCategoryOptions, getCategoryColor } from '@/lib/categoryUtils';
+import { getCategoryLabel, getEditCategoryOptions, getCategoryColor, isRolePost, hasEnded } from '@/lib/categoryUtils';
 import { CATEGORIES, type Category, type Opportunity } from '@/lib/mockData';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -43,8 +43,11 @@ async function uploadImage(file: File): Promise<string | null> {
 // in categoryUtils, is the only way that stays true.
 
 
-function isPast(dateStr: string) {
-  return new Date(dateStr) < new Date();
+// hasEnded, not a bare date comparison: a role stores its creation time in
+// `date` to satisfy the NOT NULL column, so every role read as "past" the
+// moment it was posted -- ended badge, dimmed card, filed under Past.
+function isPast(opp: Opportunity) {
+  return hasEnded(opp);
 }
 
 /**
@@ -123,14 +126,14 @@ export default function MyEvents() {
   // Sort: active events first, closed & past events pushed to the end
   const hosted = [...hostedRaw].sort((a, b) => {
     // Recurring events are never "past" — only check date for non-recurring
-    const aInactive = (!a.isRecurring && isPast(a.date)) || isOppClosed(a);
-    const bInactive = (!b.isRecurring && isPast(b.date)) || isOppClosed(b);
+    const aInactive = isPast(a) || isOppClosed(a);
+    const bInactive = isPast(b) || isOppClosed(b);
     if (aInactive === bInactive) return 0;
     return aInactive ? 1 : -1;
   });
   // Recurring events always stay in "upcoming" — their stored date is the first occurrence
-  const upcoming = signedUp.filter(o => o.isRecurring || !isPast(o.date));
-  const past = signedUp.filter(o => !o.isRecurring && isPast(o.date));
+  const upcoming = signedUp.filter(o => !isPast(o));
+  const past = signedUp.filter(o => isPast(o));
 
   const handleCancel = async (opp: Opportunity) => {
     setCancellingId(opp.id);
@@ -327,9 +330,7 @@ export default function MyEvents() {
               {hosted.map((opp) => {
                 const isClosed = isOppClosed(opp);
                 // Recurring posts are always open unless the host manually closes them
-                const effectiveOpen = opp.isRecurring
-                  ? !isClosed
-                  : !isClosed && !isPast(opp.date);
+                const effectiveOpen = !isClosed && !isPast(opp);
                 const inactive = !effectiveOpen;
                 return (
                 <div key={opp.id} className={cn('rounded-2xl border border-border bg-card overflow-hidden transition-opacity', inactive && 'opacity-70')}>
@@ -355,7 +356,7 @@ export default function MyEvents() {
                         <h3 className="font-heading font-bold text-lg text-foreground">{opp.title}</h3>
                         <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
                           <span className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5" />{opp.location}</span>
-                          <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" />{opp.duration}h</span>
+                          <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" />{isRolePost(opp) ? opp.commitment : `${opp.duration}h`}</span>
                           {opp.isRecurring ? (
                             isClosed ? (
                               // Host manually closed — clickable to reopen
@@ -378,7 +379,7 @@ export default function MyEvents() {
                                 {togglingId === opp.id ? '…' : 'Open'}
                               </button>
                             )
-                          ) : isPast(opp.date) ? (
+                          ) : isPast(opp) ? (
                             // Past one-time event — ended, not togglable
                             <span className="text-xs font-semibold text-muted-foreground bg-secondary px-2 py-0.5 rounded-md">Ended</span>
                           ) : isClosed ? (
@@ -628,7 +629,7 @@ function EventCard({
           <p className="text-muted-foreground text-sm line-clamp-2">{opp.description}</p>
           <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
             <span className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5" />{opp.location}</span>
-            <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" />{opp.duration}h</span>
+            <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" />{isRolePost(opp) ? opp.commitment : `${opp.duration}h`}</span>
             <span className="flex items-center gap-1"><Users className="w-3.5 h-3.5" />Host: {opp.hostName}</span>
           </div>
         </div>

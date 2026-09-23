@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { useModalA11y } from '@/hooks/use-modal-a11y';
 import { getCardSize, isFullDetailCard, isLargeCard, getTitleSize } from '@/lib/cardUtils';
-import { getCategoryColor, getModalGradient, getCategoryBorder, getCategoryLabel, getMatchScore } from '@/lib/categoryUtils';
+import { getCategoryColor, getModalGradient, getCategoryBorder, getCategoryLabel, getMatchScore, isRolePost, hasEnded } from '@/lib/categoryUtils';
 import { useAuthStore, useOpportunitiesStore, useFavoritesStore, getRecurringStatus } from '@/lib/store';
 import { CATEGORIES, TOWNS, type Category, type Opportunity } from '@/lib/mockData';
 import CreatePostModal from '@/components/CreatePostModal';
@@ -41,11 +41,6 @@ const SORT_OPTIONS: { value: 'newest' | 'oldest' | 'soonest' | 'popular' | 'matc
 
 // Easing curve used throughout — smooth deceleration
 const EASE_OUT = [0.25, 0.1, 0.25, 1] as const;
-
-/** A post is an ongoing role rather than a one-time event. Posts from before
- *  the field exists have no commitmentType, which reads as 'event' -- the same
- *  default the server writes. */
-const isRolePost = (o: { commitmentType?: string | null }) => (o.commitmentType ?? 'event') === 'role';
 
 /** Every advertised position on a role is taken. Counted from accepted
  *  applications, never from how many applied. Unlimited (null) never fills. */
@@ -881,7 +876,7 @@ export default function Home() {
                 same modal as any card. Absent entirely when nothing is featured. */}
             {featuredPost && (() => {
               const rs = !!featuredPost.isRecurring ? getRecurringStatus(featuredPost) : null;
-              const isPast = rs ? false : new Date(featuredPost.date) < new Date();
+              const isPast = hasEnded(featuredPost);
               const manualClosed = featuredPost.isAvailable === false || (featuredPost.isAvailable as any) === 0;
               const isClosed = manualClosed || (rs ? !rs.isOpen : false);
               return (
@@ -911,7 +906,7 @@ export default function Home() {
                           <Star className="w-3 h-3 fill-current" /> FEATURED
                         </span>
                         <p className="text-xs font-bold tracking-widest uppercase opacity-80">{getCategoryLabel(featuredPost.category)}</p>
-                        {isPast && !featuredPost.isRecurring && <span className="text-[10px] font-bold bg-white/20 text-white px-2 py-0.5 rounded-md">ENDED</span>}
+                        {isPast && <span className="text-[10px] font-bold bg-white/20 text-white px-2 py-0.5 rounded-md">ENDED</span>}
                         {isClosed && !!featuredPost.isRecurring && <span className="text-[10px] font-bold bg-orange-500/80 text-white px-2 py-0.5 rounded-md">CLOSED</span>}
                       </div>
                       <h2 className="font-heading font-bold text-lg md:text-2xl leading-tight">{featuredPost.title}</h2>
@@ -931,23 +926,40 @@ export default function Home() {
                         <MapPin className="w-3 h-3 flex-shrink-0" />
                         <span className="truncate max-w-full">{featuredPost.location.split(',')[0]}</span>
                         <span className="opacity-60 flex-shrink-0">&bull;</span>
-                        {featuredPost.isRecurring ? (
+                        {isRolePost(featuredPost) ? (
+                          // Same substitution the board card makes: a role has no
+                          // date and no duration, so it states its commitment.
                           <>
                             <Repeat className="w-3 h-3 flex-shrink-0" />
-                            <span className="flex-shrink-0">{formatRecurringShort(featuredPost)}</span>
+                            <span className="flex-shrink-0">{featuredPost.commitment}</span>
+                            {featuredPost.term && (
+                              <>
+                                <span className="opacity-60 flex-shrink-0">&bull;</span>
+                                <span className="flex-shrink-0">{featuredPost.term}</span>
+                              </>
+                            )}
                           </>
                         ) : (
                           <>
-                            <Calendar className="w-3 h-3 flex-shrink-0" />
-                            <span className="flex-shrink-0">
-                              {getRelativeDay(featuredPost.date)
-                                ?? new Date(featuredPost.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                            </span>
+                            {featuredPost.isRecurring ? (
+                              <>
+                                <Repeat className="w-3 h-3 flex-shrink-0" />
+                                <span className="flex-shrink-0">{formatRecurringShort(featuredPost)}</span>
+                              </>
+                            ) : (
+                              <>
+                                <Calendar className="w-3 h-3 flex-shrink-0" />
+                                <span className="flex-shrink-0">
+                                  {getRelativeDay(featuredPost.date)
+                                    ?? new Date(featuredPost.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                </span>
+                              </>
+                            )}
+                            <span className="opacity-60 flex-shrink-0">&bull;</span>
+                            <Clock className="w-3 h-3 flex-shrink-0" />
+                            <span className="flex-shrink-0">{featuredPost.duration}h</span>
                           </>
                         )}
-                        <span className="opacity-60 flex-shrink-0">&bull;</span>
-                        <Clock className="w-3 h-3 flex-shrink-0" />
-                        <span className="flex-shrink-0">{featuredPost.duration}h</span>
                       </div>
                       <span className="text-[11px] opacity-70 font-medium inline-flex items-center gap-1.5 min-w-0">
                         {hostAvatars[featuredPost.hostId] ? (
@@ -1023,7 +1035,7 @@ export default function Home() {
                 // Recurring posts are never "past"; their open/closed state is time-computed
                 // !! coerces SQLite 0/1 integers to proper booleans (avoids rendering "0" in JSX)
                 const recurringStatus = !!opp.isRecurring ? getRecurringStatus(opp) : null;
-                const isPast = recurringStatus ? false : new Date(opp.date) < new Date();
+                const isPast = hasEnded(opp);
                 // Manual host-close always wins; for recurring events schedule also contributes
                 const manualClosed = opp.isAvailable === false || (opp.isAvailable as any) === 0;
                 const isClosed = manualClosed || (recurringStatus ? !recurringStatus.isOpen : false);
@@ -1107,7 +1119,7 @@ export default function Home() {
                           {isRolePost(opp) && isPositionsFilled(opp) && (
                             <span className="text-[10px] font-bold bg-orange-500/80 text-white px-2 py-0.5 rounded-md">POSITIONS FILLED</span>
                           )}
-                          {isPast && !opp.isRecurring && !isRolePost(opp) && <span className="text-[10px] font-bold bg-white/20 text-white px-2 py-0.5 rounded-md">ENDED</span>}
+                          {isPast && <span className="text-[10px] font-bold bg-white/20 text-white px-2 py-0.5 rounded-md">ENDED</span>}
                           {isClosed && !!opp.isRecurring && <span className="text-[10px] font-bold bg-orange-500/80 text-white px-2 py-0.5 rounded-md">CLOSED</span>}
                           {alreadyInterested && (
                             <motion.span
@@ -1175,16 +1187,24 @@ export default function Home() {
                                 {opp.commitment}
                                 {opp.term && (<><span className="opacity-60">&bull;</span>{opp.term}</>)}
                               </>
-                            ) : opp.isRecurring ? (
-                              <>
-                                <Repeat className="w-3 h-3 flex-shrink-0" />
-                                {formatRecurringShort(opp)}
-                              </>
                             ) : (
+                              // Events, one-time and weekly alike, both end in
+                              // the duration -- it sits outside the branch on
+                              // purpose, because a weekly event has a length
+                              // just as much as a dated one does.
                               <>
-                                <Calendar className="w-3 h-3 flex-shrink-0" />
-                                {getRelativeDay(opp.date)
-                                  ?? new Date(opp.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                {opp.isRecurring ? (
+                                  <>
+                                    <Repeat className="w-3 h-3 flex-shrink-0" />
+                                    {formatRecurringShort(opp)}
+                                  </>
+                                ) : (
+                                  <>
+                                    <Calendar className="w-3 h-3 flex-shrink-0" />
+                                    {getRelativeDay(opp.date)
+                                      ?? new Date(opp.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                  </>
+                                )}
                                 <span className="opacity-60">&bull;</span>
                                 <Clock className="w-3 h-3 flex-shrink-0" />
                                 {opp.duration}h
@@ -2045,7 +2065,7 @@ export default function Home() {
                             </motion.button>
                           </div>
                         )
-                      ) : !selectedCard.isRecurring && new Date(selectedCard.date) < new Date() ? (
+                      ) : hasEnded(selectedCard) ? (
                         // Ended one-time event — no interest CTA. Recurring posts never end.
                         <div className="rounded-2xl py-3 font-semibold text-center bg-white/10 border border-white/20 text-white/60 text-lg">
                           This event has ended
@@ -2180,22 +2200,44 @@ export default function Home() {
         onCancel={() => setShowDiscardEdits(false)}
       />
 
-      {/* Applying to a role is an ongoing commitment and hands the org the
-          volunteer's contact details, so it gets said plainly before the tap,
-          not in a toast afterwards. Most of these volunteers are minors, hence
-          the guardian line. */}
+      {/* Applying to a role is an ongoing commitment, and it reaches the
+          organization the moment it's made. Both get said before the tap
+          rather than in a toast afterwards. The commitment is a block rather
+          than a clause because it's the one thing here that must not be
+          skimmed; the rest is consequence, which reads fine as prose. Most of
+          these volunteers are minors, hence the guardian line. */}
       <ConfirmBubble
         open={!!applyConfirmFor}
         icon={<CalendarClock className="w-4 h-4 text-primary" />}
-        title="Apply for this role?"
+        title="Before you apply"
         message={(() => {
           const o = opportunities.find(x => x.id === applyConfirmFor) ?? selectedCard;
-          const what = o?.commitment ? `You're committing to ${o.commitment}. ` : '';
-          return `${what}Your name and email will be shared with ${o?.hostName ?? 'the organization'}. You'll finish your application on their site — a parent or guardian may need to sign.`;
+          const org = o?.hostName ?? 'The organization';
+          return (
+            <div className="space-y-2.5">
+              <div className="rounded-xl bg-secondary/60 border border-border px-3 py-2">
+                <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wide">You're committing to</p>
+                <p className="text-sm font-bold text-foreground leading-snug">{o?.commitment}</p>
+                {/* Only the ones this role actually sets -- an absent term or
+                    age must not leave a label with nothing under it. */}
+                {(o?.term || o?.minAge) && (
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {[o?.term, o?.minAge ? `${o.minAge}+ years old` : null].filter(Boolean).join(' · ')}
+                  </p>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                <span className="font-semibold text-foreground">{org}</span> will be notified right away, and will see your name and email.
+              </p>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                You'll finish your application on their site. A parent or guardian may need to sign.
+              </p>
+            </div>
+          );
         })()}
         confirmLabel="Apply"
         onConfirm={() => applyConfirmFor && handleApply(applyConfirmFor)}
-        cancelLabel="Not now"
+        cancelLabel="Cancel"
         onCancel={() => setApplyConfirmFor(null)}
       />
 

@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn, getLocationError, getExternalSignupUrlError, LIMITS, getLengthError } from '@/lib/utils';
 import {
@@ -91,6 +91,9 @@ function timeAgo(ts: number): string {
 }
 
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+/** How tall the description box is allowed to grow before it scrolls instead. */
+const DESCRIPTION_MAX_H = 300;
 const DAY_FULL = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 /** Returns the ISO datetime string for the next upcoming occurrence of dayOfWeek at time "HH:MM" */
@@ -175,12 +178,59 @@ export default function CreatePostModal({ open, onClose }: Props) {
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
   const [pendingDraft, setPendingDraft] = useState<PostDraft | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const descriptionRef = useRef<HTMLTextAreaElement>(null);
   const todayStr = new Date().toISOString().slice(0, 16);
 
   // Revoke blob URL when the preview changes or modal unmounts to prevent memory leaks
   useEffect(() => {
     return () => { if (imagePreview) URL.revokeObjectURL(imagePreview); };
   }, [imagePreview]);
+
+  /**
+   * Grow the description box downward to fit whatever's been typed, rather than
+   * scrolling inside a fixed 90px window. Height only -- the width is the
+   * column's, and nothing here touches it.
+   *
+   * Height is reset to 'auto' before reading scrollHeight because scrollHeight
+   * never reports less than the element's current height, so without the reset
+   * the box could only ever grow and would stay tall after text is deleted.
+   *
+   * Growth stops at DESCRIPTION_MAX_H and the box scrolls from there. Without a
+   * ceiling a description at the 2000-character cap is over 500px tall, which
+   * on a phone is a form field longer than the screen and leaves the column it
+   * sits in far taller than the one beside it.
+   */
+  const fitDescription = (el: HTMLTextAreaElement | null) => {
+    if (!el) return;
+    el.style.height = 'auto';
+    const contentHeight = el.scrollHeight;
+    el.style.height = `${Math.min(contentHeight, DESCRIPTION_MAX_H)}px`;
+    // Only give it a scrollbar once it actually has somewhere to scroll --
+    // 'auto' on a box that exactly fits its text still reserves gutter space
+    // in some engines and makes the text jump sideways as it grows.
+    el.style.overflowY = contentHeight > DESCRIPTION_MAX_H ? 'auto' : 'hidden';
+  };
+
+  /**
+   * Sizing on mount goes through a callback ref, not the effect below, and the
+   * difference is load-bearing. The step panels are wrapped in AnimatePresence,
+   * so while step 3 animates in, step 2 is still mounted and unmounting; the
+   * exiting panel's ref cleanup fires null *after* the entering one has stored
+   * its node, so an effect reading descriptionRef.current finds null and
+   * silently skips. A callback ref runs against the node itself, at the moment
+   * it attaches, and can't lose that race. Resuming a saved draft is where this
+   * showed: a restored description opened clipped inside a 90px box with
+   * overflow hidden, so the text was neither visible nor scrollable.
+   */
+  const descriptionCallbackRef = useCallback((el: HTMLTextAreaElement | null) => {
+    descriptionRef.current = el;
+    fitDescription(el);
+  }, []);
+
+  // Subsequent value changes: typing, and the reset after publishing.
+  useEffect(() => {
+    fitDescription(descriptionRef.current);
+  }, [formData.description, createStep, open]);
 
   const filteredTags = FIELD_TAGS.filter(t => t.toLowerCase().includes(tagSearch.toLowerCase()));
   // Split into up to 5 rows; adapts when search reduces the list so no empty ghost cells appear
@@ -454,6 +504,53 @@ export default function CreatePostModal({ open, onClose }: Props) {
   };
 
   if (!open) return null;
+
+  /**
+   * Where the opportunity is. Extracted only because the two post types put it
+   * in different columns: an event's right-hand card is the "where and when"
+   * card, but a role's right-hand card is already full of what the job asks of
+   * someone, so a role puts this on the left beside the description instead.
+   * One definition, two placements — not two copies drifting apart.
+   */
+  const locationAndTownFields = (
+    <>
+      <div>
+        <label htmlFor="createpostmodal-location" className="text-xs font-bold tracking-widest uppercase opacity-75 block mb-1">Location *</label>
+        <Input id="createpostmodal-location" placeholder="Full address or place name — shown as a map link" maxLength={LIMITS.location}
+          value={formData.location}
+          onChange={e => { setFormData({ ...formData, location: e.target.value }); setFormErrors({ ...formErrors, location: '' }); }}
+          className={cn("rounded-xl bg-white/80 text-slate-900 border-0 text-sm h-9", formErrors.location && "ring-2 ring-red-400")} />
+        {formErrors.location && <p data-post-error className="text-red-200 text-xs">{formErrors.location}</p>}
+        {/* No geocoding — the human is the address validator. Show them
+            exactly what volunteers will see so mistakes surface pre-publish. */}
+        {formData.location.trim().length >= 5 && (
+          <p className="text-white/70 text-xs mt-1">
+            Are you sure this is right?{' '}
+            <a
+              href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(formData.location.trim())}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline hover:text-white"
+            >
+              Check it on Google Maps ↗
+            </a>
+          </p>
+        )}
+      </div>
+
+      <div>
+        <label htmlFor="createpostmodal-town" className="text-xs font-bold tracking-widest uppercase opacity-75 block mb-1">Town *</label>
+        <select id="createpostmodal-town"
+          value={formData.town}
+          onChange={e => { setFormData({ ...formData, town: e.target.value }); setFormErrors({ ...formErrors, town: '' }); }}
+          className={cn("w-full rounded-xl bg-white/80 text-slate-900 border-0 text-sm h-9 px-3", formErrors.town && "ring-2 ring-red-400")}>
+          <option value="">Select a town…</option>
+          {TOWNS.map(t => <option key={t} value={t}>{t}</option>)}
+        </select>
+        {formErrors.town && <p data-post-error className="text-red-200 text-xs">{formErrors.town}</p>}
+      </div>
+    </>
+  );
 
   return (
     <AnimatePresence>
@@ -758,52 +855,48 @@ export default function CreatePostModal({ open, onClose }: Props) {
                       {formErrors.title && <p data-post-error className="text-red-200 text-xs mt-1">{formErrors.title}</p>}
                     </div>
 
+                    {/* Two cards. An event splits them "what it is" / "where and
+                        when". A role can't: it has more to say about what the
+                        job asks of someone than an event does, and nothing to
+                        say about a date. So a role splits them "where and when"
+                        / "what it asks of you" instead, and the description
+                        joins the left card rather than sitting alone beside a
+                        column carrying every other field on the form. */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="bg-white/15 rounded-2xl p-4 border border-white/20 space-y-2">
-                        <label htmlFor="createpostmodal-description" className="text-xs font-bold tracking-widest uppercase opacity-75 block">Description *</label>
-                        <Textarea id="createpostmodal-description" placeholder="Describe this opportunity..." maxLength={LIMITS.description}
-                          value={formData.description}
-                          onChange={e => { setFormData({ ...formData, description: e.target.value }); setFormErrors({ ...formErrors, description: '' }); }}
-                          className={cn("rounded-xl bg-white/80 text-slate-900 border-0 text-sm resize-none min-h-[90px]", formErrors.description && "ring-2 ring-red-400")} />
-                        {formErrors.description && <p data-post-error className="text-red-200 text-xs">{formErrors.description}</p>}
+                      <div className="bg-white/15 rounded-2xl p-4 border border-white/20 space-y-3">
+                        <div className="space-y-2">
+                          <label htmlFor="createpostmodal-description" className="text-xs font-bold tracking-widest uppercase opacity-75 block">Description *</label>
+                          {/* overflow-hidden so the scrollbar never appears mid-keystroke:
+                              the box is always exactly as tall as its text. */}
+                          <Textarea ref={descriptionCallbackRef} id="createpostmodal-description" placeholder="Describe this opportunity..." maxLength={LIMITS.description}
+                            value={formData.description}
+                            onChange={e => { setFormData({ ...formData, description: e.target.value }); setFormErrors({ ...formErrors, description: '' }); }}
+                            className={cn("rounded-xl bg-white/80 text-slate-900 border-0 text-sm resize-none overflow-hidden min-h-[90px]", formErrors.description && "ring-2 ring-red-400")} />
+                          {formErrors.description && <p data-post-error className="text-red-200 text-xs">{formErrors.description}</p>}
+                        </div>
+
+                        {isRole && locationAndTownFields}
+
+                        {/* A role's commitment is its "when" — it belongs with
+                            the location, where an event's date and time sit. */}
+                        {isRole && (
+                          <div>
+                            <label htmlFor="role-commitment" className="text-xs font-bold tracking-widest uppercase opacity-75 block mb-1.5">Commitment *</label>
+                            <Input id="role-commitment" placeholder="8 hrs/month · Every Wednesday · 60 hrs/year"
+                              value={commitment}
+                              onChange={e => { setCommitment(e.target.value); setFormErrors({ ...formErrors, commitment: '' }); }}
+                              className={cn("rounded-xl bg-white/80 text-slate-900 border-0 text-sm h-9", formErrors.commitment && "ring-2 ring-red-400")} />
+                            {formErrors.commitment && <p data-post-error className="text-red-200 text-xs mt-1">{formErrors.commitment}</p>}
+                            <p className="text-white/60 text-xs mt-1">However you'd describe it to a volunteer.</p>
+                          </div>
+                        )}
                       </div>
 
                       <div className="bg-white/15 rounded-2xl p-4 border border-white/20 space-y-3">
-                        <div>
-                          <label htmlFor="createpostmodal-location" className="text-xs font-bold tracking-widest uppercase opacity-75 block mb-1">Location *</label>
-                          <Input id="createpostmodal-location" placeholder="Full address or place name — shown as a map link" maxLength={LIMITS.location}
-                            value={formData.location}
-                            onChange={e => { setFormData({ ...formData, location: e.target.value }); setFormErrors({ ...formErrors, location: '' }); }}
-                            className={cn("rounded-xl bg-white/80 text-slate-900 border-0 text-sm h-9", formErrors.location && "ring-2 ring-red-400")} />
-                          {formErrors.location && <p data-post-error className="text-red-200 text-xs">{formErrors.location}</p>}
-                          {/* No geocoding — the human is the address validator. Show them
-                              exactly what volunteers will see so mistakes surface pre-publish. */}
-                          {formData.location.trim().length >= 5 && (
-                            <p className="text-white/70 text-xs mt-1">
-                              Are you sure this is right?{' '}
-                              <a
-                                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(formData.location.trim())}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="underline hover:text-white"
-                              >
-                                Check it on Google Maps ↗
-                              </a>
-                            </p>
-                          )}
-                        </div>
-
-                        <div>
-                          <label htmlFor="createpostmodal-town" className="text-xs font-bold tracking-widest uppercase opacity-75 block mb-1">Town *</label>
-                          <select id="createpostmodal-town"
-                            value={formData.town}
-                            onChange={e => { setFormData({ ...formData, town: e.target.value }); setFormErrors({ ...formErrors, town: '' }); }}
-                            className={cn("w-full rounded-xl bg-white/80 text-slate-900 border-0 text-sm h-9 px-3", formErrors.town && "ring-2 ring-red-400")}>
-                            <option value="">Select a town…</option>
-                            {TOWNS.map(t => <option key={t} value={t}>{t}</option>)}
-                          </select>
-                          {formErrors.town && <p data-post-error className="text-red-200 text-xs">{formErrors.town}</p>}
-                        </div>
+                        {isRole && (
+                          <p className="text-xs font-bold tracking-widest uppercase opacity-75">What this role asks of you</p>
+                        )}
+                        {!isRole && locationAndTownFields}
 
                         {/* ── Schedule type toggle — events only. A role has no
                             date, no weekly slot and no duration; its commitment
@@ -871,18 +964,9 @@ export default function CreatePostModal({ open, onClose }: Props) {
                           )}
                         </div>}
 
-                        {/* ── Ongoing role: what the commitment actually is ── */}
+                        {/* ── Ongoing role: what the job asks of whoever takes it ── */}
                         {isRole && (
                           <div className="space-y-3">
-                            <div>
-                              <label htmlFor="role-commitment" className="text-xs font-bold tracking-widest uppercase opacity-75 block mb-1.5">Commitment *</label>
-                              <Input id="role-commitment" placeholder="8 hrs/month · Every Wednesday · 60 hrs/year"
-                                value={commitment}
-                                onChange={e => { setCommitment(e.target.value); setFormErrors({ ...formErrors, commitment: '' }); }}
-                                className={cn("rounded-xl bg-white/80 text-slate-900 border-0 text-sm h-9", formErrors.commitment && "ring-2 ring-red-400")} />
-                              {formErrors.commitment && <p data-post-error className="text-red-200 text-xs mt-1">{formErrors.commitment}</p>}
-                              <p className="text-white/60 text-xs mt-1">However you'd describe it to a volunteer.</p>
-                            </div>
                             <div>
                               <label htmlFor="role-term" className="text-xs font-bold tracking-widest uppercase opacity-75 block mb-1.5">Term (optional)</label>
                               <Input id="role-term" placeholder="Fall 2026 · 2026–27 school year"

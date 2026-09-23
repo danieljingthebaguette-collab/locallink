@@ -6,7 +6,10 @@ interface Props {
   open: boolean;
   icon?: ReactNode;
   title: string;
-  message: string;
+  /** Usually a sentence. Takes nodes so a dialog whose whole point is a fact
+   *  the reader must not skim — what they're committing to — can present it as
+   *  something scannable rather than a line of prose. */
+  message: ReactNode;
   /** The red one. Omit it when the choice being confirmed isn't destructive —
    *  an application, for instance, which still deserves a "here's what you're
    *  agreeing to" beat but has nothing to throw away. */
@@ -36,6 +39,7 @@ export default function ConfirmBubble({
   // guards work someone can't get back, so the fast way out must not be the
   // way that throws it away.
   const ref = useModalA11y(open, onCancel);
+  const hasDestructive = !!destructiveLabel && !!onDestructive;
 
   return (
     <AnimatePresence>
@@ -59,31 +63,54 @@ export default function ConfirmBubble({
                   {icon}
                 </div>
               )}
-              <div className="space-y-1">
+              <div className="space-y-1 min-w-0">
                 <h3 className="font-heading font-bold text-foreground leading-tight">{title}</h3>
-                <p className="text-xs text-muted-foreground leading-relaxed">{message}</p>
+                {typeof message === 'string'
+                  ? <p className="text-xs text-muted-foreground leading-relaxed">{message}</p>
+                  : message}
               </div>
             </div>
-            <div className="flex gap-2">
-              {destructiveLabel && onDestructive && (
-                <button onClick={onDestructive}
-                  className="flex-1 min-h-[44px] rounded-xl bg-red-500 hover:bg-red-600 text-white text-xs font-semibold transition-colors cursor-pointer flex items-center justify-center gap-1.5">
-                  {destructiveLabel}
+            {/* Two arrangements, picked by whether there's something destructive
+                to guard. With one, cancel drops to a full-width text button
+                underneath so the red option and the safe alternative sit
+                together and "back out" reads as the quiet third choice. With
+                none, there's nothing to demote it for: cancel and confirm are
+                just the two answers to a question, so they sit side by side. */}
+            {hasDestructive ? (
+              <>
+                <div className="flex gap-2">
+                  <button onClick={onDestructive}
+                    className="flex-1 min-h-[44px] rounded-xl bg-red-500 hover:bg-red-600 text-white text-xs font-semibold transition-colors cursor-pointer flex items-center justify-center gap-1.5">
+                    {destructiveLabel}
+                  </button>
+                  {confirmLabel && onConfirm && (
+                    <button onClick={onConfirm}
+                      className="flex-1 min-h-[44px] rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-semibold transition-colors cursor-pointer">
+                      {confirmLabel}
+                    </button>
+                  )}
+                </div>
+                {/* Text-height on its own, so it gets the floor explicitly -- this is
+                    the way out of the dialog and is tapped on a phone like any other. */}
+                <button onClick={onCancel}
+                  className="w-full min-h-[44px] text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
+                  {cancelLabel}
                 </button>
-              )}
-              {confirmLabel && onConfirm && (
-                <button onClick={onConfirm}
-                  className="flex-1 min-h-[44px] rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-semibold transition-colors cursor-pointer">
-                  {confirmLabel}
+              </>
+            ) : (
+              <div className="flex gap-2">
+                <button onClick={onCancel}
+                  className="flex-1 min-h-[44px] rounded-xl bg-secondary hover:bg-secondary/80 border border-border text-foreground text-xs font-semibold transition-colors cursor-pointer">
+                  {cancelLabel}
                 </button>
-              )}
-            </div>
-            {/* Text-height on its own, so it gets the floor explicitly -- this is
-                the way out of the dialog and is tapped on a phone like any other. */}
-            <button onClick={onCancel}
-              className="w-full min-h-[44px] text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
-              {cancelLabel}
-            </button>
+                {confirmLabel && onConfirm && (
+                  <button onClick={onConfirm}
+                    className="flex-1 min-h-[44px] rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-semibold transition-colors cursor-pointer">
+                    {confirmLabel}
+                  </button>
+                )}
+              </div>
+            )}
           </motion.div>
         </motion.div>
       )}

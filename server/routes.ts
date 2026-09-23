@@ -781,6 +781,14 @@ router.put('/api/auth/profile', requireAuth, async (req: AuthRequest, res: Respo
       }
     }
 
+    // What this account is by the end of the request. `user` was read before
+    // the upgrade above, so reading user.accountType directly would drop the
+    // org-only fields of someone becoming an organization in this same call.
+    const effectiveAccountType =
+      accountType === 'organization' && user.accountType === 'volunteer'
+        ? 'organization'
+        : user.accountType;
+
     if (username && username.trim() && username.trim() !== user.username) {
       const taken = db.prepare('SELECT id FROM users WHERE username = ? AND id != ?').get(username.trim(), userId);
       if (taken) return res.status(409).json({ error: 'Username already taken' });
@@ -808,29 +816,41 @@ router.put('/api/auth/profile', requireAuth, async (req: AuthRequest, res: Respo
       db.prepare('UPDATE users SET profileImage = ? WHERE id = ?').run(profileImage || null, userId);
     }
 
-    if (orgDescription !== undefined) {
-      const lengthError = getLengthError('orgDescription', orgDescription);
-      if (lengthError) return res.status(400).json({ error: lengthError });
-      db.prepare('UPDATE users SET orgDescription = ? WHERE id = ?').run(orgDescription || null, userId);
-    }
-    if (orgWebsite !== undefined) {
-      db.prepare('UPDATE users SET orgWebsite = ? WHERE id = ?').run(orgWebsite || null, userId);
-    }
-    if (orgEmail !== undefined) {
-      db.prepare('UPDATE users SET orgEmail = ? WHERE id = ?').run(orgEmail || null, userId);
-    }
-    if (orgPhone !== undefined) {
-      db.prepare('UPDATE users SET orgPhone = ? WHERE id = ?').run(orgPhone || null, userId);
-    }
-
-    // Whitelisted against the real tag list rather than trusted as free text --
-    // same reasoning as the onboarding questionnaire's interests: an org's own
-    // category can never be something no post could also be filed under.
-    if (orgFieldTags !== undefined) {
-      const cleanTags = Array.isArray(orgFieldTags)
-        ? [...new Set(orgFieldTags.filter((t: unknown) => typeof t === 'string' && (VALID_FIELD_TAGS as readonly string[]).includes(t)))]
-        : [];
-      db.prepare('UPDATE users SET orgFieldTags = ? WHERE id = ?').run(JSON.stringify(cleanTags), userId);
+    // ── Organization-only fields ─────────────────────────────────────────
+    // These columns sit on every user row, so nothing but this check stops a
+    // volunteer writing to them. That mattered first for orgFieldTags, which
+    // would then surface the volunteer in the admin Users list under an
+    // organization category; the other four have no reader today, but they
+    // are the same shape of hole and are closed the same way.
+    //
+    // Ignored rather than rejected: these fields simply aren't a volunteer's
+    // to set, and erroring would break a client that posts the whole profile
+    // form back. One guard rather than five, so a field added here can't be
+    // left unguarded by forgetting to repeat the condition.
+    if (effectiveAccountType === 'organization') {
+      if (orgDescription !== undefined) {
+        const lengthError = getLengthError('orgDescription', orgDescription);
+        if (lengthError) return res.status(400).json({ error: lengthError });
+        db.prepare('UPDATE users SET orgDescription = ? WHERE id = ?').run(orgDescription || null, userId);
+      }
+      if (orgWebsite !== undefined) {
+        db.prepare('UPDATE users SET orgWebsite = ? WHERE id = ?').run(orgWebsite || null, userId);
+      }
+      if (orgEmail !== undefined) {
+        db.prepare('UPDATE users SET orgEmail = ? WHERE id = ?').run(orgEmail || null, userId);
+      }
+      if (orgPhone !== undefined) {
+        db.prepare('UPDATE users SET orgPhone = ? WHERE id = ?').run(orgPhone || null, userId);
+      }
+      // Whitelisted against the real tag list rather than trusted as free text --
+      // same reasoning as the onboarding questionnaire's interests: an org's own
+      // category can never be something no post could also be filed under.
+      if (orgFieldTags !== undefined) {
+        const cleanTags = Array.isArray(orgFieldTags)
+          ? [...new Set(orgFieldTags.filter((t: unknown) => typeof t === 'string' && (VALID_FIELD_TAGS as readonly string[]).includes(t)))]
+          : [];
+        db.prepare('UPDATE users SET orgFieldTags = ? WHERE id = ?').run(JSON.stringify(cleanTags), userId);
+      }
     }
 
     if (typeof emailReminders === 'boolean') {
@@ -1295,7 +1315,7 @@ router.post('/api/opportunities/:id/signup', requireAuth, async (req: AuthReques
           oppId, new Date().toISOString()
         );
         try {
-          await sendSignupNotificationEmail(host.email, host.username, volunteerName, opp.title);
+          await sendSignupNotificationEmail(host.email, host.username, volunteerName, opp.title, isRole);
         } catch { /* email errors are non-fatal */ }
       }
     }
@@ -2581,6 +2601,12 @@ async function runReminderCron() {
       JOIN users u ON u.id = s.userId
       WHERE o.status = 'approved'
         AND o.isRecurring = 0
+        -- A role's date column holds its creation time, which is always in
+        -- the past and so can never land in a window 23 hours ahead. That
+        -- makes this exclusion redundant today and load-bearing the moment
+        -- anything writes a future date there -- and the email it guards
+        -- says "your event is tomorrow", which a standing commitment is not.
+        AND (o.commitmentType IS NULL OR o.commitmentType != 'role')
         AND o.date >= ? AND o.date <= ?
         AND u.emailReminders = 1
         AND (s.lastReminderAt IS NULL OR s.lastReminderAt < ?)

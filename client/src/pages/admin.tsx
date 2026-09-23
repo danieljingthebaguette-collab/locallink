@@ -792,10 +792,15 @@ function UsersTab({
     users.flatMap(u => u.accountType === 'organization' ? (u.orgFieldTags || []) : [])
   )).sort();
 
+  // The accountType check matches the one building the options above. Without
+  // it the two disagree: the dropdown only ever offers an organization's
+  // categories, but the filter would match any row carrying the tag, so a
+  // volunteer row with tags set would appear under an org category.
   const filteredUsers = users.filter(u =>
     (u.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
       u.email.toLowerCase().includes(searchQuery.toLowerCase())) &&
-    (!categoryFilter || (u.orgFieldTags || []).includes(categoryFilter))
+    (!categoryFilter ||
+      (u.accountType === 'organization' && (u.orgFieldTags || []).includes(categoryFilter)))
   );
 
   return (

@@ -7,7 +7,7 @@ import { VerifiedBadge } from '@/components/VerifiedBadge';
 import { Button } from '@/components/ui/button';
 import { useAuthStore, useFavoritesStore } from '@/lib/store';
 import { Heart } from 'lucide-react';
-import { getCategoryColor, getCategoryLabel } from '@/lib/categoryUtils';
+import { getCategoryColor, getCategoryLabel, isRolePost, hasEnded } from '@/lib/categoryUtils';
 import type { Opportunity } from '@/lib/mockData';
 
 interface OrgProfile {
@@ -19,6 +19,7 @@ interface OrgProfile {
   orgWebsite: string | null;
   orgEmail: string | null;
   orgPhone: string | null;
+  orgFieldTags: string[] | null;
   verified: boolean;
   createdAt: string;
   posts: Opportunity[];
@@ -83,9 +84,11 @@ export default function OrgProfilePage() {
     );
   }
 
-  const now = new Date();
-  const activePosts = org.posts.filter(p => p.isRecurring || new Date(p.date) >= now);
-  const pastPosts = org.posts.filter(p => !p.isRecurring && new Date(p.date) < now);
+  // hasEnded, not a date comparison: a role stores its creation time in `date`
+  // to satisfy the NOT NULL column, so comparing it against now filed every
+  // ongoing role this organization has under "Past".
+  const activePosts = org.posts.filter(p => !hasEnded(p));
+  const pastPosts = org.posts.filter(p => hasEnded(p));
 
   const formatDate = (iso: string) => {
     const d = new Date(iso);
@@ -178,6 +181,20 @@ export default function OrgProfilePage() {
             <div className="mt-5 pt-5 border-t border-border">
               <p className="text-sm font-bold text-muted-foreground uppercase tracking-wide mb-2">About</p>
               <p className="text-foreground leading-relaxed">{org.orgDescription}</p>
+            </div>
+          )}
+
+          {/* What this organization works on. Same chip treatment the org sees
+              on its own profile page, so the two read as the same thing. No
+              heading and no empty state here -- a visitor reading someone
+              else's page gains nothing from "none set yet". */}
+          {!!org.orgFieldTags?.length && (
+            <div className="mt-4 flex flex-wrap gap-2">
+              {org.orgFieldTags.map(tag => (
+                <span key={tag} className="px-2.5 py-1 bg-primary/10 border border-primary/20 rounded-md text-xs font-semibold text-primary">
+                  {tag}
+                </span>
+              ))}
             </div>
           )}
 
@@ -285,21 +302,31 @@ function PostCard({ post, idx, formatDate, past = false }: { post: Opportunity; 
         <p className="text-xs text-muted-foreground line-clamp-2 mb-2">{post.description}</p>
         <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
           <span className="flex items-center gap-1">
-            {/* The icon already carries "recurring" — the emoji was saying it twice */}
-            {post.isRecurring ? <Repeat className="w-3 h-3" /> : <Calendar className="w-3 h-3" />}
-            {post.isRecurring ? `Weekly ${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][post.recurringDay ?? 0]}` : formatDate(post.date)}
+            {/* The icon already carries "recurring" — the emoji was saying it twice.
+                A role has neither a date nor a weekly slot: it states its
+                commitment, which is the only "when" it has. */}
+            {post.isRecurring || isRolePost(post) ? <Repeat className="w-3 h-3" /> : <Calendar className="w-3 h-3" />}
+            {isRolePost(post)
+              ? post.commitment
+              : post.isRecurring
+              ? `Weekly ${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][post.recurringDay ?? 0]}`
+              : formatDate(post.date)}
           </span>
           <span className="flex items-center gap-1">
             <MapPin className="w-3 h-3" />
             {post.location}
           </span>
-          <span className="flex items-center gap-1">
-            <Clock className="w-3 h-3" />
-            {post.duration}h
-          </span>
+          {/* A role's duration column is 0 -- "0h" beside a standing commitment
+              is worse than saying nothing, so it says nothing. */}
+          {!isRolePost(post) && (
+            <span className="flex items-center gap-1">
+              <Clock className="w-3 h-3" />
+              {post.duration}h
+            </span>
+          )}
           <span className="flex items-center gap-1">
             <Users className="w-3 h-3" />
-            {post.signupCount || 0} interested
+            {post.signupCount || 0} {isRolePost(post) ? 'applied' : 'interested'}
           </span>
         </div>
       </div>

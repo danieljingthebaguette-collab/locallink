@@ -13,8 +13,13 @@
 - Never test against the production database. Leave DB_PATH unset locally.
 - Before saying "cleaned up" or "stopped," verify it — past sessions left
   servers running and files behind after claiming otherwise.
-- Users are mostly minors. Any new field in an API response goes through
-  the withTags allowlist explicitly. Nothing public by default.
+- Users are mostly minors. Nothing public by default. Opportunity
+  responses go through the withTags allowlist. User responses use
+  explicit SELECT column lists — never SELECT * on the users table, and
+  add new user fields only to the specific endpoints that need them.
+- Roles store createdAt in the `date` column because it can't be null.
+  Never compare opportunity.date directly — always use hasEnded() and
+  isRolePost() from categoryUtils.ts.
 - Deferred on purpose, don't propose unasked: routes.ts as one file,
   sync SQLite, no pagination, no indexes, no test suite.
 

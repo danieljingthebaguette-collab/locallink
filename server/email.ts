@@ -186,22 +186,42 @@ export async function sendReopenReminderEmail(email: string, username: string, p
   );
 }
 
+/**
+ * Someone signed up for an organization's post.
+ *
+ * `isRole` switches the whole message, not just a word. Interest in an event
+ * needs nothing from the host; an application for an ongoing role is waiting
+ * on them to accept or decline it, and saying "get in touch whenever suits"
+ * would leave the applicant sitting in the queue indefinitely. The in-app
+ * notification already branches the same way -- this keeps the email saying
+ * the same thing the bell does.
+ */
 export async function sendSignupNotificationEmail(
-  orgEmail: string, orgUsername: string, volunteerName: string, postTitle: string
+  orgEmail: string, orgUsername: string, volunteerName: string, postTitle: string,
+  isRole = false
 ): Promise<void> {
   const orgUsernameHtml = escapeHtml(orgUsername);
   const volunteerNameHtml = escapeHtml(volunteerName);
   const postTitleHtml = escapeHtml(postTitle);
+  const subject = isRole
+    ? `${volunteerName} applied for "${postTitle}"`
+    : `${volunteerName} is interested in "${postTitle}"`;
+  const lead = isRole
+    ? `<strong>${volunteerNameHtml}</strong> applied for your ongoing role.`
+    : `<strong>${volunteerNameHtml}</strong> is interested in your opportunity.`;
+  const follow = isRole
+    ? 'Open the post on LocalLink to accept or decline their application.'
+    : 'Their details are on the post, so you can get in touch whenever suits.';
   await sendEmail(
     orgEmail,
-    `${volunteerName} is interested in "${postTitle}"`,
+    subject,
     layout(
-      `${greeting(orgUsernameHtml, `<strong>${volunteerNameHtml}</strong> is interested in your opportunity.`)}
+      `${greeting(orgUsernameHtml, lead)}
        ${panel(postTitleHtml)}
-       ${para('Their details are on the post, so you can get in touch whenever suits.')}
+       ${para(follow)}
        ${button(APP_URL, 'View on LocalLink')}`
     ),
-    `Hi ${orgUsername},\n\n${volunteerName} is interested in "${postTitle}".\n\nView on LocalLink: ${APP_URL}`
+    `Hi ${orgUsername},\n\n${subject}.\n\n${follow}\n\nView on LocalLink: ${APP_URL}`
   );
 }
 

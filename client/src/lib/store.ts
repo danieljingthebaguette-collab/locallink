@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { type Opportunity, type AppUser, type Category } from './mockData';
-import { getMatchScore, getFilterCategory } from './categoryUtils';
+import { getMatchScore, getFilterCategory, isRolePost, hasEnded } from './categoryUtils';
 
 const API = '/api';
 
@@ -403,7 +403,7 @@ export const useOpportunitiesStore = create<OpportunitiesState>((set, get) => ({
         // A role has no date to be soonest by. Infinity parks every role
         // after every dated event rather than at the top, which is where a
         // meaningless 0 or the stored creation date would have put them.
-        if ((o.commitmentType ?? 'event') === 'role') return Infinity;
+        if (isRolePost(o)) return Infinity;
         if (o.isRecurring) {
           const status = getRecurringStatus(o);
           return status ? status.nextOccurrence.getTime() : new Date(o.date).getTime();
@@ -429,7 +429,7 @@ export const useOpportunitiesStore = create<OpportunitiesState>((set, get) => ({
           const diff = getMatchScore(b, prefs) - getMatchScore(a, prefs);
           if (diff !== 0) return diff;
           const dateOf = (o: Opportunity) =>
-            (o.commitmentType ?? 'event') === 'role' ? Infinity : new Date(o.date).getTime();
+            isRolePost(o) ? Infinity : new Date(o.date).getTime();
           return dateOf(a) - dateOf(b);
         });
       }
@@ -438,17 +438,13 @@ export const useOpportunitiesStore = create<OpportunitiesState>((set, get) => ({
     // Sort order: open future → closed future → past
     // Recurring posts never enter the "past" bucket — their open/closed state
     // is computed dynamically from the current time vs. their weekly schedule.
-    const now = new Date();
-
-    const isRole = (o: Opportunity) => (o.commitmentType ?? 'event') === 'role';
-
     const effectiveIsOpen = (o: Opportunity): boolean => {
       // Manual host-close (isAvailable=0/false) always overrides the schedule
       if (o.isAvailable === false || (o.isAvailable as any) === 0) return false;
       // A role has no schedule to be closed by -- only the host's own toggle
       // above, and "positions filled", which the card states without
       // reordering the board.
-      if (isRole(o)) return true;
+      if (isRolePost(o)) return true;
       if (o.isRecurring) {
         const status = getRecurringStatus(o);
         return status ? status.isOpen : true;
@@ -457,9 +453,9 @@ export const useOpportunitiesStore = create<OpportunitiesState>((set, get) => ({
     };
 
     // Roles join recurring posts in never entering the "past" bucket: there is
-    // no date on them that could have gone by.
-    const future = filtered.filter(o => isRole(o) || o.isRecurring || new Date(o.date) >= now);
-    const past   = filtered.filter(o => !isRole(o) && !o.isRecurring && new Date(o.date) < now);
+    // no date on them that could have gone by. hasEnded owns that rule.
+    const future = filtered.filter(o => !hasEnded(o));
+    const past   = filtered.filter(o =>  hasEnded(o));
     const futureOpen   = future.filter(o =>  effectiveIsOpen(o));
     const futureClosed = future.filter(o => !effectiveIsOpen(o));
     return [...futureOpen, ...futureClosed, ...past];
