@@ -618,13 +618,18 @@ export default function Profile() {
             </button>
           </div>
 
-          {/* Interest notifications — organizations only */}
+          {/* Interest and application notifications — organizations only.
+              One switch covers both, because it always has: the same opt-in
+              gated interest before roles existed and now gates applications
+              too. The label said only "interest", which left an organization
+              turning it off with no idea they were also silencing the
+              applications they have to act on. */}
           {currentUser.accountType === 'organization' && (
             <div className="flex items-center justify-between py-2 border-t border-border mt-2 pt-4">
               <div className="flex-1 pr-4">
-                <p className="text-sm font-semibold text-foreground">Notify me when someone expresses interest</p>
+                <p className="text-sm font-semibold text-foreground">Notify me about interest and applications</p>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Get a bell notification and an email when a volunteer taps "I'm Interested" on one of your posts
+                  Get a bell notification and an email when a volunteer taps "I'm Interested" on an event, or applies for one of your ongoing roles
                 </p>
               </div>
               <button

@@ -245,6 +245,33 @@ const LIMITS = {
  * `partial` is true on edit, where an absent field means "leave it alone"
  * rather than "it wasn't filled in".
  */
+
+/**
+ * The role fields an edit should end up writing: whatever the request sent,
+ * falling back to what's already stored for anything it didn't mention.
+ *
+ * Presence is tested with `in`, not `??`, and that distinction is the whole
+ * point. Half these fields use null or '' to mean something real -- no
+ * minimum age, unlimited positions, no term -- so `??` read every attempt to
+ * clear one as "didn't send it" and put the old value straight back. Blanking
+ * Positions saved successfully and changed nothing.
+ */
+function mergeRoleFields(body: any, opp: any) {
+  const sent = (k: string) => Object.prototype.hasOwnProperty.call(body, k);
+  return {
+    commitment: sent('commitment') ? body.commitment : opp.commitment,
+    term: sent('term') ? body.term : opp.term,
+    minAge: sent('minAge') ? body.minAge : opp.minAge,
+    trainingRequired: sent('trainingRequired') ? body.trainingRequired : opp.trainingRequired,
+    trainingDescription: sent('trainingDescription') ? body.trainingDescription : opp.trainingDescription,
+    // Undefined here means parseRoleFields leaves requirements null, and the
+    // UPDATE's COALESCE keeps the stored list -- so an edit that never
+    // mentions requirements doesn't wipe them.
+    requirements: sent('requirements') ? body.requirements : undefined,
+    positions: sent('positions') ? body.positions : opp.positions,
+  };
+}
+
 function parseRoleFields(body: any, partial: boolean): { error: string } | {
   commitment: string | null; term: string | null; minAge: number | null;
   trainingRequired: number; trainingDescription: string | null;
@@ -1481,16 +1508,7 @@ router.put('/api/opportunities/:id', requireAuth, (req: AuthRequest, res: Respon
       }
       // Existing values stand in for anything this request left out, so a
       // partial edit never blanks a field the form didn't send.
-      const merged = {
-        commitment: req.body.commitment ?? opp.commitment,
-        term: req.body.term ?? opp.term,
-        minAge: req.body.minAge ?? opp.minAge,
-        trainingRequired: req.body.trainingRequired ?? opp.trainingRequired,
-        trainingDescription: req.body.trainingDescription ?? opp.trainingDescription,
-        requirements: req.body.requirements,
-        positions: req.body.positions ?? opp.positions,
-      };
-      const parsed = parseRoleFields(merged, false);
+      const parsed = parseRoleFields(mergeRoleFields(req.body, opp), false);
       if ('error' in parsed) return res.status(400).json({ error: parsed.error });
       roleUpdate = parsed;
       // An application link is what makes a role actionable, so it stays
@@ -1821,15 +1839,7 @@ router.put('/api/admin/opportunities/:id', requireAdmin, (req: Request, res: Res
     // role post must be able to reach every field on it, or the admin form
     // becomes the one place a role can't be fixed.
     if (opp.commitmentType === 'role' || req.body.commitmentType === 'role') {
-      const parsed = parseRoleFields({
-        commitment: req.body.commitment ?? opp.commitment,
-        term: req.body.term ?? opp.term,
-        minAge: req.body.minAge ?? opp.minAge,
-        trainingRequired: req.body.trainingRequired ?? opp.trainingRequired,
-        trainingDescription: req.body.trainingDescription ?? opp.trainingDescription,
-        requirements: req.body.requirements,
-        positions: req.body.positions ?? opp.positions,
-      }, false);
+      const parsed = parseRoleFields(mergeRoleFields(req.body, opp), false);
       if ('error' in parsed) return res.status(400).json({ error: parsed.error });
       db.prepare(
         `UPDATE opportunities SET commitmentType = 'role', commitment = ?, term = ?, minAge = ?,

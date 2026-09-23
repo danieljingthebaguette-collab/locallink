@@ -169,6 +169,11 @@ export default function Home() {
     cardTransform: ImageTransform;
     modalTransform: ImageTransform;
     externalSignupUrl: string;
+    // Roles only. Numbers are held as strings because these are text inputs and
+    // an empty one has to stay empty rather than becoming 0 -- blank positions
+    // means unlimited, and blank minimum age means no minimum.
+    commitment: string; term: string; minAge: string; positions: string;
+    trainingRequired: boolean; trainingDescription: string; requirements: string[];
   }>({
     title: '', description: '', location: '', town: '', date: '', duration: 2, spots: 0,
     category: 'volunteer',
@@ -176,6 +181,8 @@ export default function Home() {
     cardTransform: DEFAULT_TRANSFORM,
     modalTransform: DEFAULT_TRANSFORM,
     externalSignupUrl: '',
+    commitment: '', term: '', minAge: '', positions: '',
+    trainingRequired: false, trainingDescription: '', requirements: [''],
   });
   const [savingEdit, setSavingEdit] = useState(false);
   const [signupUrlEditError, setSignupUrlEditError] = useState('');
@@ -531,6 +538,15 @@ export default function Home() {
       cardTransform: parseImageTransform(opp.cardObjectPosition),
       modalTransform: parseImageTransform(opp.modalObjectPosition),
       externalSignupUrl: opp.externalSignupUrl ?? '',
+      commitment: opp.commitment ?? '',
+      term: opp.term ?? '',
+      minAge: opp.minAge != null ? String(opp.minAge) : '',
+      positions: opp.positions != null ? String(opp.positions) : '',
+      trainingRequired: !!opp.trainingRequired,
+      trainingDescription: opp.trainingDescription ?? '',
+      // Always at least one row, so the field is visibly there to type into
+      // rather than hiding behind "+ Add requirement".
+      requirements: opp.requirements?.length ? [...opp.requirements] : [''],
     });
     setSignupUrlEditError('');
     setShowEditForm(true);
@@ -548,10 +564,14 @@ export default function Home() {
       setSignupUrlEditError(signupUrlError);
       return;
     }
-    // The server refuses this too; saying it here means the host sees which
+    // The server refuses these too; saying it here means the host sees which
     // field is wrong instead of a generic failure.
     if (isRolePost(selectedCard) && !editForm.externalSignupUrl.trim()) {
       setSignupUrlEditError('An ongoing role needs an application link');
+      return;
+    }
+    if (isRolePost(selectedCard) && !editForm.commitment.trim()) {
+      toast({ title: 'Say what the commitment is', description: 'For example "8 hrs/month" or "Every Wednesday".', variant: 'destructive' });
       return;
     }
     setSavingEdit(true);
@@ -576,6 +596,16 @@ export default function Home() {
       } else {
         payload.date = editForm.date;
       }
+    } else {
+      // Blank stays blank: an empty minimum age means no minimum and empty
+      // positions means unlimited, which is null on the wire, not 0.
+      payload.commitment = editForm.commitment.trim();
+      payload.term = editForm.term.trim();
+      payload.minAge = editForm.minAge.trim() ? Number(editForm.minAge) : null;
+      payload.positions = editForm.positions.trim() ? Number(editForm.positions) : null;
+      payload.trainingRequired = editForm.trainingRequired;
+      payload.trainingDescription = editForm.trainingRequired ? editForm.trainingDescription.trim() : '';
+      payload.requirements = editForm.requirements.filter(r => r.trim());
     }
     payload.cardObjectPosition = serializeImageTransform(editForm.cardTransform);
     payload.modalObjectPosition = serializeImageTransform(editForm.modalTransform);
@@ -1464,10 +1494,9 @@ export default function Home() {
                           <option value="">No town set</option>
                           {TOWNS.map(t => <option key={t} value={t}>{t}</option>)}
                         </select>
-                        {/* Schedule, length and capacity are event ideas. A role
-                            is edited for its commitment instead, and this quick
-                            form deliberately doesn't carry those fields -- the
-                            full role form lives in the admin panel. */}
+                        {/* Schedule, length and capacity are event ideas; a role
+                            answers the equivalent questions with the block
+                            below instead. */}
                         {isRolePost(selectedCard) ? null : selectedCard?.isRecurring ? (
                           /* Recurring events: day-of-week dropdown + time picker */
                           <div className="flex gap-1">
@@ -1522,6 +1551,90 @@ export default function Home() {
                           className="rounded-xl bg-white/80 text-slate-900 border-0 text-sm h-9 px-3 w-28"
                         />
                       </div>}
+
+                      {/* Everything a role is, other than its words. Without
+                          this the host could fix a typo in the title but not in
+                          the commitment, and had to ask an admin to change the
+                          one field the whole post is about. */}
+                      {isRolePost(selectedCard) && (
+                        <div className="space-y-2.5 rounded-2xl bg-white/10 border border-white/20 p-3">
+                          <p className="text-xs font-bold tracking-widest uppercase opacity-75">What this role asks of you</p>
+                          <div>
+                            <label htmlFor="edit-role-commitment" className="text-xs text-white/75 font-medium block mb-1">Commitment *</label>
+                            <input id="edit-role-commitment" type="text"
+                              value={editForm.commitment}
+                              onChange={e => setEditForm(f => ({ ...f, commitment: e.target.value }))}
+                              placeholder="8 hrs/month · Every Wednesday"
+                              className="w-full rounded-xl bg-white/80 text-slate-900 border-0 text-sm h-9 px-3" />
+                          </div>
+                          <div className="grid grid-cols-3 gap-2">
+                            <div>
+                              <label htmlFor="edit-role-term" className="text-xs text-white/75 font-medium block mb-1">Term</label>
+                              <input id="edit-role-term" type="text"
+                                value={editForm.term}
+                                onChange={e => setEditForm(f => ({ ...f, term: e.target.value }))}
+                                placeholder="Fall 2026"
+                                className="w-full rounded-xl bg-white/80 text-slate-900 border-0 text-sm h-9 px-3" />
+                            </div>
+                            <div>
+                              <label htmlFor="edit-role-minage" className="text-xs text-white/75 font-medium block mb-1">Min age</label>
+                              <input id="edit-role-minage" type="number" min={13} max={120}
+                                value={editForm.minAge}
+                                onChange={e => setEditForm(f => ({ ...f, minAge: e.target.value }))}
+                                placeholder="Any"
+                                className="w-full rounded-xl bg-white/80 text-slate-900 border-0 text-sm h-9 px-3" />
+                            </div>
+                            <div>
+                              <label htmlFor="edit-role-positions" className="text-xs text-white/75 font-medium block mb-1">Positions</label>
+                              <input id="edit-role-positions" type="number" min={1}
+                                value={editForm.positions}
+                                onChange={e => setEditForm(f => ({ ...f, positions: e.target.value }))}
+                                placeholder="Unlimited"
+                                className="w-full rounded-xl bg-white/80 text-slate-900 border-0 text-sm h-9 px-3" />
+                            </div>
+                          </div>
+                          <label className="flex items-start gap-2.5 cursor-pointer min-h-[44px] py-2">
+                            <input type="checkbox" checked={editForm.trainingRequired}
+                              onChange={e => setEditForm(f => ({ ...f, trainingRequired: e.target.checked }))}
+                              className="mt-0.5" />
+                            <span className="text-xs text-white/90">
+                              <span className="font-bold">Training required</span> — volunteers complete it before starting.
+                            </span>
+                          </label>
+                          {editForm.trainingRequired && (
+                            <textarea
+                              value={editForm.trainingDescription}
+                              onChange={e => setEditForm(f => ({ ...f, trainingDescription: e.target.value }))}
+                              placeholder="What the training involves, and how long it takes"
+                              className="w-full rounded-xl bg-white/80 text-slate-900 border-0 text-sm px-3 py-2 resize-none min-h-[56px]" />
+                          )}
+                          <div className="space-y-2">
+                            <span className="text-xs text-white/75 font-medium block">Requirements</span>
+                            {editForm.requirements.map((r, i) => (
+                              <div key={i} className="flex gap-2">
+                                <input type="text" value={r}
+                                  onChange={e => setEditForm(f => ({ ...f, requirements: f.requirements.map((v, vi) => vi === i ? e.target.value : v) }))}
+                                  placeholder={i === 0 ? 'Background check' : 'Another requirement'}
+                                  className="flex-1 rounded-xl bg-white/80 text-slate-900 border-0 text-sm h-9 px-3" />
+                                {editForm.requirements.length > 1 && (
+                                  <button type="button" aria-label={`Remove requirement ${i + 1}`}
+                                    onClick={() => setEditForm(f => ({ ...f, requirements: f.requirements.filter((_, vi) => vi !== i) }))}
+                                    className="w-11 h-11 rounded-xl bg-white/20 hover:bg-white/30 flex items-center justify-center flex-shrink-0 cursor-pointer">
+                                    <X className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                              </div>
+                            ))}
+                            {editForm.requirements.length < 12 && (
+                              <button type="button"
+                                onClick={() => setEditForm(f => ({ ...f, requirements: [...f.requirements, ''] }))}
+                                className="min-h-[44px] text-xs font-semibold text-white/80 hover:text-white cursor-pointer">
+                                + Add requirement
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )}
                       {/* External signup — org's own registration page, if they use one */}
                       <div>
                         <label htmlFor="home-field-2" className="text-xs text-white/75 font-medium block mb-1">
