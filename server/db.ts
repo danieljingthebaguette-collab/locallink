@@ -574,7 +574,11 @@ for (const [needle, canonicalTown] of TOWN_BACKFILL_ALIASES) {
   ).run(canonicalTown, `%${needle}%`, `%${needle}%`);
 }
 
-// Auto-grant admin and auto-verify the designated admin email
+// Auto-grant admin to the designated admin email -- but never verify it.
+// Verifying here meant that on a fresh or restored DB, whoever registered
+// that address first became a logged-in admin at the next boot without ever
+// proving the inbox. An unverified row can't log in, so granting the flag
+// alone is safe: it only takes effect once the real owner confirms.
 if (!process.env.ADMIN_EMAIL) {
   console.warn(
     '[SECURITY WARNING] ADMIN_EMAIL environment variable is not set. ' +
@@ -582,7 +586,7 @@ if (!process.env.ADMIN_EMAIL) {
   );
 }
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'linklocal2@gmail.com';
-db.prepare('UPDATE users SET isAdmin = 1, emailVerified = 1 WHERE email = ?').run(ADMIN_EMAIL);
+db.prepare('UPDATE users SET isAdmin = 1 WHERE email = ?').run(ADMIN_EMAIL);
 
 // Helper: returns an ISO datetime string N days from now at a given time
 const futureDate = (daysFromNow: number, time: string) => {

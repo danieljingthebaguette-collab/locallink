@@ -586,11 +586,15 @@ router.post('/api/auth/register', async (req: Request, res: Response) => {
 
     const id = randomUUID();
     const createdAt = new Date().toISOString();
+    // The admin address still gets the flag, but has to confirm its inbox
+    // like everyone else (login refuses unverified accounts). It used to be
+    // auto-verified, so on a DB without the admin row yet, the first person
+    // to register that address was a logged-in admin.
     const isAdmin = email === ADMIN_EMAIL ? 1 : 0;
-    // Auto-verify when: admin email, or no Brevo API key configured. A join
-    // link used to count too, which let anyone holding a link register a
-    // verified org account under an inbox they didn't own.
-    const emailVerified = (isAdmin || !process.env.BREVO_API_KEY) ? 1 : 0;
+    // Auto-verify only when no Brevo API key is configured (local dev). A
+    // join link used to count too, which let anyone holding a link register
+    // a verified org account under an inbox they didn't own.
+    const emailVerified = !process.env.BREVO_API_KEY ? 1 : 0;
     // The verified badge from a join link is granted by claimJoinLink(),
     // only once the email is confirmed.
     const verified = 0;
