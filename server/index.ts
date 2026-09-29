@@ -102,9 +102,21 @@ const uploadsPath = dbPath
 // Upload filenames are unique (timestamp + random) and never rewritten, so
 // they're safe to cache hard. Without this they were served max-age=0 and
 // every page view re-fetched every post image.
+// Only these extensions are ever written by POST /api/upload (it picks the
+// extension from the file's bytes). Anything else in the folder predates
+// that check and is forced to download rather than render.
+const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif']);
 app.use('/uploads', express.static(uploadsPath, {
   maxAge: '30d',
   immutable: true,
+  setHeaders: (res, filePath) => {
+    // A sandboxed, no-resources policy: has no effect on <img> embedding,
+    // but if a file is ever opened directly as a page, no script can run.
+    res.setHeader('Content-Security-Policy', "sandbox; default-src 'none'");
+    if (!IMAGE_EXTS.has(path.extname(filePath).toLowerCase())) {
+      res.setHeader('Content-Disposition', 'attachment');
+    }
+  },
 }));
 
 // ── OG preview tags for social crawlers ──────────────────────────────────────

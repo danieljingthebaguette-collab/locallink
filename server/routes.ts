@@ -22,27 +22,31 @@ if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
-// Multer config — store on disk with unique filenames, images only, 5 MB max
-const storage = multer.diskStorage({
-  destination: uploadsDir,
-  filename: (_req, file, cb) => {
-    const unique = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    const ext = path.extname(file.originalname).toLowerCase();
-    cb(null, `${unique}${ext}`);
-  },
+// Multer config — held in memory (5 MB max) so the bytes can be checked
+// before anything touches the disk. The client's mimetype and filename are
+// both client-controlled, and trusting them let an .html or .js upload be
+// served from our own origin: stored XSS that could read the login token.
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
 });
 
-const upload = multer({
-  storage,
-  limits: { fileSize: 5 * 1024 * 1024 },
-  fileFilter: (_req, file, cb) => {
-    if (file.mimetype.startsWith('image/')) {
-      cb(null, true);
-    } else {
-      cb(new Error('Only image files are allowed'));
-    }
-  },
-});
+/**
+ * The file extension for an image, decided from its first bytes alone, or
+ * null for anything that isn't PNG, JPEG, GIF or WebP. SVG is refused on
+ * purpose: it is XML that can carry script.
+ */
+function sniffImageExt(buf: Buffer): string | null {
+  const starts = (sig: number[], offset = 0) =>
+    buf.length >= offset + sig.length && sig.every((b, i) => buf[offset + i] === b);
+  if (starts([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) return '.png';
+  if (starts([0xff, 0xd8, 0xff])) return '.jpg';
+  // "GIF87a" or "GIF89a"
+  if (starts([0x47, 0x49, 0x46, 0x38]) && (starts([0x37, 0x61], 4) || starts([0x39, 0x61], 4))) return '.gif';
+  // "RIFF" <size> "WEBP"
+  if (starts([0x52, 0x49, 0x46, 0x46]) && starts([0x57, 0x45, 0x42, 0x50], 8)) return '.webp';
+  return null;
+}
 
 const router = Router();
 
@@ -2522,7 +2526,20 @@ router.post('/api/upload', requireAuth, upload.single('image'), (req: Request, r
   if (!req.file) {
     return res.status(400).json({ error: 'No file uploaded' });
   }
-  return res.json({ url: `/uploads/${req.file.filename}` });
+  // The extension comes from the bytes, never from the uploaded filename,
+  // so express.static can only ever serve these as images.
+  const ext = sniffImageExt(req.file.buffer);
+  if (!ext) {
+    return res.status(400).json({ error: 'Only PNG, JPEG, WebP or GIF images are allowed' });
+  }
+  const filename = `${Date.now()}-${randomBytes(8).toString('hex')}${ext}`;
+  try {
+    fs.writeFileSync(path.join(uploadsDir, filename), req.file.buffer);
+  } catch (err) {
+    console.error('[upload] write failed:', err);
+    return res.status(500).json({ error: 'Could not save the image' });
+  }
+  return res.json({ url: `/uploads/${filename}` });
 });
 
 // ===== HEALTH =====
