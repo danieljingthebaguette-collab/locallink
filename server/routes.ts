@@ -63,6 +63,22 @@ const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'linklocal2@gmail.com';
 
 // ===== Shared helpers =====
 
+/**
+ * The 500 response for a route's catch block. Logs the full error, and in
+ * production sends only a generic message -- err.message from SQLite leaks
+ * table and constraint names, and from Brevo, API details. Matches the
+ * global error handler in index.ts.
+ */
+function serverError(res: Response, err: any) {
+  // Path only, not originalUrl: query strings here can carry tokens
+  // (verify-email, unsubscribe) that must not end up in logs.
+  console.error(`[${res.req.method} ${res.req.baseUrl}${res.req.path}]`, err);
+  const message = process.env.NODE_ENV === 'production'
+    ? 'Internal server error'
+    : (err?.message || 'Internal server error');
+  return res.status(500).json({ error: message });
+}
+
 /** Safe JSON.parse — returns `fallback` instead of throwing on malformed input */
 function safeJsonParse<T>(raw: string | null | undefined, fallback: T): T {
   if (!raw) return fallback;
@@ -644,7 +660,7 @@ router.post('/api/auth/register', async (req: Request, res: Response) => {
         : 'Account created. You can now log in.',
     });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return serverError(res, err);
   }
 });
 
@@ -692,7 +708,7 @@ router.post('/api/auth/login', async (req: Request, res: Response) => {
     const { password: _pwd, birthYear: _by, ...safeUser } = user;
     return res.json({ ...safeUser, isAdmin: !!user.isAdmin, emailVerified: true, notifyOnInterest: !!user.notifyOnInterest, notifyOnReopen: user.notifyOnReopen !== 0, profileImage: user.profileImage || null, emailReminders: !!user.emailReminders, hasSeenWelcome: !!user.hasSeenWelcome, verified: !!user.verified, orgFieldTags: safeJsonParse(user.orgFieldTags, []), ...onboardingFields(user), token });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return serverError(res, err);
   }
 });
 
@@ -740,7 +756,7 @@ router.get('/api/auth/verify-email', (req: Request, res: Response) => {
       ...onboardingFields(user),
     });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return serverError(res, err);
   }
 });
 
@@ -764,7 +780,7 @@ router.post('/api/auth/resend-verification', async (req: Request, res: Response)
 
     return res.json({ success: true, message: 'Verification email resent. Please check your inbox.' });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return serverError(res, err);
   }
 });
 
@@ -790,7 +806,7 @@ router.post('/api/auth/forgot-password', async (req: Request, res: Response) => 
 
     return res.json({ success: true });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return serverError(res, err);
   }
 });
 
@@ -815,7 +831,7 @@ router.post('/api/auth/reset-password', async (req: Request, res: Response) => {
 
     return res.json({ success: true, message: 'Password reset successfully. You can now log in.' });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return serverError(res, err);
   }
 });
 
@@ -942,7 +958,7 @@ router.put('/api/auth/profile', requireAuth, async (req: AuthRequest, res: Respo
       ...onboardingFields(updated),
     });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return serverError(res, err);
   }
 });
 
@@ -1023,7 +1039,7 @@ router.post('/api/me/onboarding', requireAuth, (req: AuthRequest, res: Response)
     ).get(req.userId) as any;
     return res.json(onboardingFields(updated));
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return serverError(res, err);
   }
 });
 
@@ -1053,7 +1069,7 @@ router.post('/api/me/onboarding/remind-later', requireAuth, (req: AuthRequest, r
     );
     return res.json({ reminded: true });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return serverError(res, err);
   }
 });
 
@@ -1088,7 +1104,7 @@ router.get('/api/users/:id/profile', (req: Request, res: Response) => {
       orgWebsite: user.orgWebsite || null,
     });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return serverError(res, err);
   }
 });
 
@@ -1117,7 +1133,7 @@ router.get('/api/org/:id', optionalAuth, (req: AuthRequest, res: Response) => {
       posts: postsWithData,
     });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return serverError(res, err);
   }
 });
 
@@ -1136,7 +1152,7 @@ router.get('/api/opportunities', optionalAuth, (req: AuthRequest, res: Response)
     );
     return res.json(result);
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return serverError(res, err);
   }
 });
 
@@ -1156,7 +1172,7 @@ router.get('/api/opportunities/:id', optionalAuth, (req: AuthRequest, res: Respo
     const signups = db.prepare('SELECT userId, status FROM signups WHERE opportunityId = ?').all(opp.id) as any[];
     return res.json(withTags(opp, signups, req.userId, viewerBirthYearOf(req.userId)));
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return serverError(res, err);
   }
 });
 
@@ -1173,7 +1189,7 @@ router.get('/api/my-posts', requireAuth, (req: AuthRequest, res: Response) => {
     );
     return res.json(result);
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return serverError(res, err);
   }
 });
 
@@ -1293,7 +1309,7 @@ router.post('/api/opportunities', requireAuth, (req: AuthRequest, res: Response)
     const opp = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(id) as any;
     return res.status(201).json(withTags(opp, [], req.userId));
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return serverError(res, err);
   }
 });
 
@@ -1402,7 +1418,7 @@ router.post('/api/opportunities/:id/signup', requireAuth, async (req: AuthReques
     const signups = db.prepare('SELECT userId, status FROM signups WHERE opportunityId = ?').all(oppId) as any[];
     return res.json(withTags(updated, signups, req.userId, viewerBirthYearOf(req.userId)));
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return serverError(res, err);
   }
 });
 
@@ -1435,7 +1451,7 @@ router.delete('/api/opportunities/:id/signup', requireAuth, (req: AuthRequest, r
     const signups = db.prepare('SELECT userId, status FROM signups WHERE opportunityId = ?').all(oppId) as any[];
     return res.json(withTags(updated, signups, req.userId, viewerBirthYearOf(req.userId)));
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return serverError(res, err);
   }
 });
 
@@ -1464,7 +1480,7 @@ router.get('/api/opportunities/:id/interested', requireAuth, (req: AuthRequest, 
 
     return res.json(volunteers);
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return serverError(res, err);
   }
 });
 
@@ -1527,7 +1543,7 @@ router.put('/api/opportunities/:id/applications/:userId', requireAuth, (req: Aut
     const signups = db.prepare('SELECT userId, status FROM signups WHERE opportunityId = ?').all(oppId) as any[];
     return res.json(withTags(updated, signups, req.userId, viewerBirthYearOf(req.userId)));
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return serverError(res, err);
   }
 });
 
@@ -1673,7 +1689,7 @@ router.put('/api/opportunities/:id', requireAuth, (req: AuthRequest, res: Respon
     const signups = db.prepare('SELECT userId, status FROM signups WHERE opportunityId = ?').all(oppId) as any[];
     return res.json(withTags(updated, signups, req.userId, viewerBirthYearOf(req.userId)));
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return serverError(res, err);
   }
 });
 
@@ -1705,7 +1721,7 @@ router.delete('/api/opportunities/:id', requireAuth, async (req: AuthRequest, re
     })();
     return res.json({ success: true });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return serverError(res, err);
   }
 });
 
@@ -1724,7 +1740,7 @@ router.get('/api/favorites', requireAuth, (req: AuthRequest, res: Response) => {
     `).all(userId);
     return res.json(favorites);
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return serverError(res, err);
   }
 });
 
@@ -1744,7 +1760,7 @@ router.post('/api/favorites/:orgId', requireAuth, (req: AuthRequest, res: Respon
     db.prepare('INSERT INTO favorites (userId, orgId, createdAt) VALUES (?, ?, ?)').run(userId, orgId, new Date().toISOString());
     return res.json({ success: true });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return serverError(res, err);
   }
 });
 
@@ -1760,7 +1776,7 @@ router.delete('/api/favorites/:orgId', requireAuth, (req: AuthRequest, res: Resp
     db.prepare('DELETE FROM favorites WHERE userId = ? AND orgId = ?').run(userId, orgId);
     return res.json({ success: true });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return serverError(res, err);
   }
 });
 
@@ -1785,7 +1801,7 @@ router.get('/api/admin/users', requireAdmin, (_req: Request, res: Response) => {
       ...onboardingFields(u),
     })));
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return serverError(res, err);
   }
 });
 
@@ -1830,7 +1846,7 @@ router.delete('/api/admin/users/:id', requireAdmin, (req: AuthRequest, res: Resp
     })();
     return res.json({ success: true });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return serverError(res, err);
   }
 });
 
@@ -1922,7 +1938,7 @@ router.put('/api/admin/opportunities/:id', requireAdmin, (req: Request, res: Res
     const signups = db.prepare('SELECT userId, status FROM signups WHERE opportunityId = ?').all(oppId) as any[];
     return res.json(withTags(updated, signups));
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return serverError(res, err);
   }
 });
 
@@ -1955,7 +1971,7 @@ router.delete('/api/admin/opportunities/:id', requireAdmin, (req: Request, res: 
     })();
     return res.json({ success: true });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return serverError(res, err);
   }
 });
 
@@ -1969,7 +1985,7 @@ router.post('/api/admin/users/:id/ban', requireAdmin, (req: AuthRequest, res: Re
     db.prepare('UPDATE users SET banned = 1 WHERE id = ?').run(userId);
     return res.json({ success: true });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return serverError(res, err);
   }
 });
 
@@ -1979,7 +1995,7 @@ router.post('/api/admin/users/:id/unban', requireAdmin, (req: AuthRequest, res: 
     db.prepare('UPDATE users SET banned = 0 WHERE id = ?').run(userId);
     return res.json({ success: true });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return serverError(res, err);
   }
 });
 
@@ -1997,7 +2013,7 @@ router.get('/api/admin/pending-opportunities', requireAdmin, (_req: Request, res
     );
     return res.json(result);
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return serverError(res, err);
   }
 });
 
@@ -2032,7 +2048,7 @@ router.post('/api/admin/opportunities/:id/approve', requireAdmin, async (req: Re
     const signups = db.prepare('SELECT userId, status FROM signups WHERE opportunityId = ?').all(oppId) as any[];
     return res.json(withTags(updated, signups));
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return serverError(res, err);
   }
 });
 
@@ -2065,7 +2081,7 @@ router.post('/api/admin/opportunities/:id/deny', requireAdmin, async (req: Reque
 
     return res.json({ success: true });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return serverError(res, err);
   }
 });
 
@@ -2188,7 +2204,7 @@ router.post('/api/admin/users/:id/nudge', requireAdmin, async (req: Request, res
     db.prepare('UPDATE users SET onboardingNudgedAt = ? WHERE id = ?').run(now, u.id);
     return res.json({ sent: true, channel, kind: u.emailVerified ? 'questionnaire' : 'verification' });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return serverError(res, err);
   }
 });
 
@@ -2235,7 +2251,7 @@ router.get('/api/admin/onboarding-nudge', requireAdmin, (_req: Request, res: Res
       unsubscribedNames,
     });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return serverError(res, err);
   }
 });
 
@@ -2333,7 +2349,7 @@ router.post('/api/admin/onboarding-nudge', requireAdmin, async (_req: Request, r
       emailFailed,
     });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return serverError(res, err);
   } finally {
     nudgeRunning = false;
   }
@@ -2370,7 +2386,7 @@ router.get('/api/admin/analytics', requireAdmin, (req: Request, res: Response) =
     }
     return res.json(days);
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return serverError(res, err);
   }
 });
 
@@ -2381,7 +2397,7 @@ router.get('/api/admin/stats', requireAdmin, (_req: Request, res: Response) => {
     const totalSignups = (db.prepare('SELECT COUNT(*) as count FROM signups').get() as any).count;
     return res.json({ totalUsers, totalOpps, totalSignups });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return serverError(res, err);
   }
 });
 
@@ -2394,7 +2410,7 @@ router.get('/api/notifications', requireAuth, (req: AuthRequest, res: Response) 
     ).all(req.userId!);
     return res.json((notifications as any[]).map(n => ({ ...n, read: !!n.read })));
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return serverError(res, err);
   }
 });
 
@@ -2403,7 +2419,7 @@ router.post('/api/notifications/read-all', requireAuth, (req: AuthRequest, res: 
     db.prepare('UPDATE notifications SET read = 1 WHERE userId = ?').run(req.userId!);
     return res.json({ success: true });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return serverError(res, err);
   }
 });
 
@@ -2412,7 +2428,7 @@ router.post('/api/notifications/:id/read', requireAuth, (req: AuthRequest, res: 
     db.prepare('UPDATE notifications SET read = 1 WHERE id = ? AND userId = ?').run(req.params.id, req.userId!);
     return res.json({ success: true });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return serverError(res, err);
   }
 });
 
@@ -2438,7 +2454,7 @@ router.post('/api/reports', requireAuth, (req: AuthRequest, res: Response) => {
 
     return res.status(201).json({ success: true });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return serverError(res, err);
   }
 });
 
@@ -2447,7 +2463,7 @@ router.get('/api/admin/reports', requireAdmin, (_req: Request, res: Response) =>
     const reports = db.prepare('SELECT * FROM reports ORDER BY createdAt DESC').all();
     return res.json(reports);
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return serverError(res, err);
   }
 });
 
@@ -2456,7 +2472,7 @@ router.delete('/api/admin/reports/:id', requireAdmin, (req: Request, res: Respon
     db.prepare('DELETE FROM reports WHERE id = ?').run(req.params.id);
     return res.json({ success: true });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return serverError(res, err);
   }
 });
 
@@ -2485,7 +2501,7 @@ router.post('/api/feedback', optionalAuth, (req: AuthRequest, res: Response) => 
 
     return res.status(201).json({ success: true });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return serverError(res, err);
   }
 });
 
@@ -2494,7 +2510,7 @@ router.get('/api/admin/feedback', requireAdmin, (_req: Request, res: Response) =
     const feedback = db.prepare('SELECT * FROM feedback ORDER BY createdAt DESC').all();
     return res.json(feedback);
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return serverError(res, err);
   }
 });
 
@@ -2503,7 +2519,7 @@ router.delete('/api/admin/feedback/:id', requireAdmin, (req: Request, res: Respo
     db.prepare('DELETE FROM feedback WHERE id = ?').run(req.params.id);
     return res.json({ success: true });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return serverError(res, err);
   }
 });
 
@@ -2529,7 +2545,7 @@ router.post('/api/appeals', (req: Request, res: Response) => {
 
     return res.status(201).json({ success: true });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return serverError(res, err);
   }
 });
 
@@ -2539,7 +2555,7 @@ router.get('/api/admin/appeals', requireAdmin, (_req: Request, res: Response) =>
     const appeals = db.prepare("SELECT * FROM appeals WHERE status = 'pending' ORDER BY createdAt DESC").all();
     return res.json(appeals);
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return serverError(res, err);
   }
 });
 
@@ -2553,7 +2569,7 @@ router.post('/api/admin/appeals/:id/approve', requireAdmin, (req: Request, res: 
     db.prepare("UPDATE appeals SET status = 'approved' WHERE id = ?").run(req.params.id);
     return res.json({ success: true });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return serverError(res, err);
   }
 });
 
@@ -2563,7 +2579,7 @@ router.delete('/api/admin/appeals/:id', requireAdmin, (req: Request, res: Respon
     db.prepare("UPDATE appeals SET status = 'dismissed' WHERE id = ?").run(req.params.id);
     return res.json({ success: true });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return serverError(res, err);
   }
 });
 
@@ -2615,7 +2631,7 @@ router.post('/api/auth/mark-welcome-seen', requireAuth, (req: AuthRequest, res: 
     db.prepare('UPDATE users SET hasSeenWelcome = 1 WHERE id = ?').run(req.userId!);
     return res.json({ success: true });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return serverError(res, err);
   }
 });
 
@@ -2636,7 +2652,7 @@ router.get('/api/featured-posts', optionalAuth, (req: AuthRequest, res: Response
     );
     return res.json(result);
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return serverError(res, err);
   }
 });
 
@@ -2648,7 +2664,7 @@ router.post('/api/admin/opportunities/:id/feature', requireAdmin, (req: Request,
     db.prepare('UPDATE opportunities SET isFeatured = ? WHERE id = ?').run(newVal, req.params.id);
     return res.json({ isFeatured: !!newVal });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return serverError(res, err);
   }
 });
 
@@ -2751,7 +2767,7 @@ router.get('/api/join/:slug', (req: Request, res: Response) => {
     if (!link) return res.status(404).json({ error: 'Join link not found' });
     return res.json(link);
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return serverError(res, err);
   }
 });
 
@@ -2763,7 +2779,7 @@ router.get('/api/admin/join-links', requireAdmin, (_req: Request, res: Response)
     const links = db.prepare('SELECT * FROM onboarding_links ORDER BY createdAt DESC').all();
     return res.json(links);
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return serverError(res, err);
   }
 });
 
@@ -2783,7 +2799,7 @@ router.post('/api/admin/join-links', requireAdmin, (req: Request, res: Response)
     db.prepare('INSERT INTO onboarding_links (slug, orgName, category, createdAt) VALUES (?, ?, ?, ?)').run(slug, orgName.trim(), category || null, createdAt);
     return res.status(201).json({ slug, orgName: orgName.trim(), category: category || null, createdAt, claimedAt: null, claimedBy: null });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return serverError(res, err);
   }
 });
 
@@ -2793,7 +2809,7 @@ router.delete('/api/admin/join-links/:slug', requireAdmin, (req: Request, res: R
     db.prepare('DELETE FROM onboarding_links WHERE slug = ?').run(req.params.slug);
     return res.json({ ok: true });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return serverError(res, err);
   }
 });
 
@@ -2808,7 +2824,7 @@ router.put('/api/admin/users/:id/verify', requireAdmin, (req: Request, res: Resp
     db.prepare('UPDATE users SET verified = ? WHERE id = ?').run(newVerified, req.params.id);
     return res.json({ verified: newVerified === 1 });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return serverError(res, err);
   }
 });
 
@@ -2830,7 +2846,7 @@ router.put('/api/admin/users/:id/field-tags', requireAdmin, (req: Request, res: 
     db.prepare('UPDATE users SET orgFieldTags = ? WHERE id = ?').run(JSON.stringify(cleanTags), req.params.id);
     return res.json({ orgFieldTags: cleanTags });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return serverError(res, err);
   }
 });
 
