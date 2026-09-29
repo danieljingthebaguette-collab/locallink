@@ -1,5 +1,37 @@
 # Security fix plan
 
+## Status (2026-09-29)
+
+All seven steps are done on this branch, one commit each, each checked
+locally with `curl` against a throwaway DB (`DB_PATH` unset), plus
+`npx tsc --noEmit` and `npm run build`. Decisions from review: pending
+join-link claims are overwritten by later registrations (first to confirm
+wins); the two extra findings were added as steps 6 and 7.
+
+| Step | Commit | Verified by |
+|---|---|---|
+| 1 Uploads | `Check uploaded images by their bytes…` | HTML-as-PNG and SVG → 400; real PNG saved as `.png`; a `.html` already on disk serves with `Content-Disposition: attachment` + sandbox CSP |
+| 2 Event sign-ups | `Refuse sign-ups on events that aren't approved` | pending → 400, approved → 200 |
+| 3 Unapproved posts | `Hide pending and denied posts…` | pending: anon 404, volunteer 404, host 200, admin 200 |
+| 4 Join links | `Make join links unguessable…` | old-style slug 404; attacker unverified and can't log in; real org confirming gets the badge; claimed link 404; late registrant gets nothing |
+| 5 `err.message` | `Stop sending err.message…` | forced SQLite error: production → `Internal server error`, dev → real message; log line has no query string |
+| 6 Admin email | `Make the admin address confirm its inbox…` | squatting the admin address → unverified, can't log in, still unverified after restart |
+| 7 `optionalAuth` | `Read isAdmin from the users table in optionalAuth` | demoted admin's old token → 404 on a pending post; banned user treated as anonymous |
+
+### Still to do, on production (can't be done from here)
+
+- Uploads dir: list anything not `.png/.jpg/.jpeg/.webp/.gif`, copy aside, delete.
+- Join links: delete unclaimed links whose slug has no 16-hex suffix
+  (`WHERE claimedAt IS NULL AND slug NOT GLOB '*-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]'`)
+  and reissue from the admin panel.
+- Join-link audit: check accounts on `claimedAt IS NOT NULL` links against
+  the org name. After deploy, `claimedBy` with `claimedAt` NULL is only a
+  *pending* claim, so filter on `claimedAt`, not `claimedBy`.
+- Admin row: confirm the production `ADMIN_EMAIL` account exists and has
+  `emailVerified = 1` (older boots set it; new boots no longer do).
+
+---
+
 Plan for the five findings in `security-actions.md` (review at `619c0dd`).
 Line numbers below are from branch `security/fix-security-vulnerabilities`,
 checked against the current code, not copied from the review.

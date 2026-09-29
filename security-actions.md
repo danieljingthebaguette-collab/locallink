@@ -54,11 +54,11 @@ So an upload named `.html` is served as a page, and one named `.js` is served as
 **C = 5:** the attacker gets a 30-day login token. If an admin opens the link, the attacker gets the whole admin panel and every user's email address.
 
 **Action items**
-- [ ] Check the file's first bytes against a short list of image formats: PNG, JPEG, WebP, GIF. Refuse anything else, **including SVG**.
-- [ ] Choose the extension on the server from that check. Never use `path.extname(file.originalname)`.
-- [ ] Set headers on the `/uploads` static route as a second layer: `X-Content-Type-Options: nosniff` (helmet already sets this), `Content-Security-Policy: sandbox; default-src 'none'`, and `Content-Disposition: attachment` for any extension that isn't an image.
+- [x] Check the file's first bytes against a short list of image formats: PNG, JPEG, WebP, GIF. Refuse anything else, **including SVG**.
+- [x] Choose the extension on the server from that check. Never use `path.extname(file.originalname)`.
+- [x] Set headers on the `/uploads` static route as a second layer: `X-Content-Type-Options: nosniff` (helmet already sets this), `Content-Security-Policy: sandbox; default-src 'none'`, and `Content-Disposition: attachment` for any extension that isn't an image.
 - [ ] Check the production uploads directory (next to `DB_PATH`) for anything that isn't `.png`, `.jpg`, `.jpeg`, `.webp` or `.gif`. Anything else is either a probe or an attack, so keep a copy before deleting it.
-- [ ] Confirm the fix: upload a `.html` with `Content-Type: image/png` locally, and check that it's refused, or at least that it comes back as a download and doesn't render.
+- [x] Confirm the fix: upload a `.html` with `Content-Type: image/png` locally, and check that it's refused, or at least that it comes back as a download and doesn't render.
 
 ---
 
@@ -77,10 +77,10 @@ Put together, an attacker can make an account under someone else's Gmail address
 **C = 4:** the attacker gets an account showing the verified badge under a real organization's name, one allowed to post ongoing roles aimed at minors, and possibly someone else's account. Admin approval of posts limits the first part.
 
 **Action items**
-- [ ] Add a random suffix to new slugs, e.g. `hillsborough-food-pantry-` plus 16 hex characters from `randomBytes(8)`. This uses the existing `slug` column, so **no schema change**.
-- [ ] Stop the link from setting `emailVerified`. Send the normal confirmation email, and keep only `verified = 1` from the link.
-- [ ] Only mark the link claimed once the email is confirmed, so an attacker can't use up a real organization's invite with an address they don't own.
-- [ ] Have `GET /api/join/:slug` return only whether the link is valid (`{ orgName }`), without `claimedAt`.
+- [x] Add a random suffix to new slugs, e.g. `hillsborough-food-pantry-` plus 16 hex characters from `randomBytes(8)`. This uses the existing `slug` column, so **no schema change**.
+- [x] Stop the link from setting `emailVerified`. Send the normal confirmation email, and keep only `verified = 1` from the link.
+- [x] Only mark the link claimed once the email is confirmed, so an attacker can't use up a real organization's invite with an address they don't own.
+- [x] Have `GET /api/join/:slug` return only whether the link is valid (`{ orgName }`), without `claimedAt`.
 - [ ] Look at any unclaimed links in production that use the old guessable format. Delete them and send new ones.
 - [ ] Check which accounts in production registered with a join link (`onboarding_links.claimedBy`), and confirm each one really belongs to the organization named on the link.
 
@@ -96,7 +96,7 @@ Put together, an attacker can make an account under someone else's Gmail address
 **C = 2:** only the post's own contents are exposed, and they were written by the organization.
 
 **Action items**
-- [ ] Return 404 for posts that aren't approved, unless the person asking is the host or an admin. `optionalAuth` already provides `req.userId`, but check admin status against the database, not the token's `isAdmin`.
+- [x] Return 404 for posts that aren't approved, unless the person asking is the host or an admin. `optionalAuth` already provides `req.userId`, but check admin status against the database, not the token's `isAdmin`.
 
 ---
 
@@ -110,7 +110,7 @@ Put together, an attacker can make an account under someone else's Gmail address
 **C = 2:** junk signups, and a volunteer's email reaching an organization whose post was never approved.
 
 **Action items**
-- [ ] Move the status check out of the `if (isRole)` block so it applies to both kinds of post.
+- [x] Move the status check out of the `if (isRole)` block so it applies to both kinds of post.
 
 ---
 
@@ -124,7 +124,7 @@ Put together, an attacker can make an account under someone else's Gmail address
 **C = 1:** it only reveals details about the database structure. Neither report finding depends on it.
 
 **Action items**
-- [ ] Add a helper, e.g. `serverError(res, err)`, that logs the full error and returns `'Internal server error'` when `NODE_ENV === 'production'`, the same way the global handler does. Then replace the per-route returns with it. This touches almost every route, so do it separately from other changes.
+- [x] Add a helper, e.g. `serverError(res, err)`, that logs the full error and returns `'Internal server error'` when `NODE_ENV === 'production'`, the same way the global handler does. Then replace the per-route returns with it. This touches almost every route, so do it separately from other changes.
 
 ---
 
