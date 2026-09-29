@@ -477,8 +477,15 @@ function optionalAuth(req: AuthRequest, _res: Response, next: NextFunction) {
     const token = authHeader.split(' ')[1];
     try {
       const payload = jwt.verify(token, JWT_SECRET) as { userId: string; isAdmin: boolean };
-      req.userId = payload.userId;
-      req.isAdmin = payload.isAdmin;
+      // Same row check as requireAuth: the token's isAdmin could be up to 30
+      // days stale, so a demoted admin kept admin views here. A deleted or
+      // banned account is simply treated as anonymous on these routes.
+      const user = db.prepare('SELECT banned, isAdmin FROM users WHERE id = ?').get(payload.userId) as
+        { banned: number; isAdmin: number } | undefined;
+      if (user && !user.banned) {
+        req.userId = payload.userId;
+        req.isAdmin = !!user.isAdmin;
+      }
     } catch { /* expired / invalid — proceed as anonymous */ }
   }
   next();
@@ -1140,15 +1147,11 @@ router.get('/api/opportunities/:id', optionalAuth, (req: AuthRequest, res: Respo
       'SELECT o.*, u.verified as hostVerified FROM opportunities o LEFT JOIN users u ON o.hostId = u.id WHERE o.id = ?'
     ).get(req.params.id) as any;
     if (!opp) return res.status(404).json({ error: 'Opportunity not found' });
-    // Pending and denied posts are visible only to their host and to admins.
-    // Admin is read from the DB, not the token (optionalAuth doesn't re-check
-    // it). Everyone else gets the same 404 as a missing id, so the post's
-    // existence and status aren't leaked either.
-    if (opp.status !== 'approved' && opp.hostId !== req.userId) {
-      const viewer = req.userId
-        ? db.prepare('SELECT isAdmin FROM users WHERE id = ?').get(req.userId) as { isAdmin: number } | undefined
-        : undefined;
-      if (!viewer?.isAdmin) return res.status(404).json({ error: 'Opportunity not found' });
+    // Pending and denied posts are visible only to their host and to admins
+    // (optionalAuth reads isAdmin from the DB). Everyone else gets the same
+    // 404 as a missing id, so the post's existence and status aren't leaked.
+    if (opp.status !== 'approved' && opp.hostId !== req.userId && !req.isAdmin) {
+      return res.status(404).json({ error: 'Opportunity not found' });
     }
     const signups = db.prepare('SELECT userId, status FROM signups WHERE opportunityId = ?').all(opp.id) as any[];
     return res.json(withTags(opp, signups, req.userId, viewerBirthYearOf(req.userId)));
