@@ -1279,11 +1279,15 @@ router.post('/api/opportunities/:id/signup', requireAuth, async (req: AuthReques
     const existing = db.prepare('SELECT id FROM signups WHERE opportunityId = ? AND userId = ?').get(oppId, userId);
     if (existing) return res.status(409).json({ error: isRole ? 'You have already applied for this role' : 'Already interested' });
 
+    // Only approved posts take sign-ups. This used to be checked for roles
+    // alone, so a direct call could register interest in a pending or denied
+    // event and hand the volunteer's email to an unapproved host.
+    if (opp.status !== 'approved') {
+      return res.status(400).json({ error: isRole ? 'This role is not open for applications' : 'This event is not open for sign-ups' });
+    }
+
     if (isRole) {
       // Only a live role on a still-verified organization accepts applications.
-      if (opp.status !== 'approved') {
-        return res.status(400).json({ error: 'This role is not open for applications' });
-      }
       const host = db.prepare('SELECT verified FROM users WHERE id = ?').get(opp.hostId) as any;
       if (!host?.verified) {
         return res.status(400).json({ error: 'This role is not open for applications' });
