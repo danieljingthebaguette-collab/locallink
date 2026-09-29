@@ -518,6 +518,22 @@ function mintVerificationToken(userId: string): string {
   return token;
 }
 
+/**
+ * Completes a pending join-link claim for a user whose email is now
+ * confirmed: marks the link claimed and grants the verified badge. Does
+ * nothing if the user has no pending claim (never used a link, or someone
+ * else registered on it afterwards). One transaction, so the badge and the
+ * claim never disagree.
+ */
+const claimJoinLink = db.transaction((userId: string) => {
+  const claimed = db.prepare(
+    'UPDATE onboarding_links SET claimedAt = ? WHERE claimedBy = ? AND claimedAt IS NULL'
+  ).run(new Date().toISOString(), userId);
+  if (claimed.changes > 0) {
+    db.prepare('UPDATE users SET verified = 1 WHERE id = ?').run(userId);
+  }
+});
+
 router.post('/api/auth/register', async (req: Request, res: Response) => {
   try {
     const { username, email, password, accountType, joinSlug, birthYear } = req.body;
@@ -571,10 +587,13 @@ router.post('/api/auth/register', async (req: Request, res: Response) => {
     const id = randomUUID();
     const createdAt = new Date().toISOString();
     const isAdmin = email === ADMIN_EMAIL ? 1 : 0;
-    // Auto-verify when: admin email, no Brevo API key configured, or registered via a valid join link
-    const emailVerified = (isAdmin || !process.env.BREVO_API_KEY || !!joinLink) ? 1 : 0;
-    // Grant verified badge automatically for join-link registrations
-    const verified = joinLink ? 1 : 0;
+    // Auto-verify when: admin email, or no Brevo API key configured. A join
+    // link used to count too, which let anyone holding a link register a
+    // verified org account under an inbox they didn't own.
+    const emailVerified = (isAdmin || !process.env.BREVO_API_KEY) ? 1 : 0;
+    // The verified badge from a join link is granted by claimJoinLink(),
+    // only once the email is confirmed.
+    const verified = 0;
     const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
     const unsubToken = randomUUID();
 
@@ -582,9 +601,14 @@ router.post('/api/auth/register', async (req: Request, res: Response) => {
       'INSERT INTO users (id, username, email, emailNorm, password, isAdmin, emailVerified, accountType, hasSeenWelcome, unsubToken, verified, notifyOnInterest, birthYear, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)'
     ).run(id, username, email, normaliseEmail(email), hashedPassword, isAdmin, emailVerified, resolvedAccountType, 0, unsubToken, verified, resolvedBirthYear, createdAt);
 
-    // If registered via join link, claim it
+    // A join link is only *pending* for this account until the email is
+    // confirmed: claimedBy is set, claimedAt stays NULL. A later registration
+    // on the same link overwrites the pending claim, and whoever confirms
+    // their inbox first gets the badge -- so nobody can use up a real
+    // organization's invite with an address they don't own.
     if (joinLink) {
-      db.prepare('UPDATE onboarding_links SET claimedAt = ?, claimedBy = ? WHERE slug = ?').run(createdAt, id, joinSlug);
+      db.prepare('UPDATE onboarding_links SET claimedBy = ? WHERE slug = ? AND claimedAt IS NULL').run(id, joinSlug);
+      if (emailVerified) claimJoinLink(id);
     }
 
     // Generate a verification token (expires in 24 hours) — only needed if email verification is required
@@ -678,6 +702,8 @@ router.get('/api/auth/verify-email', (req: Request, res: Response) => {
     // Mark user as verified and delete the used token
     db.prepare('UPDATE users SET emailVerified = 1 WHERE id = ?').run(record.userId);
     db.prepare('DELETE FROM email_verifications WHERE token = ?').run(token);
+    // Now that the inbox is proven, a pending join link can be claimed.
+    claimJoinLink(record.userId);
 
     // Issue a JWT so the client can log the user in automatically
     const user = db.prepare('SELECT * FROM users WHERE id = ?').get(record.userId) as any;
@@ -2709,10 +2735,12 @@ setInterval(runReminderCron, 60 * 60 * 1000);
 
 // ===== JOIN LINKS (public) =====
 
-// Public: look up a join link by slug
+// Public: look up a join link by slug. Unknown and already-claimed links
+// give the same 404, so the lookup can't be used to learn which
+// organizations were invited or whether they've signed up.
 router.get('/api/join/:slug', (req: Request, res: Response) => {
   try {
-    const link = db.prepare('SELECT slug, orgName, category, claimedAt FROM onboarding_links WHERE slug = ?').get(req.params.slug) as any;
+    const link = db.prepare('SELECT slug, orgName, category FROM onboarding_links WHERE slug = ? AND claimedAt IS NULL').get(req.params.slug) as any;
     if (!link) return res.status(404).json({ error: 'Join link not found' });
     return res.json(link);
   } catch (err: any) {
@@ -2737,7 +2765,11 @@ router.post('/api/admin/join-links', requireAdmin, (req: Request, res: Response)
   try {
     const { orgName, category } = req.body;
     if (!orgName?.trim()) return res.status(400).json({ error: 'Org name is required' });
-    const slug = orgName.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    // The org name alone was the whole secret, so links were guessable. The
+    // random suffix makes the slug the secret; the name part just keeps the
+    // URL readable.
+    const base = orgName.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    const slug = `${base ? base + '-' : ''}${randomBytes(8).toString('hex')}`;
     const existing = db.prepare('SELECT slug FROM onboarding_links WHERE slug = ?').get(slug);
     if (existing) return res.status(409).json({ error: `A link with slug "${slug}" already exists` });
     const createdAt = new Date().toISOString();
@@ -2853,7 +2885,9 @@ router.post('/api/auth/google', async (req: Request, res: Response) => {
           db.prepare('UPDATE users SET googleSub = ?, emailVerified = 1, password = ? WHERE id = ?')
             .run(identity.sub, dead, existing.id);
         }
-        user = { ...existing, googleSub: identity.sub, emailVerified: 1 };
+        // Google has just proven the inbox, same as a confirmation link would.
+        claimJoinLink(existing.id);
+        user = db.prepare('SELECT * FROM users WHERE id = ?').get(existing.id) as any;
       }
     }
 

@@ -16,12 +16,8 @@ export default function JoinPage() {
     fetch(`/api/join/${slug}`)
       .then(res => res.ok ? res.json() : Promise.reject(res.status))
       .then(link => {
-        if (link.claimedAt) {
-          // Already registered — just send them to login
-          sessionStorage.removeItem('locallink_join');
-          navigate('/account');
-          return;
-        }
+        // The server only answers for unclaimed links; a claimed one is a 404
+        // (handled below), so there's no "already registered" case here.
         // Store the prefill data for the account page to pick up
         sessionStorage.setItem('locallink_join', JSON.stringify({
           slug: link.slug,
@@ -31,7 +27,8 @@ export default function JoinPage() {
         navigate('/account');
       })
       .catch(status => {
-        if (status === 404) setError('This join link doesn\'t exist or has expired.');
+        // Unknown and already-used links look the same from here on purpose.
+        if (status === 404) setError('This join link doesn\'t exist or has already been used. If you already have an account, sign in instead.');
         else setError('Something went wrong. Please try again.');
       });
   }, [slug, navigate]);
