@@ -150,7 +150,7 @@ export default function Account() {
         if (result.needsVerification) {
           setPendingVerificationEmail(result.email || formData.email);
         } else {
-          // Account is immediately active (join link or no email configured).
+          // Account is immediately active (no email service configured).
           // Sign them straight in rather than bouncing them to the login form to
           // retype the password they just chose. If that sign-in somehow fails,
           // fall back to the old behaviour rather than stranding them.
